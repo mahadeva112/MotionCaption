@@ -952,6 +952,18 @@ local function read_timeline()
     log("Read timeline " .. T.timeline.name .. ": " .. #T.video .. " video, " .. #T.subtitle .. " subtitle tracks")
 end
 
+-- Seconds since the app made this job: its id starts with the UTC time of the Send
+-- (core/job.ts). 0 when the id does not say, so an unknown job counts as just sent.
+local function job_age(job)
+    local y, mo, d, h, mi, s = tostring(job.id):match("^(%d%d%d%d)(%d%d)(%d%d)(%d%d)(%d%d)(%d%d)")
+    if not y then return 0 end
+    local sent = os.time({ year = tonumber(y), month = tonumber(mo), day = tonumber(d),
+        hour = tonumber(h), min = tonumber(mi), sec = tonumber(s), isdst = false })
+    local now = os.date("!*t")
+    now.isdst = false
+    return os.difftime(os.time(now), sent)
+end
+
 local function main()
     if not rv then fail("This scripting host has no Resolve object."); return end
     local job, jerr = load_job()
@@ -1042,6 +1054,14 @@ local function main()
     if not tl then fail("Open the timeline the captions are for, then run MotionCaption again."); return end
     -- Captions go on the timeline they were made for, whichever one is open now
     if job.project and not test.newTimeline and job.project ~= project:GetName() then
+        -- A Send just made waits for this click, so it hears why nothing came in. A job left
+        -- from earlier, for another project, must not stop this project's click: open the app.
+        if job_age(job) > 120 then
+            log("NOTE  The waiting captions are for the project “" .. job.project .. "”. Opening MotionCaption for “"
+                .. project:GetName() .. "” instead.")
+            idle = true
+            return
+        end
         fail("These captions are for the project “" .. job.project .. "”, but “" .. project:GetName() .. "” is open. Open it, then Send again.")
         return
     end
