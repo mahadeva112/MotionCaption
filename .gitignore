@@ -5,3 +5,8 @@ app/dist/
 .DS_Store
 Thumbs.db
 __pycache__/
+
+# Local-only: old prototypes, design drafts, preview config
+spike/
+mockups/
+launch.json
