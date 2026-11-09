@@ -673,7 +673,7 @@ local function place(job, tl, project, mp, tag)
             cueOf[#infos] = cue
         end
     end
-    local trackOf, names, made = {}, {}, {}
+    local trackOf, names, made, trackName = {}, {}, {}, {}
     local r = 0
     for li, ln in ipairs(lanes) do
         local idx, name = ln.track, nil
@@ -690,7 +690,21 @@ local function place(job, tl, project, mp, tag)
             try(function() tl:SetTrackName("video", idx, name) end)
             made[#made + 1] = name
         end
-        trackOf[li], names[#names + 1] = idx, "V" .. idx .. " " .. name
+        trackOf[li], names[#names + 1], trackName[li] = idx, "V" .. idx .. " " .. name, name
+    end
+    -- Resolve stays live while this runs, so an Undo or an edit can take a caption track
+    -- away mid-send; every caption after that then has no comp. Says what changed, or nil.
+    local function lost_track()
+        local now = try(function() return project:GetCurrentTimeline() end)
+        if not now or try(function() return now:GetName() end) ~= tl:GetName() then
+            return "the open timeline changed to " .. tostring(now and try(function() return now:GetName() end))
+        end
+        local count = try(function() return tl:GetTrackCount("video") end) or 0
+        for li, idx in ipairs(trackOf) do
+            if idx > count or try(function() return tl:GetTrackName("video", idx) end) ~= trackName[li] then
+                return "track " .. names[li] .. " was removed or renamed in Resolve"
+            end
+        end
     end
     sum.tracks, sum.made = names, made
     local list, lens = {}, {}
@@ -763,7 +777,15 @@ local function place(job, tl, project, mp, tag)
                 sum.keys, sum.keysOff = sum.keys + n, sum.keysOff + bad
             end
         end
-        if ok then
+        local gone = not ok and lost_track()
+        if gone then
+            -- One clear message instead of the same error for every caption that is left
+            local left = #items - i + 1
+            sum.failed = sum.failed + left
+            fail(string.format("Stopped at caption %s: %s while the captions were going in, so the last %d could not be made."
+                .. " Send again, and leave Resolve alone (no Undo or edits) until Send finishes.", tostring(cue.n), gone, left))
+            break
+        elseif ok then
             sum.placed = sum.placed + 1
         else
             sum.failed = sum.failed + 1
