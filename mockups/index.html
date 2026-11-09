@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MotionCaption — Top Mockup Showcase</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090a0f;
+      --card-bg: rgba(18, 20, 28, 0.85);
+      --border: rgba(255, 255, 255, 0.08);
+      --border-active: rgba(255, 90, 54, 0.5);
+      --accent: #ff5a36;
+      --accent-glow: rgba(255, 90, 54, 0.25);
+      --accent-soft: rgba(255, 90, 54, 0.12);
+      --text: #f0f2f8;
+      --text-muted: #8c93a8;
+      --tag-bg: #1c202d;
+      --gold: #f5b942;
+      --cyan: #38bdf8;
+      --green: #4fd18b;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* Top Navigation Bar */
+    header {
+      background: rgba(12, 14, 20, 0.95);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo-badge {
+      width: 34px;
+      height: 34px;
+      border-radius: 9px;
+      background: linear-gradient(135deg, #ff6b43, #d92550);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 16px;
+      color: #fff;
+      box-shadow: 0 4px 14px var(--accent-glow);
+    }
+    .brand h1 {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .brand h1 span {
+      color: var(--accent);
+    }
+    .badge-live {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(79, 209, 139, 0.15);
+      color: var(--green);
+      border: 1px solid rgba(79, 209, 139, 0.3);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .badge-live::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 1.6s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(0.9); opacity: 0.7; }
+      50% { transform: scale(1.3); opacity: 1; }
+      100% { transform: scale(0.9); opacity: 0.7; }
+    }
+
+    /* Mockup Selector Pills */
+    .selector-container {
+      display: flex;
+      background: rgba(22, 25, 36, 0.9);
+      padding: 4px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      gap: 4px;
+    }
+    .tab-btn {
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 0;
+      cursor: pointer;
+      color: var(--text-muted);
+      background: transparent;
+      transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+    .tab-btn:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .tab-btn.active {
+      color: #fff;
+      background: var(--accent);
+      box-shadow: 0 2px 10px var(--accent-glow);
+    }
+    .tab-btn .star {
+      font-size: 12px;
+      color: var(--gold);
+    }
+    .tab-btn.active .star {
+      color: #fff;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .btn-action {
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--tag-bg);
+      color: var(--text);
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .btn-action:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    /* Info Bar under Header */
+    .mockup-info-strip {
+      background: #0f1118;
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    .info-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .info-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .info-tag {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      border: 1px solid rgba(255, 90, 54, 0.2);
+    }
+    .info-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      max-width: 780px;
+      line-height: 1.45;
+    }
+    .info-features {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .feature-pill {
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      padding: 4px 9px;
+      border-radius: 6px;
+      background: var(--tag-bg);
+      color: #abb2c7;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .feature-pill i {
+      font-style: normal;
+      color: var(--accent);
+    }
+
+    /* Live Preview Viewport Container */
+    .viewport-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      background: #06070a;
+      min-height: calc(100vh - 120px);
+    }
+
+    iframe {
+      width: 100%;
+      height: 100%;
+      min-height: calc(100vh - 125px);
+      border: 0;
+      display: block;
+      background: #08090b;
+    }
+
+    /* Quick Comparison Drawer */
+    .drawer-toggle {
+      position: fixed;
+      bottom: 20px;
+      right: 24px;
+      z-index: 99;
+      background: #191c26;
+      border: 1px solid var(--border-active);
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+    .drawer-toggle:hover {
+      background: var(--accent);
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+
+    /* Bottom Quick Modal */
+    .quick-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .quick-modal.active {
+      display: flex;
+    }
+    .modal-box {
+      background: #141620;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      max-width: 840px;
+      width: 100%;
+      padding: 28px;
+      box-shadow: 0 25px 60px rgba(0,0,0,0.8);
+      position: relative;
+    }
+    .modal-close {
+      position: absolute;
+      top: 18px;
+      right: 20px;
+      font-size: 20px;
+      color: var(--text-muted);
+      cursor: pointer;
+      background: none;
+      border: 0;
+    }
+    .modal-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-top: 20px;
+    }
+    .modal-card {
+      background: #1a1d2b;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .modal-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-3px);
+    }
+    .modal-card h3 {
+      font-size: 16px;
+      margin-bottom: 8px;
+      color: #fff;
+    }
+    .modal-card p {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin-bottom: 14px;
+    }
+    .modal-card .btn-pick {
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+      font-size: 12px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 0;
+    }
+
+    @media (max-width: 900px) {
+      .modal-grid { grid-template-columns: 1fr; }
+      header { flex-direction: column; align-items: stretch; }
+      .selector-container { overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="logo-badge">MC</div>
+      <div>
+        <h1>MotionCaption <span>Mockups</span></h1>
+      </div>
+      <div class="badge-live">Browser Live View</div>
+    </div>
+
+    <!-- UI Selection Tabs -->
+    <div class="selector-container">
+      <button class="tab-btn active" data-id="D" data-src="resolve-native.html#D">
+        <span class="star">★</span> Best #1: Resolve Studio (Pro)
+      </button>
+      <button class="tab-btn" data-id="B" data-src="timeline-captions.html#B">
+        <span class="star">★</span> Best #2: Timeline Studio (Fast)
+      </button>
+      <button class="tab-btn" data-id="A" data-src="timeline-captions.html#A">
+        Mockup 3: 3-Step Wizard
+      </button>
+      <button class="tab-btn" data-id="C" data-src="resolve-native.html#C">
+        Mockup 4: Resolve Native Script
+      </button>
+    </div>
+
+    <div class="top-actions">
+      <a id="btnPopout" href="resolve-native.html#D" target="_blank" class="btn-action" title="Open this mockup directly in full tab">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+        Open Standalone
+      </a>
+      <button class="btn-action" id="btnHelp" title="Mockup Comparison Details">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        Comparison
+      </button>
+    </div>
+  </header>
+
+  <!-- Dynamic Info Strip -->
+  <div class="mockup-info-strip">
+    <div class="info-left">
+      <div class="info-title" id="infoTitle">
+        🌟 Option 1: Resolve-Style Studio (Mockup D)
+      </div>
+      <div class="info-tag" id="infoTag">RECOMMENDED PRO NLE</div>
+      <div class="info-desc" id="infoDesc">
+        Full standalone DaVinci Resolve layout with Animation Bins, interactive 9:16 vertical player (drag caption to position), 5-tab Inspector (Font/Look/Words/Animation), and multi-track Resolve timeline with SRC/TGT track routing.
+      </div>
+    </div>
+    <div class="info-features" id="infoFeatures">
+      <div class="feature-pill"><i>✦</i> 135 Animation Presets</div>
+      <div class="feature-pill"><i>✦</i> Interactive 9:16 Canvas</div>
+      <div class="feature-pill"><i>✦</i> Word-Level Inspector</div>
+      <div class="feature-pill"><i>✦</i> One-Click Send to Resolve</div>
+    </div>
+  </div>
+
+  <!-- Live Mockup Viewport -->
+  <div class="viewport-container">
+    <iframe id="mockupFrame" src="resolve-native.html#D" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"></iframe>
+  </div>
+
+  <button class="drawer-toggle" id="drawerToggle">
+    ⚡ Compare 2 Best UIs
+  </button>
+
+  <!-- Comparison Modal -->
+  <div class="quick-modal" id="quickModal">
+    <div class="modal-box">
+      <button class="modal-close" id="modalClose">✕</button>
+      <h2 style="font-size:20px; font-weight:800; color:#fff;">MotionCaption — 2 Best Mockup UIs</h2>
+      <p style="color:var(--text-muted); font-size:13px; margin-top:4px;">
+        Du'ti design e complete functional mock UI ache, browser e interactive vabe try kora jacche:
+      </p>
+
+      <div class="modal-grid">
+        <div class="modal-card" onclick="selectMockup('D')">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <span style="font-size:11px; font-weight:700; color:var(--accent); background:var(--accent-soft); padding:2px 8px; border-radius:4px;">PRO NLE WORKFLOW</span>
+            <span style="color:var(--gold);">★★★★★</span>
+          </div>
+          <h3>1. Resolve-Style Studio (UI D)</h3>
+          <p>
+            DaVinci Resolve-er moto professional interface. Animation Bins (Social, Cinematic, Letters), 9:16 Canvas-e live drag & drop, 5-tab Inspector (Font, Look, Word-by-word highlights), DaVinci Tracks (V1, V2, V3, ST1) mapping.
+          </p>
+          <button class="btn-pick">Launch Resolve Studio ➔</button>
+        </div>
+
+        <div class="modal-card" onclick="selectMockup('B')">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <span style="font-size:11px; font-weight:700; color:var(--cyan); background:rgba(56, 189, 248, 0.15); padding:2px 8px; border-radius:4px;">FAST CREATOR WORKFLOW</span>
+            <span style="color:var(--gold);">★★★★★</span>
+          </div>
+          <h3>2. Timeline Studio (UI B)</h3>
+          <p>
+            YouTube Shorts & Reels creator-der jonno fast & clean transcript-first workflow. Script text click kore shathe shathe edit & word highlight kora jay, instant preset switch (Pop, Fade, Rise, Blur), live timeline scrubber.
+          </p>
+          <button class="btn-pick" style="background:#2563eb;">Launch Timeline Studio ➔</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const MOCKUPS = {
+      'D': {
+        title: '🌟 Option 1: Resolve-Style Studio (Mockup D)',
+        tag: 'RECOMMENDED PRO NLE',
+        src: 'resolve-native.html#D',
+        desc: 'Full standalone DaVinci Resolve layout with Animation Bins, interactive 9:16 vertical player (drag caption to position), 5-tab Inspector (Font/Look/Words/Animation), and multi-track Resolve timeline with SRC/TGT track routing.',
+        features: [
+          '✦ 135 Animation Presets',
+          '✦ Interactive 9:16 Canvas (Draggable)',
+          '✦ Word-Level Inspector & Yellow Highlight',
+          '✦ One-Click Send to Resolve V3'
+        ]
+      },
+      'B': {
+        title: '⚡ Option 2: Fast Timeline Studio (Mockup B)',
+        tag: 'FAST CREATOR / TRANSCRIPT FIRST',
+        src: 'timeline-captions.html#B',
+        desc: 'Clean and lightning-fast studio designed for Shorts & Reels creators. Click any word in the script transcript to edit text or highlight it instantly, live vertical video preview, 1-click animation presets (Pop, Fade, Rise, Blur).',
+        features: [
+          '✦ Interactive Script Transcript Editor',
+          '✦ Click to Highlight Any Word',
+          '✦ Fast Animation Switcher (Pop, Blur, Rise)',
+          '✦ Single Screen Efficiency'
+        ]
+      },
+      'A': {
+        title: '🧭 Option 3: 3-Step Guided Wizard (Mockup A)',
+        tag: 'BEGINNER / GUIDED 1-2-3',
+        src: 'timeline-captions.html#A',
+        desc: 'Step-by-step guided flow: 1. Pick Subtitle Track (ST1/ST2 or .srt file) ➔ 2. Customize Style & Animation ➔ 3. Review timeline & Place in DaVinci Resolve.',
+        features: [
+          '✦ Step 1: Subtitle Track Detector',
+          '✦ Step 2: Visual Style Preset Grid',
+          '✦ Step 3: One-Click DaVinci Placement'
+        ]
+      },
+      'C': {
+        title: '🧩 Option 4: Inside Resolve Script Window (Mockup C)',
+        tag: 'LIGHTWEIGHT DIALOG OVERLAY',
+        src: 'resolve-native.html#C',
+        desc: 'Compact popup window running directly inside DaVinci Resolve (Workspace ➔ Scripts ➔ MotionCaption). Allows testing 1 caption on V3 at playhead instantly before placing all 142.',
+        features: [
+          '✦ Zero Context Switching',
+          '✦ Try at Playhead Feature',
+          '✦ Native Resolve Script GUI'
+        ]
+      }
+    };
+
+    let activeId = 'D';
+    const iframe = document.getElementById('mockupFrame');
+    const titleEl = document.getElementById('infoTitle');
+    const tagEl = document.getElementById('infoTag');
+    const descEl = document.getElementById('infoDesc');
+    const featEl = document.getElementById('infoFeatures');
+    const popoutBtn = document.getElementById('btnPopout');
+    const modal = document.getElementById('quickModal');
+
+    function selectMockup(id) {
+      if (!MOCKUPS[id]) return;
+      activeId = id;
+      const data = MOCKUPS[id];
+
+      // Update tabs
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.id === id);
+      });
+
+      // Update metadata
+      titleEl.textContent = data.title;
+      tagEl.textContent = data.tag;
+      descEl.textContent = data.desc;
+      popoutBtn.href = data.src;
+
+      featEl.innerHTML = data.features.map(f => `<div class="feature-pill"><i>${f.slice(0, 1)}</i>${f.slice(1)}</div>`).join('');
+
+      // Update iframe
+      iframe.src = data.src;
+      modal.classList.remove('active');
+    }
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        selectMockup(btn.dataset.id);
+      });
+    });
+
+    document.getElementById('drawerToggle').addEventListener('click', () => {
+      modal.classList.add('active');
+    });
+    document.getElementById('btnHelp').addEventListener('click', () => {
+      modal.classList.add('active');
+    });
+    document.getElementById('modalClose').addEventListener('click', () => {
+      modal.classList.remove('active');
+    });
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.classList.remove('active');
+    });
+  </script>
+</body>
+</html>

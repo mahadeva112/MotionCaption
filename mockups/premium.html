@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MotionCaption Premium</title>
+<style>
+:root {
+  --bg: #0b0c0f; --s0: #101115; --s1: #14161b; --s2: #191b21; --s3: #1f222a; --s4: #272b35;
+  --ln: #23262e; --ln2: #2e323c; --t: #e8e9ee; --t2: #a2a6b3; --t3: #6d7180; --t4: #4c505c;
+  --acc: #ff5a36; --acc2: #ff7a52; --accs: rgba(255, 90, 54, .14);
+  --sel: #4c8dff; --sels: rgba(76, 141, 255, .16); --ok: #3fcf8e; --warn: #f2b84b; --err: #ff5c6c;
+  --cap: #8b5cf6; --st: #b08a3e; --vid: #3b6fd1; --aud: #2fa37a;
+  --r: 8px; --r2: 6px;
+  font: 12px/1.4 'Segoe UI Variable Text', 'Segoe UI', 'Nirmala UI', system-ui, sans-serif;
+  color: var(--t); color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #060709; }
+button { font: inherit; color: inherit; cursor: pointer; }
+svg { display: block; }
+
+/* page switcher (not part of the app) */
+.switch { display: flex; gap: 6px; justify-content: center; padding: 12px; flex-wrap: wrap; }
+.switch button { background: #12141a; border: 1px solid #262a33; color: var(--t2); border-radius: 999px; padding: 7px 14px; }
+.switch button b { color: var(--t); font-weight: 600; margin-right: 4px; }
+.switch button.on { background: var(--acc); border-color: var(--acc); color: #fff; }
+.switch button.on b { color: #fff; }
+.note { width: min(1440px, calc(100% - 32px)); margin: 0 auto 28px; color: var(--t3); font-size: 12.5px; line-height: 1.6; }
+.note b { color: var(--t); }
+
+.app { width: min(1440px, calc(100% - 32px)); height: max(660px, min(860px, calc(100vh - 64px))); margin: 0 auto 14px;
+  background: var(--bg); border: 1px solid #262a33; border-radius: 10px; overflow: hidden; display: none; flex-direction: column;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .55); }
+.app.on { display: flex; }
+
+/* shared chrome */
+.title { height: 30px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 10px; background: #08090b; border-bottom: 1px solid var(--ln); color: var(--t3); font-size: 11.5px; }
+.title .logo { width: 14px; height: 14px; border-radius: 4px; background: linear-gradient(135deg, #ff7a45, #d62660); }
+.title b { color: var(--t2); font-weight: 600; }
+.title .crumb { display: flex; gap: 6px; align-items: center; }
+.title .crumb i { color: var(--t4); font-style: normal; }
+.title .win { margin-left: auto; letter-spacing: 12px; color: var(--t4); }
+.bar { height: 40px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 10px; background: var(--s0); border-bottom: 1px solid var(--ln); }
+.sp { flex: 1; }
+.ib { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; border: 1px solid transparent; background: none; color: var(--t2); }
+.ib:hover { background: var(--s3); color: var(--t); }
+.ib.on { background: var(--s3); border-color: var(--ln2); color: var(--t); }
+.ib svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.sep { width: 1px; height: 20px; background: var(--ln2); margin: 0 4px; }
+.btn { height: 28px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--ln2); background: var(--s2); color: var(--t); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.btn:hover { background: var(--s3); }
+.btn.pri { background: var(--acc); border-color: var(--acc); color: #fff; font-weight: 600; box-shadow: 0 4px 14px rgba(255, 90, 54, .28); }
+.btn.pri:hover { background: var(--acc2); }
+.btn.ghost { background: none; }
+.btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 999px; border: 1px solid var(--ln2); background: var(--s1); color: var(--t2); font-size: 11.5px; white-space: nowrap; }
+.chip b { color: var(--t); font-weight: 600; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px rgba(63, 207, 142, .15); }
+.kbd { font: 10.5px ui-monospace, Consolas, monospace; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--ln2); background: var(--s2); color: var(--t3); }
+.seg { display: inline-flex; padding: 2px; border-radius: 7px; background: var(--s1); border: 1px solid var(--ln); }
+.seg button { border: 0; background: none; color: var(--t3); padding: 3px 9px; border-radius: 5px; font-size: 11.5px; }
+.seg button.on { background: var(--s4); color: var(--t); box-shadow: 0 1px 0 rgba(255, 255, 255, .04) inset; }
+.mono { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-variant-numeric: tabular-nums; }
+.muted { color: var(--t3); }
+
+/* panel bits */
+.panel { background: var(--s0); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.ph { height: 32px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-bottom: 1px solid var(--ln); color: var(--t2); font-size: 11.5px; }
+.ph b { color: var(--t); font-weight: 600; font-size: 12px; }
+.ph .tabs { display: flex; gap: 2px; height: 100%; }
+.ph .tabs button { border: 0; background: none; color: var(--t3); padding: 0 8px; border-bottom: 2px solid transparent; height: 100%; }
+.ph .tabs button.on { color: var(--t); border-bottom-color: var(--acc); }
+.scroll { overflow: auto; flex: 1; min-height: 0; }
+.scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.scroll::-webkit-scrollbar-thumb { background: #2a2e38; border-radius: 4px; }
+.search { display: flex; align-items: center; gap: 6px; margin: 8px; height: 28px; padding: 0 8px; border-radius: 6px; background: var(--s1); border: 1px solid var(--ln); color: var(--t3); }
+.search svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; }
+.search span { flex: 1; }
+
+/* inspector rows */
+.sec { border-bottom: 1px solid var(--ln); }
+.sec > h4 { margin: 0; height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 10px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--t2); cursor: pointer; }
+.sec > h4::before { content: '▾'; color: var(--t4); font-size: 9px; }
+.sec > h4 .r { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--t3); }
+.sec .sbody { padding: 2px 10px 10px; }
+.row { display: grid; grid-template-columns: 82px 1fr 52px 14px; gap: 8px; align-items: center; height: 26px; color: var(--t2); }
+.row.w2 { grid-template-columns: 82px 1fr; }
+.sl { position: relative; height: 4px; border-radius: 2px; background: var(--s4); }
+.sl i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: linear-gradient(90deg, #3b4252, #59627a); }
+.sl b { position: absolute; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: #e7e9ef; box-shadow: 0 1px 3px rgba(0, 0, 0, .5); }
+.num { height: 22px; border-radius: 5px; background: var(--s1); border: 1px solid var(--ln); display: flex; align-items: center; justify-content: flex-end; padding: 0 6px; color: var(--t); font: 11px ui-monospace, Consolas, monospace; }
+.kf { width: 11px; height: 11px; transform: rotate(45deg); border: 1.5px solid var(--t4); border-radius: 2px; }
+.kf.on { background: var(--acc); border-color: var(--acc); }
+.sel2 { height: 24px; border-radius: 5px; background: var(--s1); border: 1px solid var(--ln); display: flex; align-items: center; padding: 0 8px; color: var(--t); justify-content: space-between; }
+.sel2::after { content: '⌄'; color: var(--t3); }
+.swatches { display: flex; gap: 5px; align-items: center; }
+.swatches i { width: 18px; height: 18px; border-radius: 5px; border: 1px solid rgba(255, 255, 255, .12); }
+.swatches i.on { outline: 2px solid var(--sel); outline-offset: 1px; }
+.tgl { width: 26px; height: 15px; border-radius: 999px; background: var(--s4); position: relative; flex: none; }
+.tgl::after { content: ''; position: absolute; left: 2px; top: 2px; width: 11px; height: 11px; border-radius: 50%; background: #9aa0ad; transition: .15s; }
+.tgl.on { background: var(--acc); }
+.tgl.on::after { left: 13px; background: #fff; }
+
+/* viewer */
+.viewer { flex: 1; min-height: 0; display: flex; flex-direction: column; background: #07080a; position: relative; }
+.vtop { height: 34px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 10px; border-bottom: 1px solid var(--ln); background: var(--s0); color: var(--t3); }
+.stage { flex: 1; min-height: 0; display: grid; place-items: center; position: relative; padding: 14px;
+  background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, .035) 1px, transparent 0); background-size: 16px 16px; }
+.frame { position: relative; height: 100%; max-height: 100%; aspect-ratio: 9 / 16; border-radius: 6px; overflow: hidden; background:
+  radial-gradient(120% 70% at 50% 22%, rgba(255, 180, 130, .30), transparent 60%), linear-gradient(180deg, #3a3e4c, #20232c 55%, #121419);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .06), 0 20px 50px rgba(0, 0, 0, .5); }
+.frame::before { content: ''; position: absolute; left: 50%; bottom: 0; width: 62%; height: 56%; transform: translateX(-50%); border-radius: 46% 46% 0 0; background: linear-gradient(180deg, #4e5364, #262934); }
+.frame::after { content: ''; position: absolute; left: 50%; bottom: 47%; width: 28%; aspect-ratio: 1; transform: translateX(-50%); border-radius: 50%; background: #646a7c; }
+.frame .safe { position: absolute; inset: 7% 6% 13%; border: 1px dashed rgba(255, 255, 255, .14); border-radius: 4px; z-index: 1; }
+.frame .grid3 { position: absolute; inset: 0; z-index: 1; background:
+  linear-gradient(90deg, transparent 33.2%, rgba(255, 255, 255, .07) 33.3%, transparent 33.5%, transparent 66.5%, rgba(255, 255, 255, .07) 66.6%, transparent 66.8%),
+  linear-gradient(180deg, transparent 33.2%, rgba(255, 255, 255, .07) 33.3%, transparent 33.5%, transparent 66.5%, rgba(255, 255, 255, .07) 66.6%, transparent 66.8%); }
+.cap { position: absolute; left: 7%; right: 7%; bottom: 22%; z-index: 2; text-align: center; color: #fff; font: 800 clamp(13px, 1.55vw, 22px)/1.15 'Segoe UI', sans-serif; text-shadow: 0 3px 12px rgba(0, 0, 0, .55); }
+.cap em { font-style: normal; color: #ffd23f; display: inline-block; transform: scale(1.25); margin: 0 .2em; }
+.cap.box span.bx { background: rgba(10, 10, 14, .78); padding: .12em .45em; border-radius: .3em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.cap .w { display: inline-block; opacity: 0; transform: translateY(40%) scale(.9); animation: wIn .32s cubic-bezier(.2, 1.4, .4, 1) forwards; }
+@keyframes wIn { to { opacity: 1; transform: none; } }
+.transport { height: 36px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 10px; border-top: 1px solid var(--ln); background: var(--s0); }
+.transport .tc { font: 13px ui-monospace, Consolas, monospace; color: var(--t); margin-right: 8px; }
+.transport .ib svg { width: 15px; height: 15px; }
+
+/* compact timeline */
+.tl { flex: none; display: flex; flex-direction: column; background: var(--s0); border-top: 1px solid var(--ln); min-height: 0; }
+.tlbar { height: 32px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 8px; border-bottom: 1px solid var(--ln); color: var(--t3); }
+.tlbody { flex: 1; min-height: 0; display: grid; grid-template-columns: 150px 1fr; overflow: hidden; }
+.heads { border-right: 1px solid var(--ln); background: var(--s1); }
+.lanes { position: relative; overflow: hidden; }
+.ruler { height: 20px; border-bottom: 1px solid var(--ln); position: relative; color: var(--t4); font: 10px ui-monospace, Consolas, monospace; background: var(--s1); }
+.ruler span { position: absolute; top: 4px; transform: translateX(-50%); }
+.ruler i { position: absolute; bottom: 0; width: 1px; height: 5px; background: var(--ln2); }
+.th { height: 24px; display: flex; align-items: center; gap: 6px; padding: 0 8px; border-bottom: 1px solid #1b1d23; color: var(--t2); font-size: 11px; white-space: nowrap; overflow: hidden; }
+.th .tag { font: 600 9.5px/1 'Segoe UI'; padding: 3px 4px; border-radius: 3px; color: #fff; width: 26px; text-align: center; }
+.th .ico { margin-left: auto; display: flex; gap: 6px; color: var(--t4); font-size: 10px; }
+.th.rh { height: 20px; color: var(--t4); font-size: 10px; background: var(--s1); }
+.lane { height: 24px; position: relative; border-bottom: 1px solid #1b1d23; }
+.lane .c { position: absolute; top: 3px; bottom: 3px; border-radius: 4px; font-size: 10px; color: rgba(255, 255, 255, .92); padding: 2px 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; }
+.lane.capl .c { background: linear-gradient(180deg, #7c55e8, #6a45d6); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08); }
+.lane.capl .c::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--stripe, #b79cff); }
+.lane.capl .c.sel { box-shadow: inset 0 0 0 1.5px var(--sel), 0 0 0 1px rgba(76, 141, 255, .3); }
+.lane.capl .c.cur { box-shadow: inset 0 0 0 1.5px #fff; }
+.lane.st .c { background: rgba(176, 138, 62, .55); color: rgba(255, 255, 255, .8); }
+.lane.vid .c { background: linear-gradient(180deg, #3b6fd1, #2f5cb3); }
+.lane.aud { height: 30px; }
+.lane.aud svg { position: absolute; inset: 3px 0; width: 100%; height: 24px; }
+.ph2 { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--acc); z-index: 3; pointer-events: none; }
+.ph2::before { content: ''; position: absolute; top: 0; left: -5px; width: 11px; height: 9px; background: var(--acc); clip-path: polygon(0 0, 100% 0, 50% 100%); }
+.mini { height: 14px; flex: none; border-top: 1px solid var(--ln); position: relative; background: var(--s1); }
+.mini i { position: absolute; top: 4px; height: 6px; border-radius: 2px; background: #3b3f4b; }
+.mini b { position: absolute; top: 1px; bottom: 1px; border: 1px solid rgba(255, 255, 255, .35); border-radius: 3px; background: rgba(255, 255, 255, .05); }
+.kd { position: absolute; width: 8px; height: 8px; transform: translate(-50%, -50%) rotate(45deg); background: #f2c14b; border: 1px solid #1a1a1a; top: 50%; }
+
+/* ───────── E: Pro Edit ───────── */
+#E > .sbody { flex: 1; min-height: 0; display: grid; grid-template-columns: 264px 1fr 312px; }
+#E > .sbody > * { border-right: 1px solid var(--ln); }
+#E > .sbody > :last-child { border-right: 0; }
+.ptiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 0 8px 10px; }
+.pt { background: var(--s1); border: 1px solid var(--ln); border-radius: 7px; padding: 0; overflow: hidden; text-align: left; }
+.pt:hover { border-color: var(--ln2); }
+.pt.on { border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc); }
+.pt .th2 { height: 44px; display: grid; place-items: center; background: linear-gradient(160deg, #2a2e3a, #16181e); font: 800 13px 'Segoe UI'; color: #fff; }
+.pt .nm { padding: 4px 6px 5px; font-size: 10.5px; color: var(--t2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fam { display: flex; gap: 4px; flex-wrap: wrap; padding: 0 8px 8px; }
+.fam button { border: 1px solid var(--ln); background: var(--s1); color: var(--t3); border-radius: 999px; padding: 2px 8px; font-size: 11px; }
+.fam button.on { color: var(--t); border-color: var(--ln2); background: var(--s3); }
+.capList { padding: 2px 6px 8px; }
+.cl { display: grid; grid-template-columns: 22px 54px 1fr; gap: 6px; align-items: start; padding: 5px 6px; border-radius: 6px; color: var(--t2); cursor: pointer; }
+.cl:hover { background: var(--s1); }
+.cl.on { background: var(--sels); color: var(--t); }
+.cl .n { color: var(--t4); font: 10px ui-monospace, Consolas, monospace; padding-top: 2px; }
+.cl .tm { color: var(--t3); font: 10px ui-monospace, Consolas, monospace; padding-top: 2px; }
+.cl .tx { font-size: 12px; line-height: 1.35; }
+
+/* ───────── F: Focus ───────── */
+#F > .sbody { flex: 1; min-height: 0; display: grid; grid-template-columns: 52px 276px 1fr; }
+.rail { background: #0a0b0e; border-right: 1px solid var(--ln); display: flex; flex-direction: column; align-items: center; padding: 8px 0; gap: 4px; }
+.rail .ib { width: 36px; height: 36px; border-radius: 9px; }
+.rail .ib.on { background: var(--accs); color: var(--acc); border-color: transparent; }
+.rail .ib svg { width: 18px; height: 18px; }
+.rail .sp { flex: 1; }
+.fly { border-right: 1px solid var(--ln); }
+.livetiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 10px 12px; }
+.lt { border-radius: 9px; overflow: hidden; border: 1px solid var(--ln); background: var(--s1); padding: 0; text-align: left; }
+.lt.on { border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc); }
+.lt .pv { height: 68px; position: relative; background: linear-gradient(160deg, #343846, #191b22); overflow: hidden; }
+.lt .pv span { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; font: 800 12px 'Segoe UI'; color: #fff; }
+.lt .meta { display: flex; justify-content: space-between; padding: 5px 7px; font-size: 11px; color: var(--t2); }
+.lt .meta i { font-style: normal; color: var(--t4); font-size: 10px; }
+.lt:hover .pv span { animation: tpop .5s cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes tpop { from { transform: scale(.5); opacity: 0; } }
+.focus { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.focus .stage { padding: 18px 18px 70px; }
+.hud { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); width: min(560px, calc(100% - 40px)); z-index: 5;
+  background: rgba(20, 22, 28, .78); backdrop-filter: blur(14px); border: 1px solid rgba(255, 255, 255, .08); border-radius: 12px; padding: 8px 10px;
+  display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; box-shadow: 0 14px 40px rgba(0, 0, 0, .5); }
+.hud .txt { font-size: 13px; color: var(--t); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud .txt em { font-style: normal; color: #ffd23f; border-bottom: 1px dashed #ffd23f; }
+.glass { position: absolute; top: 14px; right: 14px; width: 270px; z-index: 5; background: rgba(20, 22, 28, .82); backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, .08); border-radius: 12px; box-shadow: 0 14px 40px rgba(0, 0, 0, .5); overflow: hidden; }
+.glass .gh { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid rgba(255, 255, 255, .06); }
+.glass .gh b { font-size: 12px; }
+.glass .body2 { padding: 6px 10px 10px; }
+.glass .row { grid-template-columns: 70px 1fr 46px; }
+.strip { flex: none; background: var(--s0); border-top: 1px solid var(--ln); }
+.strip .lanes2 { position: relative; height: 72px; overflow: hidden; }
+.strip .chips { position: absolute; left: 0; right: 0; top: 8px; height: 26px; }
+.strip .chips .c { position: absolute; top: 0; bottom: 0; border-radius: 6px; background: var(--s3); border: 1px solid var(--ln2); color: var(--t2); font-size: 10.5px; padding: 5px 7px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; }
+.strip .chips .c.cur { background: var(--accs); border-color: var(--acc); color: #fff; }
+.strip .chips .c .fx { position: absolute; right: 4px; top: 4px; width: 6px; height: 6px; border-radius: 50%; background: #ffd23f; }
+.strip svg { position: absolute; left: 0; right: 0; bottom: 6px; height: 28px; width: 100%; }
+.status { height: 24px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 10px; border-top: 1px solid var(--ln); background: #08090b; color: var(--t3); font-size: 11px; }
+.status b { color: var(--t2); font-weight: 500; }
+
+/* ───────── G: Batch table ───────── */
+#G > .sbody { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 340px; }
+.overview { height: 46px; flex: none; position: relative; border-bottom: 1px solid var(--ln); background: var(--s1); }
+.overview i { position: absolute; bottom: 9px; border-radius: 2px; background: #2f3340; }
+.overview i.s { background: rgba(76, 141, 255, .75); }
+.overview i.w { background: rgba(242, 184, 75, .8); }
+.overview .win2 { position: absolute; top: 4px; bottom: 4px; border: 1px solid rgba(255, 255, 255, .3); border-radius: 4px; background: rgba(255, 255, 255, .04); }
+.filters { display: flex; gap: 4px; align-items: center; }
+.filters button { border: 1px solid var(--ln); background: var(--s1); color: var(--t3); border-radius: 6px; padding: 3px 9px; font-size: 11.5px; display: inline-flex; gap: 6px; align-items: center; }
+.filters button i { font-style: normal; font-size: 10px; color: var(--t4); }
+.filters button.on { background: var(--s3); color: var(--t); border-color: var(--ln2); }
+.batch { height: 36px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 10px; background: rgba(76, 141, 255, .08); border-bottom: 1px solid rgba(76, 141, 255, .25); color: var(--t2); }
+.batch b { color: var(--t); }
+table.grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.grid th { position: sticky; top: 0; z-index: 1; background: var(--s1); color: var(--t3); font-weight: 500; font-size: 11px; text-align: left; height: 28px; padding: 0 8px; border-bottom: 1px solid var(--ln); }
+.grid td { height: 32px; padding: 0 8px; border-bottom: 1px solid #191b21; color: var(--t2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grid tr:hover td { background: #13151a; }
+.grid tr.on td { background: rgba(76, 141, 255, .1); }
+.grid tr.cur td { background: rgba(76, 141, 255, .18); }
+.grid td.tx { color: var(--t); font-size: 12.5px; }
+.grid td.tx em { font-style: normal; color: #ffd23f; background: rgba(255, 210, 63, .1); border-radius: 3px; padding: 0 2px; }
+.cb { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid var(--t4); display: inline-grid; place-items: center; font-size: 9px; color: transparent; vertical-align: middle; }
+tr.on .cb, .cb.on { background: var(--sel); border-color: var(--sel); color: #fff; }
+.durbar { height: 6px; border-radius: 3px; background: var(--s4); position: relative; overflow: hidden; }
+.durbar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: #5c6478; }
+.durbar i.short { background: var(--warn); }
+.pill { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px; border-radius: 999px; background: var(--s3); color: var(--t); font-size: 11px; }
+.pill i { width: 6px; height: 6px; border-radius: 50%; background: var(--cap); }
+.pill.own { background: var(--accs); color: var(--acc2); }
+.warnI { color: var(--warn); font-size: 12px; }
+.mixed { color: var(--t3); font-style: italic; }
+
+/* ───────── H: Motion graph ───────── */
+#H > .sbody { flex: 1; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) 250px; }
+#H .top { display: grid; grid-template-columns: 236px 330px 1fr; min-height: 0; border-bottom: 1px solid var(--ln); }
+#H .top > * { border-right: 1px solid var(--ln); }
+#H .top > :last-child { border-right: 0; }
+.pchips { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 10px 10px; }
+.pchips button { border: 1px solid var(--ln); background: var(--s1); color: var(--t2); border-radius: 6px; padding: 4px 8px; font-size: 11.5px; }
+.pchips button.on { border-color: var(--acc); color: #fff; background: var(--accs); }
+.pchips button:hover { border-color: var(--ln2); }
+.graph { position: relative; flex: 1; min-height: 0; }
+.graph svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.legend { display: flex; gap: 10px; align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; color: var(--t2); font-size: 11px; }
+.legend span i { width: 10px; height: 3px; border-radius: 2px; }
+.ease { display: flex; gap: 4px; padding: 8px 10px; border-top: 1px solid var(--ln); align-items: center; }
+.ease button { border: 1px solid var(--ln); background: var(--s1); color: var(--t2); border-radius: 6px; padding: 3px 8px; font-size: 11px; display: inline-flex; gap: 6px; align-items: center; }
+.ease button svg { width: 18px; height: 12px; stroke: currentColor; fill: none; stroke-width: 1.5; }
+.ease button.on { color: #fff; border-color: var(--acc); background: var(--accs); }
+.dope { display: grid; grid-template-columns: 200px 1fr; min-height: 0; overflow: hidden; }
+.dope .heads .th { height: 22px; }
+.dope .heads .th.sub { padding-left: 24px; color: var(--t3); }
+.dope .lane { height: 22px; }
+.dope .lane.prop { background: rgba(255, 255, 255, .012); }
+.dope .lane .clip { position: absolute; top: 2px; bottom: 2px; border-radius: 4px; background: rgba(139, 92, 246, .35); border: 1px solid rgba(139, 92, 246, .6); font-size: 10px; padding: 2px 6px; color: #e9e1ff; overflow: hidden; white-space: nowrap; }
+.dope .lane .span { position: absolute; top: 50%; height: 2px; margin-top: -1px; background: rgba(242, 193, 75, .35); }
+.onion { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.onion span { position: absolute; left: 7%; right: 7%; bottom: 22%; text-align: center; font: 800 clamp(13px, 1.55vw, 22px)/1.15 'Segoe UI'; color: rgba(76, 141, 255, .28); }
+.onion span.b { color: rgba(255, 90, 54, .25); }
+</style>
+</head>
+<body>
+
+<div class="switch">
+  <button class="on" data-show="E"><b>E</b> Pro Edit</button>
+  <button data-show="F"><b>F</b> Focus Studio</button>
+  <button data-show="G"><b>G</b> Batch Grid</button>
+  <button data-show="H"><b>H</b> Motion Graph</button>
+</div>
+
+<!-- ═════════════ E · PRO EDIT ═════════════ -->
+<div class="app on" id="E">
+  <div class="title"><span class="logo"></span><b>MotionCaption Studio</b>
+    <span class="crumb"><i>/</i>Don't Deny Children the joy of firecrackers<i>/</i>Timeline 1<i>/</i>ST1 · Subtitle 1</span>
+    <span class="win">– ▢ ✕</span></div>
+  <div class="bar">
+    <button class="ib on" title="Select (V)"><svg viewBox="0 0 16 16"><path d="M3 2l9 5-4 1-1 4z"/></svg></button>
+    <button class="ib" title="Word select (W)"><svg viewBox="0 0 16 16"><path d="M2 4h12M2 8h7M2 12h10"/><rect x="9" y="6" width="5" height="4" rx="1"/></svg></button>
+    <button class="ib" title="Range (R)"><svg viewBox="0 0 16 16"><path d="M3 3v10M13 3v10M3 8h10"/></svg></button>
+    <button class="ib" title="Hand (H)"><svg viewBox="0 0 16 16"><path d="M5 8V4a1 1 0 012 0v3M7 7V3a1 1 0 012 0v4M9 7V4a1 1 0 012 0v5c0 3-2 5-4 5S4 13 3 11l-1-2a1 1 0 012-1l1 1"/></svg></button>
+    <span class="sep"></span>
+    <button class="ib" title="Undo"><svg viewBox="0 0 16 16"><path d="M5 4L2 7l3 3M2 7h8a4 4 0 010 8H7"/></svg></button>
+    <button class="ib" title="Redo"><svg viewBox="0 0 16 16"><path d="M11 4l3 3-3 3M14 7H6a4 4 0 000 8h3"/></svg></button>
+    <span class="sep"></span>
+    <span class="chip">Apply to <b>All 27</b> ⌄</span>
+    <span class="chip">Style <b>Reels Bold</b> ⌄</span>
+    <span class="sp"></span>
+    <span class="chip"><span class="kbd">Ctrl K</span> Command</span>
+    <span class="chip"><i class="dot"></i>Resolve · <b>Timeline 1</b> · 1080×1920 · 24p</span>
+    <button class="btn ghost"><svg viewBox="0 0 16 16"><path d="M13 8a5 5 0 11-1.5-3.5M13 3v3h-3"/></svg>Refresh</button>
+    <button class="btn pri"><svg viewBox="0 0 16 16"><path d="M2 8l11-5-4 11-2-4z"/></svg>Send 27 to Resolve</button>
+  </div>
+  <div class="sbody">
+    <aside class="panel">
+      <div class="ph"><div class="tabs"><button class="on">Presets</button><button>Styles</button><button>Captions</button></div><span class="sp"></span><span class="muted">135</span></div>
+      <div class="search"><svg viewBox="0 0 14 14"><circle cx="6" cy="6" r="4"/><path d="M9 9l3 3"/></svg><span>Search animations</span><span class="kbd">/</span></div>
+      <div class="fam"><button class="on">All</button><button>Social</button><button>Cinematic</button><button>Elegant</button><button>Letters</button><button>★ Fav</button></div>
+      <div class="scroll"><div class="ptiles" id="eTiles"></div>
+        <div class="ph" style="border-top:1px solid var(--ln)"><b>Captions</b><span class="sp"></span><span class="muted">27 · 3 edited</span></div>
+        <div class="capList" id="eList"></div></div>
+    </aside>
+    <section class="viewer">
+      <div class="vtop"><div class="seg"><button class="on">Fit</button><button>50%</button><button>100%</button></div>
+        <span class="sep"></span><button class="ib on" title="Safe area"><svg viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="2" stroke-dasharray="2 2"/></svg></button>
+        <button class="ib" title="Thirds grid"><svg viewBox="0 0 16 16"><path d="M6 2v12M10 2v12M2 6h12M2 10h12"/></svg></button>
+        <button class="ib" title="Platform overlay"><svg viewBox="0 0 16 16"><rect x="4" y="1.5" width="8" height="13" rx="2"/><circle cx="10" cy="9" r=".8"/><circle cx="10" cy="11.5" r=".8"/></svg></button>
+        <span class="sp"></span><span>Caption <b style="color:var(--t)" id="eNum">3</b> / 27 · <span id="ePreset">Kinetic Pop</span></span></div>
+      <div class="stage"><div class="frame"><div class="safe"></div><div class="cap" id="eCap"></div></div></div>
+      <div class="transport">
+        <span class="tc" id="eTc">01:00:04:02</span>
+        <button class="ib"><svg viewBox="0 0 16 16"><path d="M4 3v10M13 3L6 8l7 5z"/></svg></button>
+        <button class="ib"><svg viewBox="0 0 16 16"><path d="M5 3l8 5-8 5z"/></svg></button>
+        <button class="ib"><svg viewBox="0 0 16 16"><path d="M12 3v10M3 3l7 5-7 5z"/></svg></button>
+        <span class="sep"></span><span class="seg"><button class="on">Loop</button><button>Through</button></span>
+        <span class="sp"></span><span class="muted">In 10f · Hold · Out 8f</span>
+      </div>
+    </section>
+    <aside class="panel">
+      <div class="ph"><div class="tabs"><button class="on">Inspector</button><button>Words</button><button>Motion</button></div></div>
+      <div class="scroll">
+        <div class="sec"><h4>Text <span class="r">caption 3</span></h4><div class="sbody">
+          <div class="row w2"><span>Font</span><div class="sel2">Montserrat · ExtraBold</div></div>
+          <div class="row"><span>Size</span><div class="sl"><i style="width:42%"></i><b style="left:42%"></b></div><div class="num">0.078</div><i class="kf"></i></div>
+          <div class="row"><span>Tracking</span><div class="sl"><i style="width:30%"></i><b style="left:30%"></b></div><div class="num">1.04</div><i class="kf"></i></div>
+          <div class="row"><span>Line height</span><div class="sl"><i style="width:45%"></i><b style="left:45%"></b></div><div class="num">1.10</div><i class="kf"></i></div>
+          <div class="row w2"><span>Case · Align</span><div style="display:flex;gap:6px"><span class="seg"><button>Aa</button><button class="on">AA</button></span><span class="seg"><button>L</button><button class="on">C</button><button>R</button></span></div></div>
+        </div></div>
+        <div class="sec"><h4>Appearance</h4><div class="sbody">
+          <div class="row w2"><span>Fill</span><div class="swatches"><i class="on" style="background:#fff"></i><i style="background:#ffd23f"></i><i style="background:#ff5a36"></i><i style="background:#3fcf8e"></i><i style="background:#4c8dff"></i><i style="background:conic-gradient(red,yellow,lime,cyan,blue,magenta,red)"></i></div></div>
+          <div class="row"><span>Outline</span><div class="sl"><i style="width:25%"></i><b style="left:25%"></b></div><div class="num">0.06</div><span class="tgl on"></span></div>
+          <div class="row"><span>Shadow</span><div class="sl"><i style="width:55%"></i><b style="left:55%"></b></div><div class="num">60%</div><span class="tgl on"></span></div>
+          <div class="row"><span>Box</span><div class="sl"><i style="width:0%"></i><b style="left:0%"></b></div><div class="num">—</div><span class="tgl"></span></div>
+        </div></div>
+        <div class="sec"><h4>Transform <span class="r">drag in viewer</span></h4><div class="sbody">
+          <div class="row"><span>Position X</span><div class="sl"><i style="width:50%"></i><b style="left:50%"></b></div><div class="num">0.500</div><i class="kf"></i></div>
+          <div class="row"><span>Position Y</span><div class="sl"><i style="width:22%"></i><b style="left:22%"></b></div><div class="num">0.220</div><i class="kf on"></i></div>
+          <div class="row"><span>Rotation</span><div class="sl"><i style="width:50%"></i><b style="left:50%"></b></div><div class="num">0.0°</div><i class="kf"></i></div>
+          <div class="row"><span>Scale</span><div class="sl"><i style="width:60%"></i><b style="left:60%"></b></div><div class="num">100%</div><i class="kf on"></i></div>
+        </div></div>
+        <div class="sec"><h4>Word “now” <span class="r">Highlight</span></h4><div class="sbody">
+          <div class="row"><span>Size</span><div class="sl"><i style="width:62%"></i><b style="left:62%"></b></div><div class="num">125%</div><i></i></div>
+          <div class="row w2"><span>Effect</span><span class="seg"><button>None</button><button class="on">Pop</button><button>Shake</button><button>Glow</button></span></div>
+          <div class="row w2"><span>Rule</span><div class="sel2">Key words · auto</div></div>
+        </div></div>
+      </div>
+    </aside>
+  </div>
+  <div class="tl" style="height:196px">
+    <div class="tlbar">
+      <span class="seg"><button class="on">Fit</button><button>10s</button><button>2s</button></span>
+      <div class="sl" style="width:110px"><i style="width:35%"></i><b style="left:35%"></b></div>
+      <span class="sep"></span>
+      <button class="ib on" title="Snap"><svg viewBox="0 0 16 16"><path d="M4 2v6a4 4 0 008 0V2M4 5h3M9 5h3"/></svg></button>
+      <button class="ib" title="Ripple"><svg viewBox="0 0 16 16"><path d="M2 8h12M5 5l-3 3 3 3M11 5l3 3-3 3"/></svg></button>
+      <span class="chip">Put on <b>V4 · new track</b> ⌄</span>
+      <span class="chip">Replace last send <span class="tgl on" style="margin-left:4px"></span></span>
+      <span class="sp"></span><span class="muted">3 selected · 00:00:06:10</span>
+    </div>
+    <div class="tlbody">
+      <div class="heads">
+        <div class="th rh mono" id="eHeadTc">01:00:04:02</div>
+        <div class="th"><span class="tag" style="background:var(--cap)">V4</span>Captions<span class="ico">◉ 🔒</span></div>
+        <div class="th"><span class="tag" style="background:var(--vid)">V1</span>Interview.mp4<span class="ico">◉</span></div>
+        <div class="th"><span class="tag" style="background:var(--st)">ST1</span>Subtitle 1<span class="ico">SRC</span></div>
+        <div class="th" style="height:30px"><span class="tag" style="background:var(--aud)">A1</span>Voice<span class="ico">S M</span></div>
+      </div>
+      <div class="lanes" id="eLanes"></div>
+    </div>
+    <div class="mini" id="eMini"></div>
+  </div>
+</div>
+
+<!-- ═════════════ F · FOCUS STUDIO ═════════════ -->
+<div class="app" id="F">
+  <div class="title"><span class="logo"></span><b>MotionCaption Studio</b><span class="crumb"><i>/</i>Timeline 1</span>
+    <span class="sp"></span><span class="chip" style="height:20px"><i class="dot"></i>Resolve connected</span><span class="win">– ▢ ✕</span></div>
+  <div class="sbody">
+    <nav class="rail">
+      <button class="ib on" title="Animations"><svg viewBox="0 0 18 18"><path d="M3 13l4-8 3 5 2-3 3 6z"/></svg></button>
+      <button class="ib" title="Look"><svg viewBox="0 0 18 18"><path d="M4 14L9 3l5 11M6 10h6"/></svg></button>
+      <button class="ib" title="Words"><svg viewBox="0 0 18 18"><rect x="2.5" y="6" width="13" height="6" rx="2"/><path d="M6 9h6"/></svg></button>
+      <button class="ib" title="Position"><svg viewBox="0 0 18 18"><rect x="3" y="3" width="12" height="12" rx="2"/><circle cx="9" cy="12" r="1.5"/></svg></button>
+      <button class="ib" title="Motion"><svg viewBox="0 0 18 18"><path d="M2 14c4 0 4-10 8-10s4 10 6 10"/></svg></button>
+      <span class="sp"></span>
+      <button class="ib" title="Settings"><svg viewBox="0 0 18 18"><circle cx="9" cy="9" r="2.5"/><path d="M9 2v2M9 14v2M2 9h2M14 9h2M4 4l1.5 1.5M12.5 12.5L14 14M4 14l1.5-1.5M12.5 5.5L14 4"/></svg></button>
+    </nav>
+    <aside class="panel fly">
+      <div class="ph"><b>Animations</b><span class="sp"></span><span class="seg"><button class="on">Live</button><button>List</button></span></div>
+      <div class="search"><svg viewBox="0 0 14 14"><circle cx="6" cy="6" r="4"/><path d="M9 9l3 3"/></svg><span>Search 135</span></div>
+      <div class="fam"><button class="on">Trending</button><button>Social</button><button>Cinema</button><button>Letters</button></div>
+      <div class="scroll"><div class="livetiles" id="fTiles"></div></div>
+    </aside>
+    <section class="focus">
+      <div class="viewer">
+        <div class="stage"><div class="frame"><div class="grid3"></div><div class="cap" id="fCap"></div></div>
+          <div class="glass">
+            <div class="gh"><b>Look</b><span class="muted">· all 27</span><span class="sp"></span><span class="seg"><button class="on">Text</button><button>FX</button></span></div>
+            <div class="body2">
+              <div class="row w2" style="grid-template-columns:70px 1fr"><span>Font</span><div class="sel2">Inter Display · Black</div></div>
+              <div class="row"><span>Size</span><div class="sl"><i style="width:48%"></i><b style="left:48%"></b></div><div class="num">0.08</div><i></i></div>
+              <div class="row"><span>Outline</span><div class="sl"><i style="width:20%"></i><b style="left:20%"></b></div><div class="num">0.05</div><i></i></div>
+              <div class="row"><span>Shadow</span><div class="sl"><i style="width:60%"></i><b style="left:60%"></b></div><div class="num">60%</div><i></i></div>
+              <div class="row w2" style="grid-template-columns:70px 1fr"><span>Highlight</span><div class="swatches"><i style="background:#fff"></i><i class="on" style="background:#ffd23f"></i><i style="background:#ff5a36"></i><i style="background:#3fcf8e"></i></div></div>
+            </div>
+          </div>
+          <div class="hud">
+            <div style="display:flex;gap:2px"><button class="ib"><svg viewBox="0 0 16 16"><path d="M4 3v10M13 3L6 8l7 5z"/></svg></button><button class="ib"><svg viewBox="0 0 16 16"><path d="M5 3l8 5-8 5z"/></svg></button><button class="ib"><svg viewBox="0 0 16 16"><path d="M12 3v10M3 3l7 5-7 5z"/></svg></button></div>
+            <div class="txt" id="fTxt"></div>
+            <div style="display:flex;gap:6px;align-items:center"><span class="mono muted" id="fTc">04:02</span><button class="btn pri" style="height:26px">Send</button></div>
+          </div>
+        </div>
+      </div>
+      <div class="strip">
+        <div class="mini" id="fMini" style="border-top:0;border-bottom:1px solid var(--ln)"></div>
+        <div class="lanes2" id="fStrip"></div>
+      </div>
+    </section>
+  </div>
+  <div class="status"><span><b>27</b> captions</span><span><b>4</b> word highlights</span><span><b>1</b> too long for 2 lines</span><span class="sp"></span><span>Space play · ←/→ caption · W words · Ctrl K commands</span></div>
+</div>
+
+<!-- ═════════════ G · BATCH GRID ═════════════ -->
+<div class="app" id="G">
+  <div class="title"><span class="logo"></span><b>MotionCaption Studio</b><span class="crumb"><i>/</i>Timeline 1<i>/</i>Grid</span><span class="win">– ▢ ✕</span></div>
+  <div class="bar">
+    <div class="search" style="margin:0;width:260px"><svg viewBox="0 0 14 14"><circle cx="6" cy="6" r="4"/><path d="M9 9l3 3"/></svg><span>Find text, e.g. “now”</span><span class="kbd">Ctrl F</span></div>
+    <div class="filters"><button class="on">All <i>27</i></button><button>Edited <i>3</i></button><button>Word FX <i>4</i></button><button>⚠ Issues <i>2</i></button><button>Overlaps <i>0</i></button></div>
+    <span class="sp"></span>
+    <span class="chip"><i class="dot"></i><b>Timeline 1</b> · 24p</span>
+    <button class="btn pri">Send 27 to Resolve</button>
+  </div>
+  <div class="overview" id="gOver"></div>
+  <div class="sbody">
+    <section class="panel" style="border-right:1px solid var(--ln)">
+      <div class="batch"><span class="cb on">✓</span><b>3 selected</b>
+        <span class="sep"></span><button class="btn">Animation · Pop ⌄</button><button class="btn">Style ⌄</button><button class="btn">Highlight words ⌄</button>
+        <button class="btn">Nudge −1f</button><button class="btn">+1f</button><button class="btn">Find & replace</button>
+        <span class="sp"></span><button class="btn ghost">Clear</button></div>
+      <div class="scroll"><table class="grid" id="gTable">
+        <colgroup><col style="width:34px"><col style="width:38px"><col style="width:96px"><col style="width:72px"><col><col style="width:128px"><col style="width:112px"><col style="width:34px"></colgroup>
+        <thead><tr><th></th><th>#</th><th>In</th><th>Length</th><th>Text</th><th>Animation</th><th>Style</th><th></th></tr></thead><tbody></tbody></table></div>
+    </section>
+    <aside class="panel">
+      <div class="ph"><b>Preview</b><span class="sp"></span><span class="seg"><button class="on">9:16</button><button>Safe</button></span></div>
+      <div style="height:300px;flex:none;display:grid;place-items:center;padding:10px;background:#07080a;border-bottom:1px solid var(--ln)"><div class="frame" style="height:280px"><div class="safe"></div><div class="cap" id="gCap" style="font-size:15px"></div></div></div>
+      <div class="ph"><b>3 captions</b><span class="sp"></span><span class="muted">mixed values show —</span></div>
+      <div class="scroll">
+        <div class="sec"><h4>Animation</h4><div class="sbody">
+          <div class="row w2"><span>In</span><div class="sel2">Pop</div></div>
+          <div class="row"><span>Speed</span><div class="sl"><i style="width:50%"></i><b style="left:50%"></b></div><div class="num">1.0×</div><i></i></div>
+          <div class="row w2"><span>Out</span><div class="sel2 mixed">— mixed</div></div>
+        </div></div>
+        <div class="sec"><h4>Look</h4><div class="sbody">
+          <div class="row w2"><span>Style</span><div class="sel2">Reels Bold</div></div>
+          <div class="row"><span>Size</span><div class="sl"><i style="width:42%"></i><b style="left:42%"></b></div><div class="num mixed">—</div><i></i></div>
+          <div class="row"><span>Position Y</span><div class="sl"><i style="width:22%"></i><b style="left:22%"></b></div><div class="num">0.22</div><i></i></div>
+        </div></div>
+        <div class="sec"><h4>Checks <span class="r" style="color:var(--warn)">2 issues</span></h4><div class="body" style="color:var(--t2);line-height:1.6">
+          <div>⚠ #14 is 9 frames long: too short to read</div><div>⚠ #21 needs 3 lines at this size</div></div></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- ═════════════ H · MOTION GRAPH ═════════════ -->
+<div class="app" id="H">
+  <div class="title"><span class="logo"></span><b>MotionCaption Studio</b><span class="crumb"><i>/</i>Timeline 1<i>/</i>Motion</span><span class="win">– ▢ ✕</span></div>
+  <div class="bar">
+    <span class="seg"><button>Edit</button><button class="on">Motion</button><button>Grid</button></span>
+    <span class="sep"></span>
+    <span class="chip">Editing <b>Kinetic Pop</b> · used by 27</span>
+    <button class="btn">Save as new preset</button>
+    <span class="sp"></span>
+    <span class="chip"><i class="dot"></i>Resolve · <b>Timeline 1</b></span>
+    <button class="btn pri">Send 27 to Resolve</button>
+  </div>
+  <div class="sbody">
+    <div class="top">
+      <aside class="panel">
+        <div class="ph"><b>Presets</b><span class="sp"></span><span class="muted">135</span></div>
+        <div class="search"><svg viewBox="0 0 14 14"><circle cx="6" cy="6" r="4"/><path d="M9 9l3 3"/></svg><span>Search</span></div>
+        <div class="scroll">
+          <div class="ph" style="border:0;height:24px"><span class="muted">MINE</span></div>
+          <div class="pchips"><button class="on">Kinetic Pop</button><button>Brand Rise</button><button>Soft Slam</button></div>
+          <div class="ph" style="border:0;height:24px"><span class="muted">SOCIAL</span></div>
+          <div class="pchips"><button>Pop</button><button>Bounce In</button><button>Word Punch</button><button>Hype</button><button>Slide Snap</button><button>Zoom Hit</button></div>
+          <div class="ph" style="border:0;height:24px"><span class="muted">CINEMATIC</span></div>
+          <div class="pchips"><button>Blur Reveal</button><button>Slow Push</button><button>Trailer Slam</button><button>Rack Focus</button></div>
+          <div class="ph" style="border:0;height:24px"><span class="muted">LETTERS</span></div>
+          <div class="pchips"><button>Typewriter</button><button>Cascade</button><button>Scatter</button></div>
+        </div>
+      </aside>
+      <section class="viewer">
+        <div class="vtop"><span class="seg"><button class="on">Onion skin</button><button>Off</button></span><span class="sp"></span><span>±3 frames</span></div>
+        <div class="stage"><div class="frame"><div class="onion"><span>But the right time is now</span><span class="b" style="transform:translateY(-6px)">But the right time is now</span></div><div class="safe"></div><div class="cap" id="hCap"></div></div></div>
+      </section>
+      <section class="panel">
+        <div class="ph"><b>Curves</b><span class="sp"></span>
+          <div class="legend"><span><i style="background:#ff5a36"></i>Opacity</span><span><i style="background:#4c8dff"></i>Scale</span><span><i style="background:#3fcf8e"></i>Position Y</span><span style="color:var(--t4)"><i style="background:#555"></i>Blur</span></div></div>
+        <div class="graph" id="hGraph"></div>
+        <div class="ease">
+          <span class="muted" style="margin-right:4px">Ease</span>
+          <button><svg viewBox="0 0 18 12"><path d="M1 11L17 1"/></svg>Linear</button>
+          <button class="on"><svg viewBox="0 0 18 12"><path d="M1 11C6 1 10 1 17 1"/></svg>Ease out</button>
+          <button><svg viewBox="0 0 18 12"><path d="M1 11C8 11 10 1 17 1"/></svg>In-out</button>
+          <button><svg viewBox="0 0 18 12"><path d="M1 11C5 -4 10 2 17 1"/></svg>Back</button>
+          <button><svg viewBox="0 0 18 12"><path d="M1 11C3 -2 6 6 8 1S13 3 17 1"/></svg>Elastic</button>
+          <span class="sp"></span>
+          <span class="muted">Handles</span><span class="num" style="width:150px">0.22, 1.00, 0.36, 1.00</span>
+        </div>
+      </section>
+    </div>
+    <div class="tl" style="border-top:0;height:100%">
+      <div class="tlbar"><span class="seg"><button>Seconds</button><button class="on">Frames</button></span><span class="sep"></span>
+        <button class="btn" style="height:24px">◆ Add key</button><button class="btn" style="height:24px">Copy keys</button><button class="btn" style="height:24px">Paste to selected</button>
+        <span class="sp"></span><span class="muted">Caption 3 · 42 frames · 24p</span></div>
+      <div class="dope">
+        <div class="heads">
+          <div class="th rh mono">f 0</div>
+          <div class="th"><span class="tag" style="background:var(--cap)">#2</span>Most people wait…</div>
+          <div class="th"><span class="tag" style="background:var(--acc)">#3</span>But the right time is now</div>
+          <div class="th sub">◆ Opacity</div><div class="th sub">◆ Scale</div><div class="th sub">◆ Position Y</div><div class="th sub">◆ Word “now” · size</div>
+          <div class="th"><span class="tag" style="background:var(--cap)">#4</span>Do what you can…</div>
+        </div>
+        <div class="lanes" id="hDope"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note" id="noteE"><b>E · Pro Edit</b> — the full editor, tightened: a 196 px timeline with 24 px tracks, a waveform and a minimap; presets and the caption list share one side panel; the Inspector has keyframe diamonds beside every property. Tools, command palette and Send all live in one 40 px bar.</div>
+<div class="note" id="noteF" style="display:none"><b>F · Focus Studio</b> — the frame is the work area. A 52 px icon rail swaps one panel (live animated preset tiles), the look settings float over the viewer as a glass card, and the timeline is a single 86 px strip of caption chips over the waveform. Most room for the picture.</div>
+<div class="note" id="noteG" style="display:none"><b>G · Batch Grid</b> — for long videos: every caption is a dense row with time, length bar, text, animation and style; filters find issues, edited captions or word effects; a batch bar changes many at once. A 46 px density overview replaces the timeline.</div>
+<div class="note" id="noteH" style="display:none"><b>H · Motion Graph</b> — for designing animations: a curve editor with ease presets and numeric handles, onion skin in the viewer, and a dope sheet that opens a caption into its property lanes with keyframes. Save the result as your own preset.</div>
+
+<script>
+const CUES = [
+  ['01:00:00:10', 0.4, 1.7, 'Every moment is a possibility'],
+  ['01:00:01:22', 1.9, 2.0, 'Most people wait for the right time'],
+  ['01:00:04:02', 4.1, 1.75, 'But the right time is <em>now</em>'],
+  ['01:00:05:21', 5.9, 1.8, 'Do what you can with what you have'],
+  ['01:00:07:18', 7.75, 1.3, 'Start where you are'],
+  ['01:00:09:04', 9.2, 1.7, 'Small steps, every single day'],
+  ['01:00:11:00', 11.0, 2.3, 'That is how <em>everything</em> changes'],
+  ['01:00:13:12', 13.5, 0.38, 'Not someday.'],
+  ['01:00:14:02', 14.1, 1.0, 'Today.'],
+  ['01:00:15:12', 15.5, 1.9, 'Your life is in your hands'],
+  ['01:00:17:12', 17.5, 1.6, 'Make it <em>count</em>'],
+  ['01:00:19:12', 19.5, 2.4, 'Small things done with full attention become big'],
+]
+const SPAN = 22.5
+const PRESETS = ['Kinetic Pop', 'Pop', 'Rise', 'Blur Reveal', 'Typewriter', 'Slow Push', 'Word Punch', 'Cascade', 'Trailer Slam', 'Soft Focus', 'Bounce In', 'Zoom Hit', 'Glide', 'Neon Flick', 'Elastic']
+let cur = 2
+const plain = (s) => s.replace(/<[^>]+>/g, '')
+const pct = (t) => (t / SPAN) * 100
+
+// switcher
+document.querySelectorAll('.switch button').forEach((b) => b.onclick = () => {
+  document.querySelectorAll('.switch button').forEach((x) => x.classList.toggle('on', x === b))
+  document.querySelectorAll('.app').forEach((a) => a.classList.toggle('on', a.id === b.dataset.show))
+  document.querySelectorAll('.note').forEach((n) => n.style.display = n.id === 'note' + b.dataset.show ? '' : 'none')
+  render()
+})
+
+// a waveform path, seeded so it stays the same
+function wave(n = 300, h = 24) {
+  let s = 11, d = 'M0 ' + h / 2
+  const r = () => (s = (s * 9301 + 49297) % 233280) / 233280
+  const pts = []
+  for (let i = 0; i <= n; i++) {
+    const x = (i / n) * 1000
+    const t = (i / n) * SPAN
+    const talk = CUES.some((c) => t > c[1] - 0.05 && t < c[1] + c[2]) ? 1 : 0.18
+    pts.push([x, (0.25 + r() * 0.75) * talk * (h / 2 - 1)])
+  }
+  d = 'M0 ' + h / 2 + pts.map(([x, a]) => `L${x.toFixed(1)} ${(h / 2 - a).toFixed(1)}`).join('') + pts.reverse().map(([x, a]) => `L${x.toFixed(1)} ${(h / 2 + a).toFixed(1)}`).join('') + 'Z'
+  return `<svg viewBox="0 0 1000 ${h}" preserveAspectRatio="none"><path d="${d}" fill="rgba(63,207,142,.55)"/></svg>`
+}
+const ruler = (step = 2) => `<div class="ruler">${Array.from({ length: Math.floor(SPAN / step) + 1 }, (_, i) => i * step).map((s) => `<i style="left:${pct(s)}%"></i><span style="left:${pct(s)}%">00:${String(s).padStart(2, '0')}</span>`).join('')}</div>`
+const mini = (id) => { document.getElementById(id).innerHTML = CUES.map((c) => `<i style="left:${pct(c[1])}%;width:${pct(c[2])}%"></i>`).join('') + `<b style="left:4%;width:42%"></b>` }
+
+// ── E
+document.getElementById('eTiles').innerHTML = PRESETS.slice(0, 12).map((p, i) => `<button class="pt${i === 0 ? ' on' : ''}"><div class="th2">Aa</div><div class="nm">${p}</div></button>`).join('')
+document.getElementById('eList').innerHTML = CUES.map((c, i) => `<div class="cl${i === cur ? ' on' : ''}" data-i="${i}"><span class="n">${i + 1}</span><span class="tm">${c[0].slice(6)}</span><span class="tx">${plain(c[3])}</span></div>`).join('')
+const sel = new Set([1, 2, 3])
+document.getElementById('eLanes').innerHTML = ruler() +
+  `<div class="lane capl">${CUES.map((c, i) => `<div class="c${sel.has(i) ? ' sel' : ''}" data-i="${i}" style="left:${pct(c[1])}%;width:${pct(c[2]) - 0.25}%;--stripe:${i === 6 ? '#ffd23f' : '#b79cff'}">${PRESETS[i === 6 ? 6 : 0]}</div>`).join('')}</div>` +
+  `<div class="lane vid"><div class="c" style="left:0;width:99.6%">Interview.mp4</div></div>` +
+  `<div class="lane st">${CUES.map((c) => `<div class="c" style="left:${pct(c[1])}%;width:${pct(c[2]) - 0.25}%">${plain(c[3])}</div>`).join('')}</div>` +
+  `<div class="lane aud">${wave()}</div><div class="ph2" id="ePh"></div>`
+mini('eMini')
+
+// ── F
+const COLORS = ['#ffd23f', '#ff5a36', '#4c8dff', '#3fcf8e']
+document.getElementById('fTiles').innerHTML = PRESETS.slice(0, 10).map((p, i) => `<button class="lt${i === 0 ? ' on' : ''}"><div class="pv"><span>Make it <b style="color:${COLORS[i % 4]}">count</b></span></div><div class="meta">${p}<i>${['Social', 'Basic', 'Cinematic', 'Letters'][i % 4]}</i></div></button>`).join('')
+document.getElementById('fStrip').innerHTML = `<div class="chips">${CUES.map((c, i) => `<div class="c${i === cur ? ' cur' : ''}" data-i="${i}" style="left:${pct(c[1])}%;width:${pct(c[2]) - 0.3}%">${plain(c[3])}${c[3].includes('<em>') ? '<span class="fx"></span>' : ''}</div>`).join('')}</div>${wave(260, 28)}<div class="ph2" id="fPh"></div>`
+mini('fMini')
+
+// ── G
+const tb = document.querySelector('#gTable tbody')
+tb.innerHTML = CUES.map((c, i) => {
+  const short = c[2] < 0.5, long = plain(c[3]).length > 40
+  return `<tr class="${sel.has(i) ? 'on' : ''}${i === cur ? ' cur' : ''}" data-i="${i}"><td><span class="cb">✓</span></td><td class="mono muted">${i + 1}</td><td class="mono">${c[0].slice(3)}</td>
+  <td><div class="durbar"><i class="${short ? 'short' : ''}" style="width:${Math.min(100, c[2] / 2.5 * 100)}%"></i></div></td>
+  <td class="tx">${c[3]}</td><td><span class="pill${i === 6 ? ' own' : ''}"><i></i>${i === 6 ? 'Word Punch' : sel.has(i) ? 'Pop' : 'Kinetic Pop'}</span></td>
+  <td><span class="pill" style="background:var(--s2)">${i === 9 ? 'Podcast Box' : 'Reels Bold'}</span></td><td>${short || long ? '<span class="warnI" title="' + (short ? 'Too short' : 'Needs 3 lines') + '">⚠</span>' : ''}</td></tr>`
+}).join('')
+document.getElementById('gOver').innerHTML = CUES.map((c, i) => `<i class="${sel.has(i) ? 's' : c[2] < 0.5 || plain(c[3]).length > 40 ? 'w' : ''}" style="left:${pct(c[1])}%;height:${8 + plain(c[3]).length * 0.38}px;width:${Math.max(0.6, pct(c[2]) - 0.4)}%"></i>`).join('') + '<div class="win2" style="left:1%;width:48%"></div>'
+
+// ── H: curves and dope sheet
+function curves() {
+  const W = 1000, H = 300, pad = 30, x = (f) => pad + (f / 42) * (W - pad * 2), y = (v) => H - pad - v * (H - pad * 2)
+  const grid = Array.from({ length: 8 }, (_, i) => `<line x1="${x(i * 6)}" y1="${pad}" x2="${x(i * 6)}" y2="${H - pad}" stroke="#1e2128"/><text x="${x(i * 6)}" y="${H - 10}" fill="#4c505c" font-size="11" text-anchor="middle">${i * 6}</text>`).join('') +
+    [0, .25, .5, .75, 1].map((v) => `<line x1="${pad}" y1="${y(v)}" x2="${W - pad}" y2="${y(v)}" stroke="#1e2128"/>`).join('')
+  const op = `M${x(0)} ${y(0)} C${x(2)} ${y(.9)} ${x(3)} ${y(1)} ${x(5)} ${y(1)} L${x(34)} ${y(1)} C${x(37)} ${y(1)} ${x(39)} ${y(.3)} ${x(42)} ${y(0)}`
+  const sc = `M${x(0)} ${y(.45)} C${x(2)} ${y(1.05)} ${x(4)} ${y(.92)} ${x(7)} ${y(.75)} L${x(42)} ${y(.75)}`
+  const py = `M${x(0)} ${y(.2)} C${x(3)} ${y(.62)} ${x(6)} ${y(.6)} ${x(9)} ${y(.6)} L${x(42)} ${y(.6)}`
+  const k = (f, v, c) => `<rect x="${x(f) - 5}" y="${y(v) - 5}" width="10" height="10" transform="rotate(45 ${x(f)} ${y(v)})" fill="${c}" stroke="#0b0c0f" stroke-width="1.5"/>`
+  const h = (f1, v1, f2, v2) => `<line x1="${x(f1)}" y1="${y(v1)}" x2="${x(f2)}" y2="${y(v2)}" stroke="#9aa0ad" stroke-width="1"/><circle cx="${x(f2)}" cy="${y(v2)}" r="4" fill="#0b0c0f" stroke="#e8e9ee" stroke-width="1.5"/>`
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${grid}
+    <path d="${op}" stroke="#ff5a36" stroke-width="2.2" fill="none"/>
+    <path d="${sc}" stroke="#4c8dff" stroke-width="2.2" fill="none"/>
+    <path d="${py}" stroke="#3fcf8e" stroke-width="2.2" fill="none"/>
+    ${h(0, .45, 2, 1.05)}${h(7, .75, 4, .92)}
+    ${k(0, 0, '#ff5a36')}${k(5, 1, '#ff5a36')}${k(34, 1, '#ff5a36')}${k(42, 0, '#ff5a36')}
+    ${k(0, .45, '#4c8dff')}${k(7, .75, '#4c8dff')}${k(0, .2, '#3fcf8e')}${k(9, .6, '#3fcf8e')}
+    <line x1="${x(12)}" y1="${pad - 8}" x2="${x(12)}" y2="${H - pad}" stroke="#ff5a36" stroke-width="1.5"/></svg>`
+}
+document.getElementById('hGraph').innerHTML = curves()
+const fx = (f) => 2 + (f / 60) * 96
+const lane = (inner, cls = '') => `<div class="lane ${cls}">${inner}</div>`
+const keys = (list) => list.map((f) => `<span class="kd" style="left:${fx(f)}%"></span>`).join('')
+document.getElementById('hDope').innerHTML =
+  `<div class="ruler">${Array.from({ length: 11 }, (_, i) => i * 6).map((f) => `<i style="left:${fx(f)}%"></i><span style="left:${fx(f)}%">${f}</span>`).join('')}</div>` +
+  lane(`<div class="clip" style="left:0;width:${fx(-2)}%">#2</div>`) +
+  lane(`<div class="clip" style="left:${fx(0)}%;width:${fx(42) - fx(0)}%;background:rgba(255,90,54,.25);border-color:rgba(255,90,54,.6)">#3 · Kinetic Pop</div>`) +
+  lane(`<span class="span" style="left:${fx(0)}%;width:${fx(5) - fx(0)}%"></span><span class="span" style="left:${fx(34)}%;width:${fx(42) - fx(34)}%"></span>` + keys([0, 5, 34, 42]), 'prop') +
+  lane(`<span class="span" style="left:${fx(0)}%;width:${fx(7) - fx(0)}%"></span>` + keys([0, 3, 7]), 'prop') +
+  lane(`<span class="span" style="left:${fx(0)}%;width:${fx(9) - fx(0)}%"></span>` + keys([0, 9]), 'prop') +
+  lane(`<span class="span" style="left:${fx(8)}%;width:${fx(16) - fx(8)}%"></span>` + keys([8, 12, 16]), 'prop') +
+  lane(`<div class="clip" style="left:${fx(44)}%;width:${fx(60) - fx(44)}%">#4</div>`) +
+  `<div class="ph2" style="left:${fx(12)}%"></div>`
+
+// ── caption animation, shared by all four
+function animateInto(el, html) {
+  if (!el) return
+  const parts = html.split(/(<em>.*?<\/em>)/).filter(Boolean)
+  let i = 0
+  el.innerHTML = parts.map((p) => p.startsWith('<em>')
+    ? `<em class="w" style="animation-delay:${(i++) * 70}ms">${plain(p)}</em>`
+    : p.split(/(\s+)/).map((w) => (/^\s+$/.test(w) || !w ? w : `<span class="w" style="animation-delay:${(i++) * 70}ms">${w}</span>`)).join('')).join('')
+}
+function render() {
+  const c = CUES[cur]
+  for (const id of ['eCap', 'fCap', 'gCap', 'hCap']) animateInto(document.getElementById(id), id === 'hCap' ? CUES[2][3] : c[3])
+  document.getElementById('eNum').textContent = cur + 1
+  document.getElementById('eTc').textContent = c[0]
+  document.getElementById('eHeadTc').textContent = c[0]
+  document.getElementById('ePreset').textContent = cur === 6 ? 'Word Punch' : 'Kinetic Pop'
+  document.getElementById('fTxt').innerHTML = `<span class="muted">#${cur + 1}</span> &nbsp;${c[3]}`
+  document.getElementById('fTc').textContent = c[0].slice(6)
+  for (const id of ['ePh', 'fPh']) document.getElementById(id).style.left = pct(c[1]) + '%'
+  document.querySelectorAll('#eList .cl').forEach((e) => e.classList.toggle('on', +e.dataset.i === cur))
+  document.querySelectorAll('#eLanes .lane.capl .c').forEach((e) => e.classList.toggle('cur', +e.dataset.i === cur))
+  document.querySelectorAll('#fStrip .c').forEach((e) => e.classList.toggle('cur', +e.dataset.i === cur))
+  document.querySelectorAll('#gTable tr[data-i]').forEach((e) => e.classList.toggle('cur', +e.dataset.i === cur))
+}
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-i]')
+  if (t) { cur = +t.dataset.i; render() }
+  const pt = e.target.closest('.pt, .lt, .pchips button, .fam button, .seg button, .filters button, .ease button')
+  if (pt) pt.parentElement.querySelectorAll(':scope > *').forEach((x) => x.classList.toggle('on', x === pt))
+  const tg = e.target.closest('.tgl')
+  if (tg) tg.classList.toggle('on')
+})
+setInterval(() => { cur = (cur + 1) % CUES.length; render() }, 2600)
+render()
+</script>
+</body>
+</html>

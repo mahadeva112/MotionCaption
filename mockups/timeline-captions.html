@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MotionCaption mockups</title>
+<style>
+:root {
+  --bg: #0e0f13; --panel: #16181f; --panel2: #1d2029; --line: #262a35; --line2: #333846;
+  --text: #e9ebf1; --muted: #8b91a1; --dim: #5d6373;
+  --accent: #ff5a36; --accent-soft: rgba(255, 90, 54, .16);
+  --sel: rgba(90, 160, 255, .28); --blue: #5aa0ff; --ok: #4fd18b; --warn: #f5b942;
+  --v: #3c5a9a; --st: #8a5cc8; --a: #2f7d5b; --cap: #ff5a36;
+  font: 14px 'Segoe UI', 'Nirmala UI', system-ui, sans-serif; color: var(--text); background: #08090c;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #08090c; }
+button { font: inherit; color: inherit; cursor: pointer; }
+
+/* Mock switcher (not part of the app) */
+.switch { display: flex; gap: 8px; align-items: center; justify-content: center; padding: 12px 16px; flex-wrap: wrap; }
+.switch span { color: var(--muted); font-size: 12px; margin-right: 6px; }
+.switch button { background: #15171d; border: 1px solid var(--line2); border-radius: 999px; padding: 7px 16px; color: var(--muted); }
+.switch button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.win { width: min(1360px, calc(100% - 32px)); height: max(640px, min(820px, calc(100vh - 66px))); margin: 0 auto 24px; background: var(--bg); border: 1px solid var(--line2); border-radius: 12px; overflow: hidden; display: none; flex-direction: column; box-shadow: 0 20px 60px rgba(0, 0, 0, .5); }
+.win.on { display: flex; }
+.titlebar { height: 30px; display: flex; align-items: center; padding: 0 12px; font-size: 12px; color: var(--muted); background: #0b0c10; border-bottom: 1px solid var(--line); gap: 8px; }
+.titlebar i { width: 14px; height: 14px; border-radius: 4px; background: linear-gradient(135deg, #ff7a45, #d62660); display: inline-block; }
+.titlebar .dots { margin-left: auto; letter-spacing: 14px; }
+
+/* Shared */
+.top { display: flex; align-items: center; gap: 20px; padding: 10px 18px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.brand { font-weight: 700; font-size: 16px; white-space: nowrap; }
+.brand span { color: var(--accent); }
+.link { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; white-space: nowrap; }
+.link b { color: var(--text); font-weight: 600; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px rgba(79, 209, 139, .18); }
+.primary { background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 9px 16px; font-weight: 600; white-space: nowrap; }
+.primary.big { padding: 12px 22px; font-size: 15px; }
+.ghost { background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; }
+.ghost:hover { background: var(--panel2); }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.chip { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: var(--panel2); color: var(--muted); border: 1px solid var(--line); white-space: nowrap; }
+.chip.acc { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.chip.ok { color: var(--ok); border-color: rgba(79, 209, 139, .35); background: rgba(79, 209, 139, .08); }
+
+/* Preview frame */
+.frame { position: relative; aspect-ratio: 9 / 16; height: 100%; max-height: 100%; border-radius: 10px; overflow: hidden; background:
+  radial-gradient(120% 70% at 50% 25%, rgba(255, 190, 140, .28), transparent 60%),
+  linear-gradient(180deg, #3b3f4d 0%, #232631 55%, #15171d 100%); box-shadow: inset 0 0 0 1px var(--line); }
+.frame .person { position: absolute; left: 50%; bottom: 0; width: 64%; height: 58%; transform: translateX(-50%); border-radius: 46% 46% 0 0; background: linear-gradient(180deg, #555a6a, #2c2f3a); }
+.frame .person::before { content: ''; position: absolute; left: 50%; top: -34%; width: 46%; aspect-ratio: 1; transform: translateX(-50%); border-radius: 50%; background: #6a6f80; }
+.frame .cap { position: absolute; left: 6%; right: 6%; bottom: 20%; text-align: center; font-weight: 800; font-size: clamp(16px, 2.1vw, 26px); line-height: 1.15; text-shadow: 0 3px 12px rgba(0, 0, 0, .6); }
+.frame .cap em { font-style: normal; color: #ffd23f; }
+.frame .safe { position: absolute; inset: 8% 6% 14%; border: 1px dashed rgba(255, 255, 255, .12); border-radius: 6px; pointer-events: none; }
+
+/* Caption animations (preview look) */
+.a-pop { animation: pop .45s cubic-bezier(.2, 1.6, .4, 1) both; }
+@keyframes pop { from { transform: scale(.4); opacity: 0; } to { transform: none; opacity: 1; } }
+.a-fade { animation: fade .5s ease both; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.a-rise { animation: rise .55s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes rise { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+.a-blur { animation: blur .6s ease both; }
+@keyframes blur { from { filter: blur(14px); opacity: 0; letter-spacing: .3em; } to { filter: none; opacity: 1; } }
+.a-type .l { opacity: 0; animation: fade .01s both; }
+
+/* ───────────── Design A: guided ───────────── */
+.steps { display: flex; gap: 4px; margin: 0 auto; padding: 0; list-style: none; }
+.steps button { display: flex; align-items: center; gap: 8px; background: none; border: 0; color: var(--muted); padding: 6px 10px; border-radius: 8px; }
+.steps b { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line); font-size: 12px; }
+.steps li.on button { color: var(--text); }
+.steps li.on b { background: var(--accent); border-color: var(--accent); color: #fff; }
+.steps li.done b { color: var(--ok); border-color: var(--ok); }
+.steps .sep { width: 28px; height: 1px; background: var(--line); align-self: center; }
+.page { flex: 1; min-height: 0; display: none; }
+.page.on { display: flex; }
+
+/* A1: pick subtitles */
+.pick { flex-direction: column; align-items: center; overflow: auto; padding: 34px 20px; }
+.pick h1 { margin: 0 0 4px; font-size: 24px; }
+.pick .lead { color: var(--muted); margin: 0 0 22px; }
+.tracks { width: min(860px, 100%); display: grid; gap: 12px; }
+.tcard { display: grid; grid-template-columns: 26px 1fr auto; gap: 14px; align-items: start; text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+.tcard:hover { border-color: var(--line2); }
+.tcard.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.radio { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--line2); margin-top: 2px; }
+.tcard.on .radio { border-color: var(--accent); box-shadow: inset 0 0 0 4px var(--panel), inset 0 0 0 10px var(--accent); }
+.tcard h3 { margin: 0 0 3px; font-size: 15px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.tcard .meta { color: var(--muted); font-size: 12px; }
+.strip { position: relative; height: 18px; margin: 12px 0 10px; background: var(--panel2); border-radius: 4px; overflow: hidden; }
+.strip i { position: absolute; top: 3px; bottom: 3px; border-radius: 2px; background: var(--st); opacity: .85; }
+.samples { margin: 0; padding: 0; list-style: none; font-size: 13px; display: grid; gap: 3px; }
+.samples li { display: flex; gap: 10px; }
+.samples time { color: var(--dim); font-variant-numeric: tabular-nums; font-size: 12px; width: 62px; flex: none; padding-top: 1px; }
+.pick .foot { width: min(860px, 100%); display: flex; align-items: center; gap: 12px; margin-top: 18px; }
+.pick .foot .primary { margin-left: auto; }
+.note { width: min(860px, 100%); margin-top: 14px; font-size: 12px; color: var(--muted); background: var(--panel); border: 1px dashed var(--line2); border-radius: 10px; padding: 10px 14px; line-height: 1.5; }
+.note b { color: var(--warn); font-weight: 600; }
+
+/* A2: animate */
+.studio { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(320px, 1.1fr) 300px; width: 100%; min-height: 0; }
+.left { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.srcbar { padding: 10px 16px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.srcbar b { color: var(--text); }
+.srcbar .ghost { margin-left: auto; padding: 3px 10px; font-size: 12px; }
+.script { flex: 1; overflow: auto; padding: 8px 12px 40px; }
+.cue { display: flex; gap: 10px; padding: 7px 8px; border-radius: 8px; margin: 1px 0; cursor: pointer; }
+.cue:hover { background: var(--panel); }
+.cue.on { background: var(--sel); }
+.cue .h { width: 92px; flex: none; display: flex; flex-direction: column; gap: 4px; }
+.cue time { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.cue p { margin: 0; font-size: 15px; line-height: 1.5; }
+.cue p em { font-style: normal; background: var(--sel); outline: 1px solid rgba(90, 160, 255, .7); border-radius: 3px; padding: 0 2px; }
+.center { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 18px; min-height: 0; }
+.center .fwrap { flex: 1; min-height: 0; display: flex; justify-content: center; width: 100%; }
+.pbar { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 12px; width: 100%; justify-content: center; }
+.lib { border-left: 1px solid var(--line); background: var(--panel); overflow: auto; padding: 4px 14px 20px; }
+.lib h4 { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 14px 0 8px; }
+.search { width: 100%; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; color: var(--muted); padding: 7px 10px; font-size: 13px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 10px; }
+.tabs span { border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; font-size: 11px; color: var(--muted); }
+.tabs span.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.preset { text-align: left; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+.preset b { font-size: 13px; }
+.preset span { font-size: 11px; color: var(--muted); }
+.preset.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.nav { display: flex; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line); background: var(--panel); align-items: center; }
+.nav .primary { margin-left: auto; }
+
+/* A3: place */
+.place { flex-direction: column; align-items: center; overflow: auto; padding: 30px 20px; }
+.place h1 { margin: 0 0 4px; font-size: 24px; }
+.place .lead { color: var(--muted); margin: 0 0 20px; }
+.tl { width: min(900px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+.row { display: grid; grid-template-columns: 210px 1fr; gap: 10px; align-items: center; margin: 5px 0; }
+.th { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; height: 32px; }
+.th b { color: var(--text); font-size: 12px; }
+.lane { position: relative; height: 32px; background: #12141a; border-radius: 6px; overflow: hidden; }
+.lane i { position: absolute; top: 4px; bottom: 4px; border-radius: 3px; }
+.lane.v i { background: var(--v); }
+.lane.a i { background: var(--a); top: 6px; bottom: 6px; }
+.lane.st i { background: var(--st); }
+.lane.new { outline: 2px dashed var(--accent); outline-offset: -2px; background: rgba(255, 90, 54, .06); }
+.lane.new i { background: var(--cap); }
+.row.new .th { border-color: var(--accent); color: var(--accent); }
+.row.off .lane { opacity: .35; }
+.th .eye { margin-left: auto; font-size: 11px; }
+.opts { width: min(900px, 100%); display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+.opt { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.opt h4 { margin: 0 0 10px; font-size: 13px; }
+.choice { display: flex; gap: 10px; align-items: flex-start; padding: 7px 0; font-size: 13px; }
+.choice .radio, .choice .box { flex: none; }
+.choice.on .radio { border-color: var(--accent); box-shadow: inset 0 0 0 4px var(--panel), inset 0 0 0 10px var(--accent); }
+.box { width: 18px; height: 18px; border-radius: 5px; border: 2px solid var(--line2); display: grid; place-items: center; font-size: 12px; margin-top: 1px; }
+.choice.on .box { background: var(--accent); border-color: var(--accent); color: #fff; }
+.choice small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.summary { width: min(900px, 100%); display: flex; align-items: center; gap: 16px; margin-top: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.summary .primary { margin-left: auto; }
+.summary .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.summary .v { font-weight: 600; }
+
+/* ───────────── Design B: timeline studio ───────────── */
+.bwrap { flex: 1; min-height: 0; display: grid; grid-template-rows: 1fr 300px; }
+.bmain { display: grid; grid-template-columns: 1fr 310px; min-height: 0; }
+.stage { display: grid; grid-template-columns: 1fr minmax(240px, 300px) 1fr; gap: 18px; padding: 16px 18px; min-height: 0; }
+.stage .fwrap { display: flex; justify-content: center; min-height: 0; }
+.inspector { display: flex; flex-direction: column; gap: 12px; min-width: 0; overflow: auto; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.card h5 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; }
+.edit { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-size: 15px; line-height: 1.45; }
+.edit em { font-style: normal; color: #ffd23f; text-decoration: underline dotted; text-underline-offset: 4px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 12px; }
+.kv span { color: var(--muted); }
+.wordfx { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill { border: 1px solid var(--line); background: var(--panel2); border-radius: 14px; padding: 4px 10px; font-size: 12px; }
+.pill.on { border-color: var(--accent); color: var(--accent); }
+.flow { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.flow .st { display: flex; gap: 8px; align-items: center; }
+.flow .n { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; background: var(--panel2); border: 1px solid var(--line); flex: none; }
+.flow .st.done .n { border-color: var(--ok); color: var(--ok); }
+.flow .st.now .n { background: var(--accent); border-color: var(--accent); color: #fff; }
+.flow .st.now { color: var(--text); }
+.flow .st:not(.now):not(.done) { color: var(--muted); }
+
+.bottom { border-top: 1px solid var(--line); background: #101116; display: flex; flex-direction: column; min-height: 0; }
+.tbar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.tbar .tc { font-variant-numeric: tabular-nums; color: var(--text); font-size: 13px; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; }
+.tbar .sel { display: inline-flex; gap: 6px; align-items: center; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; color: var(--text); }
+.tbar .sel.src { border-color: rgba(138, 92, 200, .7); }
+.tbar .sel.dst { border-color: var(--accent); }
+.tbar .arrow { color: var(--dim); }
+.tbar .primary { margin-left: auto; padding: 7px 14px; }
+.tracksB { flex: 1; overflow: hidden; position: relative; padding: 6px 12px 10px; }
+.ruler { display: grid; grid-template-columns: 178px 1fr; gap: 8px; height: 18px; font-size: 10px; color: var(--dim); }
+.ruler .marks { position: relative; border-bottom: 1px solid var(--line); }
+.ruler .marks span { position: absolute; top: 2px; transform: translateX(-50%); font-variant-numeric: tabular-nums; }
+.rowB { display: grid; grid-template-columns: 178px 1fr; gap: 8px; margin-top: 3px; align-items: center; }
+.hdr { height: 29px; display: flex; align-items: center; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px 0 8px; font-size: 12px; }
+.hdr b { font-size: 11px; width: 26px; color: var(--muted); }
+.hdr .name { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tgl { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--line2); color: var(--dim); background: none; }
+.tgl.src.on { background: var(--st); border-color: var(--st); color: #fff; }
+.tgl.dst.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.laneB { position: relative; height: 29px; background: #14161c; border-radius: 6px; overflow: hidden; }
+.laneB i { position: absolute; top: 3px; bottom: 3px; border-radius: 3px; font-style: normal; font-size: 10px; color: rgba(255, 255, 255, .85); padding: 3px 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.laneB.v i { background: var(--v); }
+.laneB.a i { background: var(--a); top: 8px; bottom: 8px; }
+.laneB.st i { background: var(--st); }
+.laneB.cap { background: rgba(255, 90, 54, .05); outline: 1px dashed rgba(255, 90, 54, .55); outline-offset: -1px; }
+.laneB.cap i { background: linear-gradient(90deg, #ff7a45, #e8455a); }
+.laneB i.cur { box-shadow: 0 0 0 2px #fff; }
+.rowB.dim .laneB { opacity: .45; }
+.playhead { position: absolute; top: 6px; bottom: 6px; width: 2px; background: #ff3b3b; pointer-events: none; }
+.playhead::before { content: ''; position: absolute; top: 0; left: -5px; border: 6px solid transparent; border-top-color: #ff3b3b; }
+.legend { display: flex; gap: 14px; font-size: 11px; color: var(--muted); padding: 0 12px 8px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+
+.mocknote { width: min(1360px, calc(100% - 32px)); margin: 0 auto 30px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.mocknote b { color: var(--text); }
+</style>
+</head>
+<body>
+
+<div class="switch">
+  <span>Mockup</span>
+  <button class="on" data-show="A">A · Guided (3 steps)</button>
+  <button data-show="B">B · Timeline Studio (one screen)</button>
+</div>
+
+<!-- ═══════════════════ DESIGN A ═══════════════════ -->
+<div class="win on" id="A">
+  <div class="titlebar"><i></i>MotionCaption Studio<span class="dots">– ▢ ✕</span></div>
+  <div class="top">
+    <div class="brand">Motion<span>Caption</span></div>
+    <ol class="steps">
+      <li data-step="1" class="on"><button><b>1</b>Pick subtitles</button></li><span class="sep"></span>
+      <li data-step="2"><button><b>2</b>Animate</button></li><span class="sep"></span>
+      <li data-step="3"><button><b>3</b>Place</button></li>
+    </ol>
+    <div class="link"><span class="dot"></span>Resolve · <b>Reel_Final</b> · 1080×1920 · 23.976</div>
+  </div>
+
+  <!-- Step 1 -->
+  <div class="page pick on" data-page="1">
+    <h1>Which subtitles should we animate?</h1>
+    <p class="lead">Found on your timeline <b style="color:var(--text)">Reel_Final</b>. Pick one track. Nothing on the timeline changes yet.</p>
+    <div class="tracks">
+      <button class="tcard on" data-track="en">
+        <span class="radio"></span>
+        <div>
+          <h3>Subtitle 1 <span class="chip">English</span><span class="chip ok">142 captions</span></h3>
+          <div class="meta">00:00:00:10 – 00:01:28:04 · longest line 38 letters</div>
+          <div class="strip" data-strip="142"></div>
+          <ul class="samples">
+            <li><time>00:00.40</time>Every moment is a possibility</li>
+            <li><time>00:01.90</time>Most people wait for the right time</li>
+            <li><time>00:04.10</time>But the right time is now</li>
+          </ul>
+        </div>
+        <span class="chip acc">Suggested</span>
+      </button>
+      <button class="tcard" data-track="hi">
+        <span class="radio"></span>
+        <div>
+          <h3>Subtitle 2 <span class="chip">Hindi</span><span class="chip ok">138 captions</span></h3>
+          <div class="meta">00:00:00:10 – 00:01:27:20 · Nirmala UI will be used for Devanagari</div>
+          <div class="strip" data-strip="138"></div>
+          <ul class="samples">
+            <li><time>00:00.40</time>हर पल एक संभावना है</li>
+            <li><time>00:01.90</time>ज़्यादातर लोग सही समय का इंतज़ार करते हैं</li>
+            <li><time>00:04.10</time>लेकिन सही समय अभी है</li>
+          </ul>
+        </div>
+        <span></span>
+      </button>
+    </div>
+    <div class="note"><b>3 notes on Subtitle 1:</b> 2 captions overlap (they will go on a second track) · 1 caption is shorter than one frame (left out) · line 87 is 52 letters, may wrap on 9:16.</div>
+    <div class="foot">
+      <button class="ghost small">Or open an .srt file instead</button>
+      <span class="muted small">Edited a subtitle in Resolve? Click MotionCaption there again to refresh.</span>
+      <button class="primary" data-go="2">Continue with Subtitle 1 →</button>
+    </div>
+  </div>
+
+  <!-- Step 2 -->
+  <div class="page" data-page="2" style="flex-direction:column">
+    <div class="studio" style="flex:1">
+      <div class="left">
+        <div class="srcbar">From <b>Subtitle 1 · English</b> · 142 captions <button class="ghost">Change</button></div>
+        <div class="script" id="scriptA"></div>
+      </div>
+      <div class="center">
+        <div class="fwrap"><div class="frame"><div class="person"></div><div class="safe"></div><div class="cap" id="capA"></div></div></div>
+        <div class="pbar"><button class="ghost small" style="padding:3px 10px">❚❚</button><span id="tcA">00:00:04:02</span><span>·</span><span>Preview is close; Resolve's Text+ is the final look</span></div>
+      </div>
+      <div class="lib">
+        <h4>Animation <span style="text-transform:none;letter-spacing:0;color:var(--text)">· all captions</span></h4>
+        <input class="search" placeholder="Search 135 animations" disabled>
+        <div class="tabs"><span class="on">All 135</span><span>Social 25</span><span>Cinematic 30</span><span>Elegant 20</span><span>Letters 25</span><span>Basic 20</span></div>
+        <div class="grid" id="presetsA"></div>
+        <h4>Look</h4>
+        <div class="grid">
+          <button class="preset"><b>Font</b><span>Montserrat ExtraBold</span></button>
+          <button class="preset"><b>Size & place</b><span>Lower third · safe area</span></button>
+          <button class="preset"><b>Highlight</b><span>Yellow on picked words</span></button>
+          <button class="preset"><b>Shadow</b><span>Soft, 40%</span></button>
+        </div>
+      </div>
+    </div>
+    <div class="nav"><button class="ghost" data-go="1">← Back</button><span class="muted small">Tip: Shift-click captions to give a few of them their own animation.</span><button class="primary" data-go="3">Continue to placing →</button></div>
+  </div>
+
+  <!-- Step 3 -->
+  <div class="page place" data-page="3">
+    <h1>Where should the captions go?</h1>
+    <p class="lead">They go on a video track as Text+ titles. Your clips and subtitles are not moved or deleted.</p>
+    <div class="tl" id="tlA"></div>
+    <div class="opts">
+      <div class="opt">
+        <h4>Video track</h4>
+        <div class="choice on"><span class="radio"></span><div>New track V3, above everything<small>Recommended: nothing can cover the captions</small></div></div>
+        <div class="choice"><span class="radio"></span><div>Existing track V2 · B-roll<small>Only where it is empty; overlaps go to a new track</small></div></div>
+      </div>
+      <div class="opt">
+        <h4>After placing</h4>
+        <div class="choice on"><span class="box">✓</span><div>Turn off Subtitle 1<small>So the same words do not show twice. Turn it back on any time.</small></div></div>
+        <div class="choice on"><span class="box">✓</span><div>Replace captions from the last send<small>Send again after changes and V3 is updated, not doubled</small></div></div>
+      </div>
+    </div>
+    <div class="summary">
+      <div><div class="k">Captions</div><div class="v">142 from Subtitle 1</div></div>
+      <div><div class="k">Animation</div><div class="v" id="sumPreset">Pop</div></div>
+      <div><div class="k">Goes to</div><div class="v">V3 (new) · Reel_Final</div></div>
+      <button class="ghost" data-go="2">← Back</button>
+      <button class="primary big">Send to Resolve</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ DESIGN B ═══════════════════ -->
+<div class="win" id="B">
+  <div class="titlebar"><i></i>MotionCaption Studio<span class="dots">– ▢ ✕</span></div>
+  <div class="top">
+    <div class="brand">Motion<span>Caption</span></div>
+    <div class="link"><span class="dot"></span>Linked to <b>Reel_Final</b> · 1080×1920 · 23.976 · read 12:04</div>
+    <button class="ghost small" style="padding:5px 10px">↻ Refresh from Resolve</button>
+    <span style="margin-left:auto" class="muted small">142 captions · 1 animation · 3 own · 4 highlighted words</span>
+  </div>
+  <div class="bwrap">
+    <div class="bmain">
+      <div class="stage">
+        <div class="inspector">
+          <div class="card">
+            <h5>Caption 3 · 00:00:04:02 → 00:00:05:20</h5>
+            <div class="edit" id="editB">But the right time is <em>now</em></div>
+            <div class="muted small" style="margin-top:6px">Typing here changes the caption only, never your subtitle track.</div>
+          </div>
+          <div class="card">
+            <h5>Word “now”</h5>
+            <div class="wordfx"><span class="pill on">Pop</span><span class="pill">Shake</span><span class="pill">Color only</span><span class="pill">Glow</span></div>
+          </div>
+          <div class="card">
+            <h5>Steps</h5>
+            <div class="flow">
+              <div class="st done"><span class="n">✓</span>Source: Subtitle 1 (English)</div>
+              <div class="st now"><span class="n">2</span>Pick an animation, check the preview</div>
+              <div class="st"><span class="n">3</span>Send, then click MotionCaption in Resolve</div>
+            </div>
+          </div>
+        </div>
+        <div class="fwrap"><div class="frame"><div class="person"></div><div class="safe"></div><div class="cap" id="capB"></div></div></div>
+        <div class="inspector">
+          <div class="card">
+            <h5>This caption</h5>
+            <div class="kv"><span>Animation</span><b id="curPresetB">Pop</b><span>Length</span><b>1.75 s · 42 frames</b><span>Track</span><b>V3 (new)</b><span>Lines</span><b>1 of 2 max</b></div>
+          </div>
+          <div class="card">
+            <h5>Applies to</h5>
+            <div class="wordfx"><span class="pill on">All 142</span><span class="pill">Selected 1</span><span class="pill">From here on</span></div>
+          </div>
+          <div class="card">
+            <h5>Shortcuts</h5>
+            <div class="kv"><span>Space</span><b>Play</b><span>← →</span><b>Caption back / next</b><span>Shift-click</span><b>Select a range</b></div>
+          </div>
+        </div>
+      </div>
+      <div class="lib">
+        <h4>Animations</h4>
+        <input class="search" placeholder="Search 135 animations" disabled>
+        <div class="tabs"><span class="on">All 135</span><span>Social 25</span><span>Cinematic 30</span><span>Elegant 20</span><span>Letters 25</span></div>
+        <div class="grid" id="presetsB"></div>
+      </div>
+    </div>
+    <div class="bottom">
+      <div class="tbar">
+        <span class="tc" id="tcB">00:00:04:02</span>
+        <span>Source</span><span class="sel src">ST1 · Subtitle 1 · English ▾</span>
+        <span class="arrow">→</span>
+        <span>Target</span><span class="sel dst">V3 · new track ▾</span>
+        <label style="display:flex;gap:6px;align-items:center"><span class="box" style="width:15px;height:15px;background:var(--accent);border-color:var(--accent);color:#fff;font-size:10px">✓</span>Turn off ST1 after</label>
+        <button class="primary">Send 142 captions to V3</button>
+      </div>
+      <div class="tracksB" id="tracksB"></div>
+      <div class="legend"><span><i style="background:var(--st)"></i>Subtitle track (read only)</span><span><i style="background:linear-gradient(90deg,#ff7a45,#e8455a)"></i>Animated Text+ captions (what Send makes)</span><span><b style="color:var(--st)">SRC</b> = read subtitles from · <b style="color:var(--accent)">TGT</b> = put captions on</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="mocknote">
+  <b>How the flow works with Resolve Free:</b> Resolve cannot be read from outside, so the first click on
+  Workspace → Scripts → MotionCaption reads the open timeline (its subtitle and video tracks) and opens the app with them.
+  After Send, one more click in Resolve places the captions on the chosen track. Static mockup: the data is made up.
+</div>
+
+<script>
+const CUES = [
+  ['00:00:00:10', 'Every moment is a possibility'],
+  ['00:00:01:22', 'Most people wait for the right time'],
+  ['00:00:04:02', 'But the right time is <em>now</em>'],
+  ['00:00:05:21', 'Do what you can with what you have'],
+  ['00:00:07:18', 'Start where you are'],
+  ['00:00:09:04', 'Small steps, every single day'],
+  ['00:00:11:00', 'That is how <em>everything</em> changes'],
+  ['00:00:13:12', 'Not someday. Today.'],
+  ['00:00:15:02', 'Your life is in your hands'],
+  ['00:00:17:08', 'Make it count'],
+]
+const PRESETS = [
+  ['Pop', 'Bounces in, social style', 'a-pop'], ['Fade', 'Soft fade in and out', 'a-fade'],
+  ['Rise', 'Slides up into place', 'a-rise'], ['Blur Reveal', 'Sharpens from wide blur', 'a-blur'],
+  ['Typewriter', 'Letter by letter', 'a-type'], ['Slow Push', 'Gentle zoom over the line', 'a-fade'],
+  ['Impact', 'Hits hard, then settles', 'a-pop'], ['Letter Cascade', 'Letters drop in turn', 'a-type'],
+]
+let preset = 0, cur = 2
+
+// Switcher
+function setMockup(showId) {
+  document.querySelectorAll('.switch button').forEach(x => x.classList.toggle('on', x.dataset.show === showId))
+  document.querySelectorAll('.win').forEach(w => w.classList.toggle('on', w.id === showId))
+  show()
+}
+document.querySelectorAll('.switch button').forEach(b => b.onclick = () => {
+  setMockup(b.dataset.show)
+  if (location.hash !== '#' + b.dataset.show) history.replaceState(null, '', '#' + b.dataset.show)
+})
+function checkHash() {
+  const h = (location.hash || '').replace('#', '').toUpperCase()
+  if (h === 'A' || h === 'B') setMockup(h)
+}
+window.addEventListener('hashchange', checkHash)
+checkHash()
+
+// Design A steps
+function go(n) {
+  document.querySelectorAll('#A .page').forEach(p => p.classList.toggle('on', p.dataset.page == n))
+  document.querySelectorAll('#A .steps li').forEach(li => {
+    li.classList.toggle('on', li.dataset.step == n)
+    li.classList.toggle('done', li.dataset.step < n)
+  })
+}
+document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go))
+document.querySelectorAll('#A .steps li').forEach(li => li.querySelector('button').onclick = () => go(li.dataset.step))
+document.querySelectorAll('.tcard').forEach(c => c.onclick = () => document.querySelectorAll('.tcard').forEach(x => x.classList.toggle('on', x === c)))
+document.querySelectorAll('#A .choice').forEach(c => c.onclick = () => {
+  if (c.querySelector('.radio')) c.parentElement.querySelectorAll('.choice').forEach(x => x.classList.toggle('on', x === c))
+  else c.classList.toggle('on')
+})
+
+// Little caption strips
+let seed = 7
+const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280
+document.querySelectorAll('.strip').forEach(s => {
+  let x = 0.5
+  while (x < 99) { const w = 0.35 + rnd() * 0.5; s.insertAdjacentHTML('beforeend', `<i style="left:${x}%;width:${w}%"></i>`); x += w + 0.12 + rnd() * 0.15 }
+})
+
+// Script list (A)
+document.getElementById('scriptA').innerHTML = CUES.map(([t, s], i) =>
+  `<div class="cue${i === cur ? ' on' : ''}" data-i="${i}"><div class="h"><time>${t}</time><span class="chip${i === 6 ? ' acc' : ''}">${i === 6 ? 'Impact' : 'Pop'}</span></div><p>${s}</p></div>`).join('')
+document.querySelectorAll('#scriptA .cue').forEach(c => c.onclick = () => { cur = +c.dataset.i; show() })
+
+// Presets
+for (const id of ['presetsA', 'presetsB']) {
+  const g = document.getElementById(id)
+  g.innerHTML = PRESETS.map(([n, d], i) => `<button class="preset${i === 0 ? ' on' : ''}" data-p="${i}"><b>${n}</b><span>${d}</span></button>`).join('')
+}
+document.querySelectorAll('.preset[data-p]').forEach(b => b.onclick = () => { preset = +b.dataset.p; show() })
+
+// Timeline diagram (A3)
+function blocks(n, from, to, gap) { let out = '', x = from; for (let i = 0; i < n && x < to; i++) { const w = (to - from) / n - gap; out += `<i style="left:${x}%;width:${w}%"></i>`; x += w + gap } return out }
+document.getElementById('tlA').innerHTML = [
+  ['new', 'V3', 'Captions (new)', 'lane new', blocks(26, 1, 99, 0.9)],
+  ['', 'V2', 'B-roll', 'lane v', '<i style="left:18%;width:12%"></i><i style="left:52%;width:9%"></i><i style="left:78%;width:14%"></i>'],
+  ['', 'V1', 'Interview.mp4', 'lane v', '<i style="left:0.5%;width:99%"></i>'],
+  ['', 'A1', 'Voice', 'lane a', '<i style="left:0.5%;width:99%"></i>'],
+  ['off', 'ST1', 'Subtitle 1 · English', 'lane st', blocks(26, 1, 99, 0.9)],
+  ['', 'ST2', 'Subtitle 2 · Hindi', 'lane st', blocks(25, 1, 98, 1)],
+].map(([cls, k, n, lane, b]) => `<div class="row ${cls}"><div class="th"><b>${k}</b>${n}${cls === 'off' ? '<span class="eye">source</span>' : cls === 'new' ? '<span class="eye">★</span>' : ''}</div><div class="${lane}">${b}</div></div>`).join('')
+
+// Timeline (B)
+const span = 19 // seconds shown
+const T = CUES.map(([t], i) => { const [h, m, s, f] = t.split(':').map(Number); return s + f / 24 })
+const pct = s => (s / span) * 100
+const capBlocks = (cls) => CUES.map(([, s], i) => {
+  const a = T[i], b = (T[i + 1] ?? a + 1.8) - 0.12
+  return `<i class="${cls}" data-i="${i}" style="left:${pct(a)}%;width:${pct(b - a)}%">${s.replace(/<[^>]+>/g, '')}</i>`
+}).join('')
+document.getElementById('tracksB').innerHTML =
+  `<div class="ruler"><div></div><div class="marks">${[0, 2, 4, 6, 8, 10, 12, 14, 16, 18].map(s => `<span style="left:${pct(s)}%">00:${String(s).padStart(2, '0')}</span>`).join('')}</div></div>` +
+  [
+    ['V3', 'Captions (new)', 'cap', '<button class="tgl dst on">TGT</button>', capBlocks('c')],
+    ['V2', 'B-roll', 'v', '<button class="tgl dst">TGT</button>', '<i style="left:20%;width:13%">city_drone.mp4</i><i style="left:58%;width:10%">hands.mp4</i>'],
+    ['V1', 'Interview.mp4', 'v', '<button class="tgl dst">TGT</button>', '<i style="left:0;width:100%">Interview.mp4</i>'],
+    ['A1', 'Voice', 'a', '', '<i style="left:0;width:100%"></i>'],
+    ['ST1', 'Subtitle 1 · English', 'st', '<button class="tgl src on">SRC</button>', capBlocks('s')],
+    ['ST2', 'Subtitle 2 · Hindi', 'st dim', '<button class="tgl src">SRC</button>', CUES.map((_, i) => `<i style="left:${pct(T[i])}%;width:${pct(((T[i + 1] ?? T[i] + 1.8) - 0.12) - T[i])}%"></i>`).join('')],
+  ].map(([k, n, lane, tg, b]) => `<div class="rowB${lane.includes('dim') ? ' dim' : ''}"><div class="hdr"><b>${k}</b><span class="name">${n}</span>${tg}</div><div class="laneB ${lane.replace(' dim', '')}">${b}</div></div>`).join('') +
+  `<div class="playhead" id="ph"></div>`
+document.querySelectorAll('#tracksB .laneB i[data-i]').forEach(b => b.onclick = () => { cur = +b.dataset.i; show() })
+document.querySelectorAll('#tracksB .tgl').forEach(t => t.onclick = () => {
+  const kind = t.classList.contains('src') ? 'src' : 'dst'
+  document.querySelectorAll('#tracksB .tgl.' + kind).forEach(x => x.classList.toggle('on', x === t))
+})
+
+function animate(el, html) {
+  const cls = PRESETS[preset][2]
+  el.className = 'cap'
+  if (cls === 'a-type') {
+    const text = html.replace(/<[^>]+>/g, '')
+    el.innerHTML = [...text].map((c, i) => `<span class="l" style="animation-delay:${i * 35}ms">${c === ' ' ? '&nbsp;' : c}</span>`).join('')
+    void el.offsetWidth; el.classList.add('a-type')
+  } else { el.innerHTML = html; void el.offsetWidth; el.classList.add(cls) }
+}
+
+function show() {
+  const [t, s] = CUES[cur]
+  animate(document.getElementById('capA'), s)
+  animate(document.getElementById('capB'), s)
+  document.getElementById('tcA').textContent = t
+  document.getElementById('tcB').textContent = t
+  document.getElementById('editB').innerHTML = s
+  document.getElementById('sumPreset').textContent = PRESETS[preset][0]
+  document.getElementById('curPresetB').textContent = PRESETS[preset][0]
+  document.querySelectorAll('.preset[data-p]').forEach(b => b.classList.toggle('on', +b.dataset.p === preset))
+  document.querySelectorAll('#scriptA .cue').forEach(c => c.classList.toggle('on', +c.dataset.i === cur))
+  document.querySelectorAll('#tracksB .laneB i[data-i]').forEach(b => b.classList.toggle('cur', +b.dataset.i === cur))
+  // Playhead over the caption's start, inside the lane area
+  const lanes = document.querySelector('#tracksB .laneB')
+  const box = document.getElementById('tracksB').getBoundingClientRect(), lb = lanes.getBoundingClientRect()
+  document.getElementById('ph').style.left = (lb.left - box.left + lb.width * pct(T[cur]) / 100 + 4) + 'px'
+}
+
+// Play through the captions
+setInterval(() => { cur = (cur + 1) % CUES.length; show() }, 2200)
+show()
+window.addEventListener('resize', show)
+</script>
+</body>
+</html>

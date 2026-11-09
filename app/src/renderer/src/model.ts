@@ -1,0 +1,97 @@
+import { cuesOfLayers, lookOfLayer, usableLayers } from '@core/layers'
+import type { Look, Rgb, WordLook } from '@core/look'
+import type { Cue } from '@core/srt'
+import type { TimelineData } from '../../preload'
+
+/** What the user changed on one caption. The subtitles themselves are never edited. */
+export interface CueEdit {
+  preset?: string
+  /** Text typed in the Caption tab, replacing the subtitle's for this caption only */
+  text?: string
+  /** Look settings changed for this caption only */
+  look?: Partial<Look>
+  /** Word index → that word's own look */
+  words: Record<number, WordLook>
+}
+
+export type Edits = Record<number, CueEdit>
+
+/** Where captions come from: a subtitle track read from Resolve, the Text+ layers on its
+ *  video tracks ('text'), or an SRT file */
+export type Source =
+  | { kind: 'timeline'; data: TimelineData; track: number | 'text' }
+  | { kind: 'srt'; name: string; cues: Cue[]; notes: string[] }
+
+/** Text+ layers of a timeline that can be animated, in caption order (caption n = layers[n - 1]) */
+export const layersOf = (src: Source | null) => (src?.kind === 'timeline' && src.track === 'text' ? usableLayers(src.data.texts) : [])
+
+/** Each Text+ layer's own look, as caption edits, so a layer keeps its look when animated */
+export function editsOf(src: Source | null): Edits {
+  return Object.fromEntries(layersOf(src).map((t, i) => [i + 1, { words: {}, look: lookOfLayer(t.raw) }]))
+}
+
+/** Where captions go and what happens around them */
+export interface Target {
+  track: number | 'new'
+  turnOffSource: boolean
+  replace: boolean
+}
+
+export type Scope = 'all' | 'selected' | 'this'
+
+export type SafeArea = 'off' | 'reels' | 'shorts' | 'tiktok'
+
+/** Rough share of a 9:16 frame each app covers with its buttons (right) and text (bottom) */
+export const SAFE: Record<Exclude<SafeArea, 'off'>, { name: string; rail: [number, number, number, number]; meta: number }> = {
+  reels: { name: 'Instagram Reels', rail: [2, 19, 13, 38], meta: 17 },
+  shorts: { name: 'YouTube Shorts', rail: [2, 16, 13, 40], meta: 15 },
+  tiktok: { name: 'TikTok', rail: [1.5, 18, 14, 42], meta: 19 },
+}
+
+/** Subtitle cues of a timeline track as captions */
+export function cuesOf(src: Source | null): Cue[] {
+  if (!src) return []
+  if (src.kind === 'srt') return src.cues
+  if (src.track === 'text') return cuesOfLayers(layersOf(src))
+  const t = src.data.subtitle?.find((x) => x.index === src.track)
+  return (t?.cues ?? []).map((c, i) => ({
+    n: i + 1, index: i + 1, startMs: Math.round(c.start), endMs: Math.round(c.end), raw: c.text, text: c.text.replace(/\r/g, ''), line: 0,
+  }))
+}
+
+/** The look one caption gets: the script's, with that caption's own changes on top */
+export const lookOf = (look: Look, edits: Edits, n: number): Look => {
+  const own = edits[n]?.look
+  if (!own) return look
+  return {
+    ...look, ...own,
+    outline: { ...look.outline, ...own.outline }, shadow: { ...look.shadow, ...own.shadow }, box: { ...look.box, ...own.box },
+  }
+}
+
+/** Lower case, letters and digits only, so “Story,” matches “story” */
+export const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{M}\p{N}]/gu, '')
+
+export const wordsIn = (text: string) => text.split(/\s+/).filter(Boolean)
+
+export const css = (c: Rgb, a = 1) => `rgba(${Math.round(c[0] * 255)}, ${Math.round(c[1] * 255)}, ${Math.round(c[2] * 255)}, ${a})`
+export const hex = (c: Rgb) => '#' + c.map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('')
+export const rgb = (h: string): Rgb => {
+  const n = parseInt(h.slice(1), 16)
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]
+}
+
+export const SWATCHES: Rgb[] = [[1, 1, 1], [1, 0.82, 0.25], [1, 0.35, 0.21], [0.31, 0.82, 0.55], [0.35, 0.63, 1], [1, 0.31, 0.64], [0, 0, 0]]
+
+/** Preview frame shapes for an SRT (a timeline brings its own size) */
+export const FRAMES: { label: string; aspect: number }[] = [
+  { label: '9:16', aspect: 9 / 16 }, { label: '16:9', aspect: 16 / 9 }, { label: '1:1', aspect: 1 }, { label: '4:5', aspect: 4 / 5 },
+]
+
+export function timecode(ms: number, fps = 24): string {
+  const nominal = Math.round(fps)
+  const f = Math.round((ms / 1000) * fps)
+  const s = Math.floor(f / nominal)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(Math.floor(s / 3600))}:${p(Math.floor(s / 60) % 60)}:${p(s % 60)}:${p(f % nominal)}`
+}
