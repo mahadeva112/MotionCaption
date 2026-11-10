@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { DEFAULT_HIGHLIGHT, DEFAULT_MOTION, type Highlight, type Look, type Motion, type Rgb, type WordLook } from '@core/look'
+import type { Pattern } from '@core/pattern'
 import { FAMILIES, PRESETS, presetById } from '@core/presets'
 import type { FontFamily } from './fonts'
 import { hex, rgb, SWATCHES, timecode, type SafeArea, type Scope } from './model'
@@ -51,6 +52,15 @@ interface Props {
   // Animation tab
   preset: string
   onPreset: (id: string) => void
+  pattern: Pattern
+  onPattern: (p: Partial<Pattern>) => void
+  /** The pattern runs over all captions */
+  patternOn: boolean
+  onApplyPattern: () => void
+  onStopPattern: () => void
+  /** Library clicks add to the pattern */
+  patternPick: boolean
+  onPatternPick: (b: boolean) => void
   motion: Motion
   onMotion: (m: Partial<Motion>) => void
   safe: SafeArea
@@ -334,6 +344,7 @@ export function Inspector(p: Props) {
                   onChange={(v) => p.onMotion({ stepMs: v })} />
               )}
             </Section>
+            <PatternSection {...p} />
             <Section title="Out" right="all captions" r={mo('out', 'outMs')}>
               <Seg label="Animation" value={p.motion.out} r={mo('out')} onChange={(v) => p.onMotion({ out: v })}
                 opts={[['preset', 'As designed'], ['none', 'None'], ['fade', 'Fade'], ['slide', 'Slide'], ['zoom', 'Zoom']]} />
@@ -346,5 +357,64 @@ export function Inspector(p: Props) {
         )}
       </div>
     </aside>
+  )
+}
+
+/** Animations that take turns over the captions, chunk by chunk: pick them, how many
+ *  captions share one, in order or at random, then apply */
+function PatternSection(p: Props) {
+  const P = p.pattern
+  const ids = P.ids
+  const name = (id: string) => presetById(id)?.name ?? id
+  const toSel = p.scope === 'selected' && p.selected > 0
+  const n = toSel ? p.selected : p.total
+  // What the first chunks get, e.g. "1–2 Fade · 3–4 Pop · 5–6 Rise …"
+  const every = Math.max(1, P.every)
+  const shown = P.order === 'seq' ? Math.min(ids.length, Math.ceil(n / every)) : 0
+  const sample = Array.from({ length: shown }, (_, k) => {
+    const a = k * every + 1
+    const b = Math.min(n, a + every - 1)
+    return `${a === b ? a : `${a}–${b}`} ${name(ids[k]!)}`
+  }).join(' · ') + (shown && shown * every < n ? ' · …' : '')
+  return (
+    <Section title={<>Pattern {p.patternOn && <i className="badge">on</i>}</>}
+      right={toSel ? `${p.selected} selected` : `all ${p.total} captions`}>
+      <div className="pchips">
+        {ids.map((id, i) => (
+          <span key={i} className="pchip">
+            <em>{i + 1}</em>{name(id)}
+            {i > 0 && <button title="Earlier" onClick={() => { const x = [...ids]; [x[i - 1], x[i]] = [x[i]!, x[i - 1]!]; p.onPattern({ ids: x }) }}>‹</button>}
+            <button title="Take out" onClick={() => p.onPattern({ ids: ids.filter((_, j) => j !== i) })}>✕</button>
+          </span>
+        ))}
+        {!ids.length && <span className="hint2">No animations yet. Add two or more.</span>}
+      </div>
+      <Row label="Add" wide>
+        <select className="sl" value="" onChange={(e) => { if (e.target.value) p.onPattern({ ids: [...ids, e.target.value] }) }}>
+          <option value="">+ Add an animation…</option>
+          {FAMILIES.map((f) => (
+            <optgroup key={f} label={f}>{PRESETS.filter((x) => x.family === f).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>
+          ))}
+        </select>
+      </Row>
+      <div className="btnrow" style={{ marginTop: 2 }}>
+        <Toggle on={p.patternPick} onChange={p.onPatternPick}>Add by clicking in the library</Toggle>
+      </div>
+      <Slider label="Captions per chunk" value={P.every} min={1} max={10} step={1} onChange={(v) => p.onPattern({ every: Math.max(1, Math.round(v)) })} />
+      <Seg label="Order" value={P.order} onChange={(v) => p.onPattern({ order: v })} opts={[['seq', 'In turn'], ['random', 'Random']]} />
+      {sample && <p className="hint2">{sample}</p>}
+      {P.order === 'random' && ids.length > 1 && <p className="hint2">Never the same animation twice in a row.</p>}
+      <div className="btnrow">
+        <button className="go" disabled={!ids.length} onClick={p.onApplyPattern}>
+          {toSel ? `Apply to ${p.selected} selected` : p.patternOn ? `On for all ${p.total}` : `Apply to all ${p.total}`}
+        </button>
+        {P.order === 'random' && ids.length > 1 && <button className="mini" onClick={() => p.onPattern({ seed: P.seed + 1 })}>Shuffle again</button>}
+        {p.patternOn && <button className="mini" title="All captions get the one animation picked above again" onClick={p.onStopPattern}>Turn off</button>}
+        {ids.length > 0 && <button className="mini" onClick={() => p.onPattern({ ids: [] })}>Clear</button>}
+      </div>
+      <p className="hint2">{p.patternOn
+        ? 'Changes here show at once. Captions added later in Resolve get the pattern too. A caption you give its own animation keeps it.'
+        : 'On all captions it stays live: new captions get it too. On selected captions each one gets its animation as its own.'}</p>
+    </Section>
   )
 }

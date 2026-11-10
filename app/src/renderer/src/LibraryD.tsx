@@ -11,12 +11,14 @@ interface Props {
   target: string
   recent: string[]
   onPick: (id: string) => void
+  /** A click adds the animation to the pattern being built */
+  adding?: boolean
   /** Pointer over a tile: try it on the preview; null when it leaves the grid */
   onHover: (id: string | null) => void
 }
 
 /** The big middle area of Pro: search, groups as chips, and a wide grid of tiles */
-export function LibraryD({ current, target, recent, onPick, onHover }: Props) {
+export function LibraryD({ current, target, recent, onPick, onHover, adding }: Props) {
   const [bin, setBin] = useState<Bin>('All')
   const [q, setQ] = useState('')
   const query = q.trim().toLowerCase()
@@ -27,7 +29,7 @@ export function LibraryD({ current, target, recent, onPick, onHover }: Props) {
 
   return (
     <section className="lib2">
-      <div className="phead"><b>Animations</b><span className="r">{PRESETS.length} presets · click to use on <b>{target}</b></span></div>
+      <div className="phead"><b>Animations</b><span className="r">{PRESETS.length} presets · {adding ? <>click to <b>add to the pattern</b></> : <>click to use on <b>{target}</b></>}</span></div>
       <div className="libtop">
         <input className="search" type="search" placeholder={`Search ${PRESETS.length} animations`} value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="chips">

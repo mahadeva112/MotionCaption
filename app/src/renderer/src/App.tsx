@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { compileCue, type CompileOpts } from '@core/compile'
 import { jobToLua, makeJob, sigOf } from '@core/job'
 import { DEFAULT_HIGHLIGHT, DEFAULT_LOOK, DEFAULT_MOTION, type Highlight, type Look, type Motion, type WordLook } from '@core/look'
+import { EMPTY_PATTERN, patternList, type Pattern } from '@core/pattern'
 import { presetById } from '@core/presets'
 import { parseSrt } from '@core/srt'
 import type { Cue } from '@core/srt'
@@ -75,7 +76,14 @@ export function App() {
   const [sending, setSending] = useState(false)
   const [resetting, setResetting] = useState(false)
   /** The work just before a reset, for one Undo */
-  const [undo, setUndo] = useState<{ look: Look; highlight: Highlight; motion: Motion; edits: Edits; preset: string; target: Target; safe: SafeArea; styleBase: StyleBase } | null>(null)
+  const [undo, setUndo] = useState<{ look: Look; highlight: Highlight; motion: Motion; edits: Edits; preset: string; target: Target; safe: SafeArea; styleBase: StyleBase; pattern: Pattern; patternOn: boolean } | null>(null)
+  /** Animations that take turns over the captions, a chunk at a time (core/pattern.ts);
+   *  on: it runs over all captions in place of the one animation for all */
+  const [pattern, setPattern] = useState<Pattern>(() => ({ ...EMPTY_PATTERN, ...saved('mc.pattern', { pattern: EMPTY_PATTERN }).pattern }))
+  const [patternOn, setPatternOn] = useState(() => saved('mc.pattern', { on: false }).on)
+  /** Clicks in the animation library add to the pattern instead of using the animation */
+  const [patternPick, setPatternPick] = useState(false)
+  useEffect(() => store('mc.pattern', { pattern, on: patternOn }), [pattern, patternOn])
   const [recent, setRecent] = useState<string[]>(() => saved('mc.misc', { recent: [] as string[] }).recent)
   const [userStyles, setUserStyles] = useState<{ name: string; look: Partial<Look> }[]>(() => saved('mc.styles', { list: [] as { name: string; look: Partial<Look> }[] }).list)
   /** The Style last picked: the Inspector's ↺ buttons put a setting back to its value */
@@ -142,7 +150,11 @@ export function App() {
   const baseCues = useMemo(() => cuesOf(source), [source])
   const cues: Cue[] = useMemo(() => baseCues.map((c) => (edits[c.n]?.text !== undefined ? { ...c, text: edits[c.n]!.text! } : c)), [baseCues, edits])
   const cue = cues.find((c) => c.n === active) ?? cues[0] ?? null
-  const presetOf = (n: number) => edits[n]?.preset ?? defaultPreset
+  /** Each caption's place in the script, for the pattern's chunks */
+  const order = useMemo(() => new Map(baseCues.map((c, i) => [c.n, i])), [baseCues])
+  const patterned = useMemo(() => (patternOn ? patternList(pattern, baseCues.length) : []), [patternOn, pattern, baseCues.length])
+  /** A caption's own animation, else the pattern's for its chunk, else the one for all */
+  const presetOf = (n: number) => edits[n]?.preset ?? patterned[order.get(n) ?? -1] ?? defaultPreset
   const effLook = cue ? lookOf(look, edits, cue.n) : look
 
   // Caption changes are kept on this computer for each source as they are made
@@ -168,7 +180,7 @@ export function App() {
     if (!cue || cue.endMs <= cue.startMs || !cue.text.trim()) return null
     try { return compileCue(cue, hoverPreset ?? presetOf(cue.n), opts(cue.n)) } catch { return null }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cue, opts, defaultPreset, hoverPreset])
+  }, [cue, opts, defaultPreset, patterned, hoverPreset])
 
   // Count the captions that differ from the last Send, a moment after the last change.
   // The count is for the button; Resolve itself decides what an update touches.
@@ -187,7 +199,7 @@ export function App() {
     }, 300)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sent, cues, opts, defaultPreset])
+  }, [sent, cues, opts, defaultPreset, patterned])
 
   // ── Scope-aware changes ──
   const targets = (): number[] => (scope === 'selected' ? [...sel] : cue ? [cue.n] : [])
@@ -208,6 +220,7 @@ export function App() {
     setRecent((r) => [id, ...r.filter((x) => x !== id)].slice(0, 12))
     if (scope === 'all') {
       setDefaultPreset(id)
+      setPatternOn(false)
       setEdits((e) => Object.fromEntries(Object.entries(e).map(([n, x]) => [n, { ...x, preset: undefined }])))
       return
     }
@@ -216,6 +229,24 @@ export function App() {
       for (const n of targets()) next[n] = { words: {}, ...next[n], preset: id }
       return next
     })
+  }
+  /** The pattern over all captions (each one's own animation goes), or over the selected
+   *  ones in order (they get it as their own animation) */
+  function applyPattern() {
+    if (!pattern.ids.length) return
+    setPatternPick(false)
+    if (scope === 'selected' && sel.size) {
+      const ns = baseCues.filter((c) => sel.has(c.n)).map((c) => c.n)
+      const list = patternList(pattern, ns.length)
+      setEdits((e) => {
+        const next = { ...e }
+        ns.forEach((n, i) => { next[n] = { words: {}, ...next[n], preset: list[i] } })
+        return next
+      })
+      return
+    }
+    setPatternOn(true)
+    setEdits((e) => Object.fromEntries(Object.entries(e).map(([n, x]) => [n, { ...x, preset: undefined }])))
   }
   function changeWord(partial: Partial<WordLook> | null) {
     if (!cue || selWord === null) return
@@ -309,7 +340,8 @@ export function App() {
 
   // ── Reset: this project's work back to how the app starts ──
   function resetAll() {
-    setUndo({ look, highlight, motion, edits, preset: defaultPreset, target, safe, styleBase })
+    setUndo({ look, highlight, motion, edits, preset: defaultPreset, target, safe, styleBase, pattern, patternOn })
+    setPattern(EMPTY_PATTERN); setPatternOn(false); setPatternPick(false)
     setLook(DEFAULT_LOOK); setHighlight(DEFAULT_HIGHLIGHT); setMotion(DEFAULT_MOTION); setStyleBase(NO_STYLE)
     // Text+ layers go back to the look they have in Resolve
     setEdits(editsOf(source)); setDefaultPreset(DEFAULT_PRESET); setTarget(DEFAULT_TARGET); setSafe('off')
@@ -322,6 +354,7 @@ export function App() {
     if (!undo) return
     setLook(undo.look); setHighlight(undo.highlight); setMotion(undo.motion); setStyleBase(undo.styleBase)
     setEdits(undo.edits); setDefaultPreset(undo.preset); setTarget(undo.target); setSafe(undo.safe)
+    setPattern(undo.pattern); setPatternOn(undo.patternOn)
     setUndo(null)
   }
   // The Undo offer goes away after a while
@@ -454,7 +487,8 @@ export function App() {
             onPickWord={(i) => { setSelWord(i); setTab('Words'); setPlaying(false) }} onDrag={drag} />
           <CaptionCard caption={cue} total={cues.length} words={words} selWord={selWord} styled={styledWords} fps={fps}
             onWord={(i) => { setSelWord(i); setTab('Words'); setPlaying(false) }} />
-          <LibraryD current={cue ? presetOf(cue.n) : defaultPreset} target={scopeTarget} recent={recent} onPick={pickPreset} onHover={tryPreset} />
+          <LibraryD current={cue ? presetOf(cue.n) : defaultPreset} target={scopeTarget} recent={recent} onHover={tryPreset}
+            adding={patternPick} onPick={patternPick ? (id) => setPattern((x) => ({ ...x, ids: [...x.ids, id] })) : pickPreset} />
           <Inspector
             tab={tab} onTab={setTab} scope={scope} onScope={setScope} selected={sel.size} total={cues.length}
             look={effLook} onLook={changeLook} styles={[...BUILT_IN_STYLES, ...userStyles]}
@@ -473,6 +507,9 @@ export function App() {
             styledWords={styledWords} onWordLook={changeWord} everywhere={everywhere} onEverywhere={setEverywhere}
             highlight={highlight} onHighlight={(h) => setHighlight((x) => ({ ...x, ...h }))}
             preset={cue ? presetOf(cue.n) : defaultPreset} onPreset={pickPreset}
+            pattern={pattern} onPattern={(x) => setPattern((y) => ({ ...y, ...x }))} patternOn={patternOn}
+            onApplyPattern={applyPattern} onStopPattern={() => setPatternOn(false)}
+            patternPick={patternPick} onPatternPick={setPatternPick}
             motion={motion} onMotion={(m) => setMotion((x) => ({ ...x, ...m }))}
             safe={safe} onSafe={setSafe}
           />
@@ -513,7 +550,7 @@ function ResetDialog({ onReset, onClose }: { onReset: () => void; onClose: () =>
           <p className="lead">This puts the app back to how it starts, for all captions:</p>
           <ul className="how">
             <li>Look, size, colours, outline, shadow, box and position</li>
-            <li>Animation (back to <b>Fade</b>), motion and word highlight</li>
+            <li>Animation (back to <b>Fade</b>), animation pattern, motion and word highlight</li>
             <li>Every caption's own look, animation, word styles and text edits</li>
             <li>Send options and safe area</li>
           </ul>
