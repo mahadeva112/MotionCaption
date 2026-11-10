@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useState, type CSSProperties, type ReactNode } from 'react'
 import { DEFAULT_HIGHLIGHT, DEFAULT_MOTION, type Highlight, type Look, type Motion, type Rgb, type WordLook } from '@core/look'
 import type { Pattern } from '@core/pattern'
 import { FAMILIES, PRESETS, presetById } from '@core/presets'
@@ -90,7 +90,8 @@ function Slider({ label, value, min, max, step = 0.01, fmt, onChange, r }: {
 }) {
   return (
     <Row label={label} r={r}>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} />
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))}
+        style={{ '--p': `${((value - min) / (max - min || 1)) * 100}%` } as CSSProperties} />
       <input className="num" type="number" min={min} max={max} step={step} value={Number(value.toFixed(4))}
         onChange={(e) => { const v = Number(e.target.value); if (Number.isFinite(v)) onChange(Math.min(max, Math.max(min, v))) }}
         title={fmt ? fmt(value) : undefined} />
@@ -190,7 +191,7 @@ export function Inspector(p: Props) {
               <p className="hint2">Changes this caption only. The subtitle track in Resolve is not touched.
                 {p.caption.edited && <> <button className="link" onClick={() => p.onText(null)}>Undo my changes</button></>}</p>
             </Section>
-            <Section title="Timing" right={`${p.fps} fps`}>
+            <Section title="Timing" right={`${Number(p.fps.toFixed(3))} fps`}>
               <Row label="Start"><span className="ro">{timecode(p.caption.startMs, p.fps)}</span></Row>
               <Row label="End"><span className="ro">{timecode(p.caption.endMs, p.fps)}</span></Row>
               <Row label="Length"><span className="ro">{((p.caption.endMs - p.caption.startMs) / 1000).toFixed(2)} s</span></Row>

@@ -11,6 +11,7 @@ import { hasGlyphs, loadFonts, measure, type FontFamily } from './fonts'
 import { clock } from './clock'
 import { CaptionCard } from './CaptionCard'
 import { BUILT_IN_STYLES, Inspector, type Tab } from './Inspector'
+import { Icon } from './Icon'
 import { LibraryD } from './LibraryD'
 import { usableLayers } from '@core/layers'
 import {
@@ -460,21 +461,22 @@ export function App() {
     <div className="app2">
       <header className="menubar2">
         <i className="logo" />
-        <b>Motion<span>Caption</span> Studio</b>
+        <b>MotionCaption <em>Studio</em></b>
         {source?.kind === 'timeline' && tl && (
-          <span className="link"><i className="dot" />Linked to <b>{tl.name}</b> · {tl.width}×{tl.height} · {tl.fps} fps
-            {readAt && <> · read {readAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</>}</span>
+          <span className="link"><i className="dot" />Linked <b>{tl.name}</b><i className="sep" />{tl.width}×{tl.height}<i className="sep" />{tl.fps} fps
+            {readAt && <><i className="sep" />read {readAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</>}</span>
         )}
         {source?.kind === 'srt' && (
-          <span className="link"><i className="dot off" />{source.name} · frame
+          <span className="link"><i className="dot off" />{source.name}<i className="sep" />frame
             <select className="sl" value={frame} onChange={(e) => setFrame(e.target.value)}>{FRAMES.map((f) => <option key={f.label}>{f.label}</option>)}</select>
           </span>
         )}
         <span className="grow" />
         <button className="mini" title="Read the timeline open in Resolve again"
-          onClick={() => (link.alive ? window.mc.refreshTimeline() : window.mc.runInResolve())}>↻ Refresh from Resolve</button>
-        {source && <button className="mini" title="Put every setting and caption change back to how the app starts" onClick={() => setResetting(true)}>⟲ Reset to default</button>}
-        <button className="mini" onClick={openSrt}>Open SRT…</button>
+          onClick={() => (link.alive ? window.mc.refreshTimeline() : window.mc.runInResolve())}><Icon name="refresh" />Refresh from Resolve</button>
+        {source && <button className="mini" title="Put every setting and caption change back to how the app starts" onClick={() => setResetting(true)}><Icon name="undo" />Reset</button>}
+        <button className="mini" onClick={openSrt}><Icon name="file" />Open SRT…</button>
+        {source && <button className="go cta" disabled={!placeable.length} onClick={() => setSending(true)}><Icon name="send" />{sendLabel}</button>}
       </header>
 
       {!source ? (
@@ -482,6 +484,7 @@ export function App() {
       ) : (
         <div className={'studio2' + (aspect >= 1 ? ' wide' : '')}>
           <Viewer cue={compiled} aspect={aspect} fps={fps} safe={safe} selWord={selWord} playing={playing} loop={!!hoverPreset}
+            endMs={endMs} onSeek={seek}
             label={tryingName !== null ? `Trying ${tryingName} · click to use` : cue ? `Caption ${cue.n} of ${cues.length} · ${presetById(presetOf(cue.n))?.name ?? ''}` : 'No captions'}
             onPlaying={setPlaying} onPrev={() => step(-1)} onNext={() => step(1)}
             onPickWord={(i) => { setSelWord(i); setTab('Words'); setPlaying(false) }} onDrag={drag} />
@@ -519,7 +522,7 @@ export function App() {
             onSrcTrack={switchSource}
             srcName={srcName} cues={cues} presetName={(n) => presetById(presetOf(n))?.name ?? ''} ownLook={ownLook}
             active={cue?.n ?? 0} sel={sel} onCue={pickCue} playing={playing} onSeek={seek}
-            target={target} onTarget={(t) => setTarget((x) => ({ ...x, ...t }))} fps={fps} onSend={() => setSending(true)} sendLabel={sendLabel}
+            target={target} onTarget={(t) => setTarget((x) => ({ ...x, ...t }))} fps={fps}
           />
         </div>
       )}

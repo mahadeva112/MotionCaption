@@ -34,9 +34,8 @@ export function PresetTile({ preset, on, big, onPick, onHover }: { preset: Prese
   if (big && style.fontSize) style.fontSize = `calc(${style.fontSize} * 1.25)`
   return (
     <button className={'ptile' + (on ? ' on' : '') + (big ? ' big' : '')} title={preset.desc} onClick={() => onPick(preset.id)} onMouseEnter={() => onHover?.(preset.id)}>
-      <b className={own?.m ?? f.m} style={style}>{preset.name}{preset.id === 'typewriter' ? '_' : ''}</b>
-      <em>{preset.family}</em>
-      {preset.status === 'testing' && <i>Testing</i>}
+      <span className="pthumb"><b className={own?.m ?? f.m} style={style}>{preset.name}{preset.id === 'typewriter' ? '_' : ''}</b></span>
+      <span className="pmeta"><em>{preset.family}</em>{preset.status === 'testing' && <i>Testing</i>}</span>
     </button>
   )
 }

@@ -18,11 +18,13 @@ export function CaptionCard(p: Props) {
       <div className="phead"><b>This caption</b><span className="r">{p.caption ? `${p.caption.n} / ${p.total}` : ''}</span></div>
       {p.caption ? (
         <div className="capbody">
+          <div className="capline">
           <span className="captm">{timecode(p.caption.startMs, p.fps)} → {timecode(p.caption.endMs, p.fps)}</span>
           <div className="wchips">
             {p.words.map((w, i) => (
               <button key={i} className={(i === p.selWord ? 'on ' : '') + (p.styled.has(i) ? 'own' : '')} onClick={() => p.onWord(i)}>{w}</button>
             ))}
+          </div>
           </div>
           <p className="hint2">Click a word to give it its own look. Edit the text in the Caption tab.</p>
         </div>
