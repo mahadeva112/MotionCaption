@@ -4,6 +4,7 @@ import { fontShare } from '@core/look'
 import { num, pt, valueAt } from '@core/sample'
 import { useClock } from './clock'
 import { cssFace } from './fonts'
+import { Icon } from './Icon'
 import { css, SAFE, timecode, type SafeArea } from './model'
 
 // A browser approximation of what Resolve will render, driven by the same keys and eases
@@ -44,6 +45,10 @@ interface Props {
   /** Loop this caption on its own clock (an animation being tried on hover), not the timeline's */
   loop?: boolean
   label: string
+  /** End of the last caption, for the scrub bar */
+  endMs: number
+  /** Move the playhead (click or drag on the scrub bar) */
+  onSeek: (ms: number) => void
   onPlaying: (p: boolean) => void
   onPrev: () => void
   onNext: () => void
@@ -119,6 +124,15 @@ export function Viewer(p: Props) {
     else if (d.w !== null) p.onPickWord(d.w)
   }
 
+  // Scrub bar: where the playhead is along all the captions; click or drag to move it
+  const pct = p.endMs > 0 ? Math.min(100, Math.max(0, (t / p.endMs) * 100)) : 0
+  const scrub = (e: PointerEvent<HTMLDivElement>) => {
+    if (e.type === 'pointerdown') e.currentTarget.setPointerCapture(e.pointerId)
+    else if (!e.buttons) return
+    const r = e.currentTarget.getBoundingClientRect()
+    p.onSeek(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * p.endMs)
+  }
+
   const fr = (
     <div className="vframe" ref={frame} style={{ width: W, height: H }}>
       <div className="vbg" />
@@ -130,13 +144,21 @@ export function Viewer(p: Props) {
 
   return (
     <div className={'viewer' + (p.loop ? ' trying' : '')}>
+      <div className="phead"><b>Preview</b><span className="vlabel">{p.label}</span></div>
       <div className="vstage" ref={wrap}>{fr}</div>
       <div className="transport">
-        <button onClick={p.onPrev} title="Previous caption (←)">⏮</button>
-        <button onClick={() => p.onPlaying(!p.playing)} title="Play / pause (Space)">{p.playing ? '❚❚' : '▶'}</button>
-        <button onClick={p.onNext} title="Next caption (→)">⏭</button>
-        <span className="vlabel">{p.label}</span>
-        <span className="tc">{timecode(p.loop && cue ? cue.startMs + loopMs : t, p.fps)}</span>
+        <div className="scrub" onPointerDown={scrub} onPointerMove={scrub} title="Click or drag to move the playhead">
+          <i style={{ width: `${pct}%` }} /><b style={{ left: `${pct}%` }} />
+        </div>
+        <div className="trow">
+          <span className="tc">{timecode(p.loop && cue ? cue.startMs + loopMs : t, p.fps)}</span>
+          <div className="tbtns">
+            <button onClick={p.onPrev} title="Previous caption (←)"><Icon name="prev" /></button>
+            <button className="play" onClick={() => p.onPlaying(!p.playing)} title="Play / pause (Space)"><Icon name={p.playing ? 'pause' : 'play'} size={15} /></button>
+            <button onClick={p.onNext} title="Next caption (→)"><Icon name="next" /></button>
+          </div>
+          <span className="tc end">{timecode(p.endMs, p.fps)}</span>
+        </div>
       </div>
     </div>
   )

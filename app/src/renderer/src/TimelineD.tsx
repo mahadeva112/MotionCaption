@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type MouseEvent, type PointerEvent, type R
 import type { Cue } from '@core/srt'
 import type { TimelineData } from '../../preload'
 import { useClock } from './clock'
+import { Icon } from './Icon'
 import { isTextSrc, layersIn, srcChoices, srcTrackOf, timecode, type SrcTrack, type Target } from './model'
 
 interface Props {
@@ -20,15 +21,12 @@ interface Props {
   target: Target
   onTarget: (t: Partial<Target>) => void
   fps: number
-  onSend: () => void
-  /** "Send 26 captions to Resolve", or after a send "Update 3 changed captions" */
-  sendLabel: string
   playing: boolean
   /** Move the playhead (click or drag on the ruler) */
   onSeek: (ms: number) => void
 }
 
-const HEAD = 186
+const HEAD = 200
 
 export function TimelineD(p: Props) {
   const [pps, setPps] = useState(70) // pixels per second
@@ -73,6 +71,7 @@ export function TimelineD(p: Props) {
   return (
     <section className="tl2">
       <div className="sendbar">
+        <b className="ttl">Timeline</b>
         <span>Read from</span>
         {choices.length > 0 ? (
           <select className="sl" value={String(p.srcTrack ?? '')} onChange={(e) => p.onSrcTrack(srcTrackOf(e.target.value))}
@@ -95,22 +94,21 @@ export function TimelineD(p: Props) {
         <button className={'tg' + (p.target.replace ? ' on' : '')} onClick={() => p.onTarget({ replace: !p.target.replace })}
           title="On: sending again only makes the captions you changed again; the others stay as they are in Resolve. Off: every send adds another copy on a new track."><i>✓</i>Update last send</button>
         <span className="zoom" title="Zoom">
-          <button onClick={() => setPps((v) => Math.max(10, v / 1.5))}>−</button>
-          <button onClick={() => setPps((v) => Math.min(400, v * 1.5))}>+</button>
+          <button onClick={() => setPps((v) => Math.max(10, v / 1.5))} title="Zoom out"><Icon name="minus" /></button>
+          <button onClick={() => setPps((v) => Math.min(400, v * 1.5))} title="Zoom in"><Icon name="plus" /></button>
         </span>
-        <button className="go" disabled={!placed} onClick={p.onSend}>{p.sendLabel}</button>
       </div>
       <div className="tracks">
         <div className="heads" style={{ width: HEAD }}>
           <div className="rhead"><Tc fps={p.fps} /></div>
           {newTrack
-            ? <div className="th tgt"><b>V{video.length + 1}</b><span>Text+ captions (new)</span><i className="tag t">TGT</i></div>
-            : <div className="th tgt"><b>V{p.target.track}</b><span>Text+ on {tgtTrack?.name ?? 'track'}</span><i className="tag t">TGT</i></div>}
+            ? <div className="th tgt"><b>V{video.length + 1}</b><span>Text+ captions<small>new track · {placed} clips</small></span><i className="tag t">TARGET</i></div>
+            : <div className="th tgt"><b>V{p.target.track}</b><span>Text+ on {tgtTrack?.name ?? 'track'}<small>empty spots · {placed} clips</small></span><i className="tag t">TARGET</i></div>}
           {fromText
-            ? <div className="th st src" title="Change it under Read from"><b>T+</b><span>Text+ on {layerTracks}</span><i className="tag s">SRC</i></div>
+            ? <div className="th st src" title="Change it under Read from"><b>T+</b><span>Text+ on {layerTracks}<small>{layers.length} layers</small></span><i className="tag s">SOURCE</i></div>
             : srcSub
-            ? <div className="th st src" title="Change it under Read from"><b>ST{srcSub.index}</b><span>{srcSub.name}</span><i className="tag s">SRC</i></div>
-            : <div className="th st src"><b>SRT</b><span>{p.srcName}</span><i className="tag s">SRC</i></div>}
+            ? <div className="th st src" title="Change it under Read from"><b>ST{srcSub.index}</b><span>{srcSub.name}<small>subtitles · {srcSub.cues.length}</small></span><i className="tag s">SOURCE</i></div>
+            : <div className="th st src"><b>SRT</b><span>{p.srcName}<small>{p.cues.length} captions</small></span><i className="tag s">SOURCE</i></div>}
         </div>
         <div className="lanes" ref={lanes}>
           <div style={{ width, position: 'relative' }}>
@@ -119,7 +117,7 @@ export function TimelineD(p: Props) {
               {tgtTrack?.clips.map((c, i) => <i key={'o' + i} className="occ" style={{ left: x(c.start), width: Math.max(2, x(c.end - c.start) - 1) }} title={`Already on V${tgtTrack.index}: ${c.name}`}>{c.name}</i>)}
               {p.cues.map((c) => (
                 <i key={c.n} className={(c.n === p.active ? 'cur ' : '') + (p.sel.has(c.n) ? 'sel ' : '') + (p.ownLook(c.n) ? 'own' : '')}
-                  style={{ left: x(c.startMs), width: Math.max(2, x(c.endMs - c.startMs) - 1) }} onClick={click(c.n)} title={c.text}>{p.presetName(c.n)}</i>
+                  style={{ left: x(c.startMs), width: Math.max(2, x(c.endMs - c.startMs) - 1) }} onClick={click(c.n)} title={c.text}><b>{c.text}</b><small>{p.presetName(c.n)}</small></i>
               ))}
             </div>
             <div className="lane st src">
