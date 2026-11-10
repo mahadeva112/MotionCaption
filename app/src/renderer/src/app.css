@@ -136,8 +136,15 @@ span.link { text-decoration: none; cursor: default; border: 1px solid var(--r4);
 .isec h6 { margin: 0 0 6px; font-size: 11px; color: var(--t); font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .isec h6 > span { margin-left: auto; color: var(--t3); font-weight: 400; }
 .isec.off .irow { opacity: .4; pointer-events: none; }
-.irow { display: grid; grid-template-columns: 78px 1fr 58px; gap: 8px; align-items: center; margin: 5px 0; color: var(--t2); }
-.irow.wide { grid-template-columns: 78px 1fr; }
+.irow { display: grid; grid-template-columns: 78px 1fr 58px 16px; gap: 8px; align-items: center; margin: 5px 0; color: var(--t2); }
+.irow.wide { grid-template-columns: 78px 1fr 16px; }
+/* ↺ at the end of a row or section title: lit when the value differs from the style */
+.rst { width: 16px; height: 16px; padding: 0; border: 0; border-radius: 3px; background: none; color: var(--t3); font-size: 13px; line-height: 1; display: grid; place-items: center; opacity: .3; font-style: normal; font-weight: 400; }
+i.rst { visibility: hidden; }
+.rst.on { opacity: 1; color: var(--t); cursor: pointer; }
+.rst.on:hover { background: var(--r5); }
+.isec h6 > .rst { margin-left: auto; flex: none; }
+.isec h6 > span + .rst { margin-left: 0; }
 .irow .ro { color: var(--t); font-variant-numeric: tabular-nums; }
 input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 3px; background: #48484d; border-radius: 2px; outline: none; margin: 0; }
 input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 11px; height: 11px; border-radius: 50%; background: #d4d4d4; border: 1px solid #111; cursor: pointer; }
@@ -160,7 +167,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 11px;
 .grid9 button.on::after { background: var(--sel); }
 .posrow { display: flex; gap: 12px; align-items: flex-start; }
 .posrow > div:last-child { flex: 1; min-width: 0; }
-.posrow .irow { grid-template-columns: 58px 1fr 52px; }
+.posrow .irow { grid-template-columns: 58px 1fr 52px 16px; }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .chips button { background: #19191a; border: 1px solid var(--r5); border-radius: 3px; padding: 3px 7px; font-size: 12px; }
 .chips button.has { color: #ffd23f; }
