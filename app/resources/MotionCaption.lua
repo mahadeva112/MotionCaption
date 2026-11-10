@@ -1132,6 +1132,35 @@ local function job_age(job)
     return os.difftime(os.time(now), sent)
 end
 
+-- Resolve keeps drawing a clip the way it first drew it. A caption placed where a clip was
+-- drawn before (an update of a super), or drawn before build() added its Follower, plays
+-- without its letter animation until the project is opened again. Opening another timeline
+-- and coming back makes Resolve draw this one again, as a restart does. With no other
+-- timeline in the project, an empty one is made for the moment and deleted again.
+local function redraw(project, mp, tl)
+    local name = try(function() return tl:GetName() end)
+    local other
+    for i = 1, (try(function() return project:GetTimelineCount() end) or 0) do
+        local t = try(function() return project:GetTimelineByIndex(i) end)
+        if t and try(function() return t:GetName() end) ~= name then other = t break end
+    end
+    local temp
+    if not other then
+        temp = try(function() return mp:CreateEmptyTimeline("MC redraw " .. os.date("%H%M%S")) end)
+        other = temp
+    end
+    if not other then log("NOTE  Could not open another timeline to redraw " .. tostring(name)); return end
+    local otherName = try(function() return other:GetName() end)
+    try(function() return project:SetCurrentTimeline(other) end)
+    try(function() return project:SetCurrentTimeline(tl) end)
+    local now = try(function() return project:GetCurrentTimeline():GetName() end)
+    if now ~= name then try(function() return project:SetCurrentTimeline(tl) end) end
+    local gone = temp and try(function() return mp:DeleteTimelines({ temp }) end)
+    log(string.format("OK    Redrew %s: opened %s and came back%s", tostring(name),
+        temp and "an empty timeline" or ("“" .. tostring(otherName) .. "”"),
+        temp and (gone and ", then deleted it" or (", but could not delete “" .. tostring(otherName) .. "”")) or ""))
+end
+
 local function main()
     if not rv then fail("This scripting host has no Resolve object."); return end
     local job, jerr = load_job()
@@ -1250,6 +1279,7 @@ local function main()
         log("OK    Switched to the timeline “" .. job.timeline .. "” the captions were made for")
     end
     local sum = place(job, tl, project, mp)
+    if sum.placed > 0 then try(function() redraw(project, mp, tl) end) end
     result.timeline, result.fps, result.tracks = sum.timeline, fps, sum.tracks
     result.placed, result.failed = sum.placed, sum.failed
     result.kept, result.removed = sum.kept or 0, sum.removed or 0

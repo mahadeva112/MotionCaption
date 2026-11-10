@@ -91,7 +91,8 @@ local function new_timeline(name, tracks)
 end
 
 local function new_project(name, timeline)
-    local P = { name = name, tl = timeline }
+    -- The project's timelines, the open one, and every timeline opened, by name
+    local P = { name = name, tl = timeline, list = { timeline }, cur = timeline, switches = {} }
     local tpl = obj({ GetClipProperty = function(_, k) return k == "Type" and "Fusion Title" or (k == "FPS" and "24" or "") end,
         GetName = function() return "Text+" end })
     local bin = obj({ GetName = function() return "MotionCaption" end, GetClipList = function() return { tpl } end,
@@ -100,6 +101,17 @@ local function new_project(name, timeline)
         GetSubFolderList = function() return { bin } end })
     local mp = obj({
         GetRootFolder = function() return root end,
+        CreateEmptyTimeline = function(_, n)
+            local T = new_timeline(n, { { name = "Video 1", items = {} } })
+            P.list[#P.list + 1] = T
+            return T.u
+        end,
+        DeleteTimelines = function(_, us)
+            for _, u in ipairs(us) do
+                for j = #P.list, 1, -1 do if P.list[j].u == u then table.remove(P.list, j) end end
+            end
+            return true
+        end,
         AppendToTimeline = function(_, list)
             local out = {}
             for _, info in ipairs(list) do
@@ -120,9 +132,15 @@ local function new_project(name, timeline)
         end,
     })
     P.u = obj({
-        GetName = function() return P.name end, GetCurrentTimeline = function() return P.tl.u end,
-        GetMediaPool = function() return mp end, GetTimelineCount = function() return 1 end,
-        GetTimelineByIndex = function() return P.tl.u end, SetCurrentTimeline = function() return true end,
+        GetName = function() return P.name end, GetCurrentTimeline = function() return P.cur.u end,
+        GetMediaPool = function() return mp end, GetTimelineCount = function() return #P.list end,
+        GetTimelineByIndex = function(_, i) return P.list[i] and P.list[i].u end,
+        SetCurrentTimeline = function(_, u)
+            for _, T in ipairs(P.list) do
+                if T.u == u then P.cur = T; P.switches[#P.switches + 1] = T.name; return true end
+            end
+            return false
+        end,
         GetSetting = function() return "1080" end,
     })
     return P
@@ -304,5 +322,29 @@ G.tc, G.underHead = "01:00:01:12", 0
 run("update, playhead on the changed one", "first", G, { placed = 1, kept = 5, removed = 1, clips = 7 })
 check("update: no caption placed under the playhead", G.underHead, 0)
 check("update: the playhead is back where it was", G.tc, "01:00:01:12")
+
+-- 8. After a send that placed captions, Resolve is made to draw the timeline again: another
+--    timeline is opened and left, or with none, an empty one is made for the moment and deleted
+local K = new_timeline("Timeline 1", { { name = "Video 1", items = {} } })
+current = new_project("P", K)
+local PK = current
+os.remove(BASE .. "last_send.lua")
+run("one timeline in the project", "first", K, { placed = 6, kept = 0, removed = 0, clips = 6 })
+check("one timeline: opened an empty one", (PK.switches[1] or ""):match("^MC redraw") ~= nil, true)
+check("one timeline: came back", PK.switches[2], "Timeline 1")
+check("one timeline: the empty one is deleted", #PK.list, 1)
+check("one timeline: it is open again", PK.cur, K)
+
+local L = new_timeline("Timeline 1", { { name = "Video 1", items = {} } })
+current = new_project("P", L)
+local PL = current
+PL.list[2] = new_timeline("Rough cut", { { name = "Video 1", items = {} } })
+os.remove(BASE .. "last_send.lua")
+run("two timelines in the project", "first", L, { placed = 6, kept = 0, removed = 0, clips = 6 })
+check("two timelines: opened the other and came back", table.concat(PL.switches, " > "), "Rough cut > Timeline 1")
+check("two timelines: none made or deleted", #PL.list, 2)
+run("nothing changed: no redraw", "same", L, { placed = 0, kept = 6, removed = 0, clips = 6 })
+check("nothing changed: no timeline opened", #PL.switches, 2)
+check("nothing changed: still open", PL.cur, L)
 
 print(string.format("\n%d checks, %d failed", checks, fails))
