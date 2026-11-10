@@ -1127,20 +1127,25 @@ local function app_or_log()
     end
 end
 
--- The Link window: stays open inside Resolve and does each Send from the app as it comes,
--- so the app needs no second click. Closing it goes back to one click per Send.
+-- "DaVinci Resolve Studio" or "DaVinci Resolve". Anything unreadable counts as Free, so a
+-- Studio-only call is never made by mistake.
+local function is_studio()
+    local name = try(function() return rv:GetProductName() end)
+    return type(name) == "string" and name:find("Studio", 1, true) ~= nil
+end
+
+-- The Link window (Studio only): stays open inside Resolve and does each Send from the app
+-- as it comes, so the app needs no second click. Closing it goes back to one click per Send.
 local function link()
+    -- Resolve Free has no UIManager (Studio only since 19.1), and just reaching for it
+    -- makes Resolve show its "You have reached a limitation" box on every click and every
+    -- Send. So Free never touches it: the app runs this script through Resolve's menu for
+    -- each Send instead.
+    if not is_studio() then return end
     -- Resolve's script host may not set fusion/fu; Resolve itself can hand its Fusion over
     local fu_ = fusion or fu or try(function() return rv:Fusion() end)
     local ui = fu_ and try(function() return fu_.UIManager end)
-    local diag = string.format("fusion=%s fu=%s rv:Fusion()=%s UIManager=%s UIDispatcher=%s",
-        tostring(fusion ~= nil), tostring(fu ~= nil), tostring(try(function() return rv:Fusion() end) ~= nil),
-        tostring(ui ~= nil), tostring(bmd and bmd.UIDispatcher ~= nil))
-    if not ui or not bmd or not bmd.UIDispatcher then
-        -- Resolve Free 21: fusion is there but has no UIManager (bridge test 6). The app
-        -- then runs this script through Resolve's menu for each Send instead.
-        return
-    end
+    if not ui or not bmd or not bmd.UIDispatcher then return end
     local disp = bmd.UIDispatcher(ui)
     local win = disp:AddWindow({ ID = "MCLink", WindowTitle = "MotionCaption", Geometry = { 80, 120, 380, 150 } }, ui:VGroup({
         ui:Label({ ID = "Status", Text = "Connected. Press Send in MotionCaption Studio and the captions come in here.", WordWrap = true }),
