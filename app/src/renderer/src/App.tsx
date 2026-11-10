@@ -13,8 +13,8 @@ import { BUILT_IN_STYLES, Inspector, type Tab } from './Inspector'
 import { LibraryD } from './LibraryD'
 import { usableLayers } from '@core/layers'
 import {
-  cuesOf, editsByStart, editsOf, editsOnto, FRAMES, layersOf, lookOf, norm, sentKey, sourceKey, wordsIn,
-  type Edits, type EditsByStart, type SafeArea, type Scope, type Source, type Target,
+  cuesOf, editsByStart, editsOf, editsOnto, FRAMES, isTextSrc, layersIn, layersOf, lookOf, norm, sentKey, sourceKey, srcNameOf, wordsIn,
+  type Edits, type EditsByStart, type SafeArea, type Scope, type Source, type SrcTrack, type Target,
 } from './model'
 import { SendDialog } from './SendDialog'
 import { TimelineD } from './TimelineD'
@@ -99,10 +99,10 @@ export function App() {
     const tlName = d.timeline.name
     setSource((prev) => {
       const same = prev?.kind === 'timeline' && prev.data.timeline && prev.data.timeline.name === tlName
-      const valid = (t: number | 'text') => (t === 'text' ? hasText : subs.some((s) => s.index === t))
+      const valid = (t: SrcTrack) => (isTextSrc(t) ? layersIn(d.texts, t).length > 0 : subs.some((s) => s.index === t))
       const keep = same && valid(prev.track) ? prev.track : null
       // Subtitles first (the usual case); a timeline with only Text+ layers opens on those
-      const track = keep ?? (subs.find((s) => s.cues.length) ?? subs[0])?.index ?? 'text'
+      const track: SrcTrack = keep ?? (subs.find((s) => s.cues.length) ?? subs[0])?.index ?? 'text'
       const next: Source = { kind: 'timeline', data: d, track }
       if (!same || keep === null) { setEdits(keptEdits(next)); setSel(new Set()); setSelWord(null); setActive(1) }
       // The same captions read again: each change stays with its caption, by start time,
@@ -372,21 +372,14 @@ export function App() {
 
   // ── Send ──
   const placeable = cues.filter((c) => c.endMs > c.startMs && c.text.trim() !== '')
-  const fromText = source?.kind === 'timeline' && source.track === 'text'
-  const srcName = source?.kind === 'timeline'
-    ? (fromText ? 'Text+ layers' : source.data.subtitle?.find((s) => s.index === source.track)?.name ?? 'Subtitles')
+  const srcName = source?.kind === 'timeline' ? srcNameOf(source.data, source.track)
     : source?.kind === 'srt' ? source.name : ''
-  /** Read captions from another subtitle track, or from the Text+ layers */
-  function switchSource(track: number | 'text') {
+  /** Read captions from another subtitle track, or from Text+ layers (all, or one track's) */
+  function switchSource(track: SrcTrack) {
     if (source?.kind !== 'timeline') return
     const next: Source = { ...source, track }
     setSource(next); setEdits(keptEdits(next)); setSel(new Set()); setSelWord(null); setActive(1)
   }
-  const nLayers = source?.kind === 'timeline' ? usableLayers(source.data.texts).length : 0
-  const sourceOptions = source?.kind === 'timeline' ? [
-    ...(source.data.subtitle ?? []).map((s) => ({ value: String(s.index), label: `Subtitles ST${s.index} · ${s.name} · ${s.cues.length}` })),
-    ...(nLayers ? [{ value: 'text', label: `Text+ layers on the timeline · ${nLayers}` }] : []),
-  ] : undefined
   /** Text+ layers the placed captions come from (caption n = layer n) */
   const fromLayers = () => {
     const layers = layersOf(source)
@@ -404,7 +397,7 @@ export function App() {
       target: {
         track: target.track, replace: target.replace,
         ...(source?.kind === 'timeline' && target.turnOffSource
-          ? (source.track === 'text' ? { disableClips: fromLayers() } : { disableSubtitle: source.track })
+          ? (isTextSrc(source.track) ? { disableClips: fromLayers() } : { disableSubtitle: source.track })
           : {}),
       },
     })
