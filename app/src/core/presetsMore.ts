@@ -12,7 +12,11 @@ function p(id: string, name: string, family: Family, desc: string, tracks: Track
 
 // Looks checked from Resolve stills on 2026-11-08 (110 presets, 3 stills each). These three
 // came back with frames of other captions, so their look is not confirmed yet.
-const UNCHECKED = new Set(['cascadeRtl', 'typeFast', 'bounceIn'])
+// Quiet, professional title moves added 2026-11-10: small amounts, no overshoot, no bounce.
+// Not yet seen in Resolve output, so they start as 'testing'.
+const SUBTLE_CINEMATIC = ['cleanCut', 'lensBreath', 'titleCard', 'horizon', 'settleDown', 'focusShift',
+  'exitDrift', 'docTitle', 'trailerFade', 'fineRise', 'anamorphic', 'quietPush']
+const UNCHECKED = new Set(['cascadeRtl', 'typeFast', 'bounceIn', ...SUBTLE_CINEMATIC])
 
 const L = (stepMs: number, order: Letters['order'] = 'ltr'): { letters: Letters } => ({ letters: { order, stepMs } })
 const SOFT = { fixed: [SOFT_FILL] }
@@ -112,6 +116,34 @@ export const MORE_PRESETS: Preset[] = [
     move.size(tween(0.9, 1, 2000)), text.spacing(tween(1.08, 1, 2000)), ...blur(tween(8, 0, 900)), fadeBoth(900, 400)], SOFT),
   p('finalFrame', 'Final Frame', 'Cinematic', 'A slow fade up and push, then it blurs away.', [
     move.size(whole(1, 1.04)), ...blur(exit(0, 8, 400)), fadeBoth(1200, 400)], SOFT),
+
+  // Subtle set: the kind of moves used on film and documentary titles. Small distances,
+  // smooth eases, nothing that jumps.
+  p('cleanCut', 'Clean Cut', 'Cinematic', 'A crisp, quick fade through a light blur. Calm, no movement.', [
+    ...blur([...tween(3, 0, 220), ...exit(0, 3, 200)]), fadeBoth(160, 160)], SOFT),
+  p('lensBreath', 'Lens Breath', 'Cinematic', 'Eases a touch smaller as it comes into focus, like a lens settling.', [
+    move.size(tween(1.03, 1, 1000, EASE.inOut)), ...blur(tween(4, 0, 800)), fadeBoth(500, 350)], SOFT),
+  p('titleCard', 'Title Card', 'Cinematic', 'A slow fade up while the letters close in by a hair.', [
+    text.spacing(tween(1.035, 1, 2400, EASE.inOut)), move.size(whole(1, 1.015)), fadeBoth(900, 600)]),
+  p('horizon', 'Horizon', 'Cinematic', 'Lifts a little into place out of a soft blur.', [
+    move.at(tween(at(0.5, 0.488), C, 1200, EASE.inOut)), text.spacing(tween(1.025, 1, 1200)),
+    ...blur(tween(3, 0, 900)), fadeBoth(700, 400)], SOFT),
+  p('settleDown', 'Settle Down', 'Cinematic', 'Lowers gently into place, no bounce.', [
+    move.at(tween(at(0.5, 0.512), C, 1000, EASE.inOut)), fadeBoth(600, 350)]),
+  p('focusShift', 'Focus Shift', 'Cinematic', 'Pulls into focus, holds sharp, then softens away.', [
+    ...blur([...tween(5, 0, 700, EASE.inOut), ...exit(0, 5, 600, EASE.inOut)]), fadeBoth(500, 550)], SOFT),
+  p('exitDrift', 'Exit Drift', 'Cinematic', 'Holds still, then drifts left and softens as it leaves.', [
+    move.at(exit(C, at(0.49), 700, EASE.inOut)), ...blur(exit(0, 3, 600)), fadeBoth(400, 600)], SOFT),
+  p('docTitle', 'Documentary', 'Cinematic', 'A slow sideways drift while the letters open slightly.', [
+    move.at(whole(at(0.496), at(0.504))), text.spacing(whole(1, 1.015)), fadeBoth(700, 500)]),
+  p('trailerFade', 'Trailer Fade', 'Cinematic', 'Fades up from black while easing back to size.', [
+    move.size(tween(1.04, 1, 1600, EASE.inOut)), text.opacity([...tween(0, 1, 1000, EASE.inOut), ...fadeOut(500)])]),
+  p('fineRise', 'Fine Letter Rise', 'Cinematic', 'Letters lift a hair into place, quickly and evenly.', [
+    letter.offset(tween(at(0, -0.008), at(0, 0), 420)), letter.opacity(tween(0, 1, 380, EASE.inOut))], L(18)),
+  p('anamorphic', 'Anamorphic', 'Cinematic', 'Letters come in slightly wide and narrow to shape, soft and even.', [
+    letter.sizeX(tween(1.25, 1, 450, EASE.inOut)), letter.opacity(tween(0, 1, 350, EASE.inOut))], L(16)),
+  p('quietPush', 'Quiet Push', 'Cinematic', 'Comes into focus, then pushes in very slowly for the rest of the shot.', [
+    move.size(whole(1, 1.025)), ...blur(tween(3, 0, 600)), fadeBoth(500, 400)], SOFT),
 
   // ── Social ───────────────────────────────────────────────────────────────
   p('bouncePop', 'Bounce Pop', 'Social', 'Pops in big, bounces, settles.', [
