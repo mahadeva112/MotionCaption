@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent, type RefObject } from 'react'
-import { usableLayers } from '@core/layers'
+
 import type { Cue } from '@core/srt'
 import type { TimelineData } from '../../preload'
 import { useClock } from './clock'
-import { timecode, type Target } from './model'
+import { isTextSrc, layersIn, srcChoices, srcTrackOf, timecode, type SrcTrack, type Target } from './model'
 
 interface Props {
   data: TimelineData | null
-  /** Subtitle track the captions come from, or 'text' for the Text+ layers (timeline sources only) */
-  srcTrack: number | 'text' | null
-  onSrcTrack: (i: number | 'text') => void
+  /** Subtitle track or Text+ layers the captions come from (timeline sources only) */
+  srcTrack: SrcTrack | null
+  onSrcTrack: (t: SrcTrack) => void
   srcName: string
   cues: Cue[]
   presetName: (n: number) => string
@@ -38,8 +38,9 @@ export function TimelineD(p: Props) {
   // Only the two tracks you work with: where the Text+ captions go, and the subtitles they come from
   const tgtTrack = p.target.track === 'new' ? null : video.find((v) => v.index === p.target.track) ?? null
   const srcSub = subs.find((s) => s.index === p.srcTrack) ?? null
-  const layers = usableLayers(p.data?.texts)
-  const fromText = p.srcTrack === 'text'
+  const fromText = isTextSrc(p.srcTrack)
+  const layers = fromText ? layersIn(p.data?.texts, p.srcTrack!) : []
+  const choices = srcChoices(p.data, p.srcTrack)
   // The tracks the Text+ layers sit on, e.g. "V2, V3"
   const layerTracks = [...new Set(layers.map((t) => t.track))].sort((a, b) => a - b).map((t) => 'V' + t).join(', ')
   const endMs = Math.max(10000, ...p.cues.map((c) => c.endMs))
@@ -73,10 +74,10 @@ export function TimelineD(p: Props) {
     <section className="tl2">
       <div className="sendbar">
         <span>Read from</span>
-        {subs.length > 0 || layers.length > 0 ? (
-          <select className="sl" value={p.srcTrack ?? ''} onChange={(e) => p.onSrcTrack(e.target.value === 'text' ? 'text' : Number(e.target.value))}>
-            {subs.map((s) => <option key={s.index} value={s.index}>ST{s.index} · {s.name} · {s.cues.length}</option>)}
-            {layers.length > 0 && <option value="text">Text+ layers on {layerTracks} · {layers.length}</option>}
+        {choices.length > 0 ? (
+          <select className="sl" value={String(p.srcTrack ?? '')} onChange={(e) => p.onSrcTrack(srcTrackOf(e.target.value))}
+            title="A super or title on its own track: pick that track's Text+ here, animate it and send it. It gets its own MC track and leaves other captions alone.">
+            {choices.map((c) => <option key={String(c.value)} value={String(c.value)}>{c.label}</option>)}
           </select>
         ) : <b className="ro">{p.srcName}</b>}
         <span className="arrow">→</span>

@@ -591,15 +591,30 @@ local function new_timeline(mp, project, name, rate)
 end
 
 -- ── What was sent ──────────────────────────────────────────────────────────
--- Each send leaves a record of the captions it made: one file per project and timeline,
--- listing every caption's track, first frame, length and content signature (job cue.sig).
--- The next send to that timeline keeps the captions that are still wanted exactly as they
+-- Each send leaves a record of the captions it made: one file per project, timeline and
+-- source (the captions' track name, job.trackName), listing every caption's track, first
+-- frame, length and content signature (job cue.sig).
+-- The next send from that source keeps the captions that are still wanted exactly as they
 -- are, so an update only touches what changed, and whatever was adjusted by hand in
--- Resolve on an unchanged caption stays.
-local function record_path(projectName, timelineName)
+-- Resolve on an unchanged caption stays. Sources keep apart: sending the Text+ on one
+-- track (a super) leaves the subtitles' captions alone, and the other way round.
+local function record_path(projectName, timelineName, source)
     local h = 5381
-    for c in (tostring(projectName) .. "\n" .. tostring(timelineName)):gmatch(".") do h = (h * 33 + c:byte()) % 2147483648 end
+    local key = tostring(projectName) .. "\n" .. tostring(timelineName) .. (source and ("\n" .. tostring(source)) or "")
+    for c in key:gmatch(".") do h = (h * 33 + c:byte()) % 2147483648 end
     return BASE .. string.format("sent_%08x.lua", h)
+end
+
+-- Does a record list a track this source makes ("MC Subtitle 1", "MC Subtitle 1 2", …)?
+local function made_by(rec, trackName)
+    for _, n in ipairs(type(rec.tracks) == "table" and rec.tracks or {}) do
+        n = tostring(n)
+        if n == trackName or n:sub(1, #trackName + 1) == trackName .. " " then return true end
+    end
+    for _, c in ipairs(type(rec.clips) == "table" and rec.clips or {}) do
+        if c.track == trackName then return true end
+    end
+    return false
 end
 
 local function load_record(path)
@@ -653,14 +668,21 @@ local function place(job, tl, project, mp, tag)
         end
     end
 
-    local recPath = record_path(try(function() return project:GetName() end), tl:GetName())
+    local projectName = try(function() return project:GetName() end)
+    local recPath = record_path(projectName, tl:GetName(), job.trackName)
     local reuse, keptCount, removed = {}, 0, 0
     if tgt.replace and not test.newTimeline then
         local last = load_record(recPath)
         if not last then
+            -- A send made when a timeline had one record for every source: it counts only
+            -- if it made this source's tracks
+            local shared = load_record(record_path(projectName, tl:GetName()))
+            if shared and made_by(shared, job.trackName) then last = shared end
+        end
+        if not last then
             -- A send made before each timeline had its own record
             local old = load_record(LAST_SEND)
-            if old and not old.project then last = old end
+            if old and not old.project and made_by(old, job.trackName) then last = old end
         end
         if last and last.timeline == tl:GetName() and type(last.tracks) == "table" then
             -- What the last send made, by track name and first frame

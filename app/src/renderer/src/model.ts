@@ -1,4 +1,4 @@
-import { cuesOfLayers, lookOfLayer, usableLayers } from '@core/layers'
+import { cuesOfLayers, lookOfLayer, usableLayers, type LayerLike } from '@core/layers'
 import type { Look, Rgb, WordLook } from '@core/look'
 import type { Cue } from '@core/srt'
 import type { TimelineData } from '../../preload'
@@ -16,14 +16,52 @@ export interface CueEdit {
 
 export type Edits = Record<number, CueEdit>
 
-/** Where captions come from: a subtitle track read from Resolve, the Text+ layers on its
- *  video tracks ('text'), or an SRT file */
+/** Which captions of a timeline: a subtitle track (its number), every Text+ layer on its
+ *  video tracks ('text'), or only the Text+ on one video track ('text:2' for V2, e.g. a super) */
+export type SrcTrack = number | 'text' | `text:${number}`
+
+/** Where captions come from: a timeline read from Resolve (see SrcTrack), or an SRT file */
 export type Source =
-  | { kind: 'timeline'; data: TimelineData; track: number | 'text' }
+  | { kind: 'timeline'; data: TimelineData; track: SrcTrack }
   | { kind: 'srt'; name: string; cues: Cue[]; notes: string[] }
 
+export const isTextSrc = (t: SrcTrack | null | undefined): t is 'text' | `text:${number}` => typeof t === 'string'
+/** The video track a 'text:N' source reads, or null for every track */
+export const textTrackOf = (t: SrcTrack): number | null => (typeof t === 'string' && t.startsWith('text:') ? Number(t.slice(5)) : null)
+/** A Read from value back from a <select> */
+export const srcTrackOf = (v: string): SrcTrack => (v === 'text' || v.startsWith('text:') ? (v as SrcTrack) : Number(v))
+
+
+/** Text+ layers a source reads, from a timeline's layers */
+export function layersIn<T extends LayerLike>(texts: T[] | undefined, t: SrcTrack): T[] {
+  if (!isTextSrc(t)) return []
+  const only = textTrackOf(t)
+  return usableLayers(texts).filter((x) => only === null || x.track === only)
+}
+
 /** Text+ layers of a timeline that can be animated, in caption order (caption n = layers[n - 1]) */
-export const layersOf = (src: Source | null) => (src?.kind === 'timeline' && src.track === 'text' ? usableLayers(src.data.texts) : [])
+export const layersOf = (src: Source | null) => (src?.kind === 'timeline' ? layersIn(src.data.texts, src.track) : [])
+
+/** The Read from choices for a timeline: each subtitle track, the Text+ on each video track
+ *  on its own, and every Text+ layer together when they sit on more than one track (or when
+ *  that is the current choice) */
+export function srcChoices(data: TimelineData | null | undefined, current?: SrcTrack | null): { value: SrcTrack; label: string }[] {
+  const subs = (data?.subtitle ?? []).map((s) => ({ value: s.index as SrcTrack, label: `ST${s.index} · ${s.name} · ${s.cues.length}` }))
+  const layers = usableLayers(data?.texts)
+  const tracks = [...new Set(layers.map((t) => t.track))].sort((a, b) => a - b)
+  const name = (i: number) => data?.video?.find((v) => v.index === i)?.name ?? ''
+  const one = tracks.map((i) => ({ value: `text:${i}` as SrcTrack, label: `Text+ on V${i} · ${name(i)} · ${layers.filter((t) => t.track === i).length}` }))
+  const all = tracks.length > 1 || (current === 'text' && tracks.length) ? [{ value: 'text' as SrcTrack, label: `Text+ on ${tracks.map((i) => 'V' + i).join(', ')} · ${layers.length}` }] : []
+  return [...subs, ...one, ...all]
+}
+
+/** What a timeline source is called: the subtitle track's name, or which Text+ layers.
+ *  Captions made from it go on a track named after it ("MC Text+ V2"). */
+export function srcNameOf(data: TimelineData, t: SrcTrack): string {
+  if (!isTextSrc(t)) return data.subtitle?.find((s) => s.index === t)?.name ?? 'Subtitles'
+  const only = textTrackOf(t)
+  return only === null ? 'Text+ layers' : `Text+ V${only}`
+}
 
 /** Each Text+ layer's own look, as caption edits, so a layer keeps its look when animated */
 export function editsOf(src: Source | null): Edits {
@@ -80,7 +118,7 @@ export const SAFE: Record<Exclude<SafeArea, 'off'>, { name: string; rail: [numbe
 export function cuesOf(src: Source | null): Cue[] {
   if (!src) return []
   if (src.kind === 'srt') return src.cues
-  if (src.track === 'text') return cuesOfLayers(layersOf(src))
+  if (isTextSrc(src.track)) return cuesOfLayers(layersOf(src))
   const t = src.data.subtitle?.find((x) => x.index === src.track)
   return (t?.cues ?? []).map((c, i) => ({
     n: i + 1, index: i + 1, startMs: Math.round(c.start), endMs: Math.round(c.end), raw: c.text, text: c.text.replace(/\r/g, ''), line: 0,
