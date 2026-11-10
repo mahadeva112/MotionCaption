@@ -6,7 +6,7 @@ import { presetById } from '@core/presets'
 import { parseSrt } from '@core/srt'
 import type { Cue } from '@core/srt'
 import type { LinkStatus, TimelineData } from '../../preload'
-import { loadFonts, measure, type FontFamily } from './fonts'
+import { hasGlyphs, loadFonts, measure, type FontFamily } from './fonts'
 import { clock } from './clock'
 import { CaptionCard } from './CaptionCard'
 import { BUILT_IN_STYLES, Inspector, type Tab } from './Inspector'
@@ -127,7 +127,7 @@ export function App() {
   const effLook = cue ? lookOf(look, edits, cue.n) : look
 
   const opts = useCallback((n: number): Partial<CompileOpts> => ({
-    look: lookOf(look, edits, n), words: edits[n]?.words ?? {}, highlight, motion, measure, aspect,
+    look: lookOf(look, edits, n), words: edits[n]?.words ?? {}, highlight, motion, measure, aspect, hasGlyphs,
   }), [look, edits, highlight, motion, aspect])
 
   const compiled = useMemo(() => {
@@ -400,7 +400,7 @@ export function App() {
               const list = [...userStyles.filter((s) => s.name !== name), { name, look: { font, style, size, tracking, lineSpacing, textCase, fill, outline, shadow, box } }]
               setUserStyles(list); store('mc.styles', { list })
             }}
-            fonts={fonts}
+            fonts={fonts} fontUsed={compiled && compiled.look.font !== effLook.font ? compiled.look.font : null}
             caption={cue ? { n: cue.n, text: cue.text, startMs: cue.startMs, endMs: cue.endMs, edited: edits[cue.n]?.text !== undefined } : null}
             fps={fps} onText={setText}
             words={words} selWord={selWord} onSelWord={(i) => { setSelWord(i); setPlaying(false) }}

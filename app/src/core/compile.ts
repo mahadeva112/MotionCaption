@@ -83,6 +83,8 @@ export interface CompileOpts {
   measure: Measure
   /** Frame width ÷ height of the timeline */
   aspect: number
+  /** Asks the real font whether it has the caption's letters (see fontFor) */
+  hasGlyphs?: HasGlyphs
 }
 
 /** Rough widths for when no real font is at hand (tests, scripts): average Latin letters */
@@ -130,11 +132,37 @@ const DEVANAGARI = /[ऀ-ॿ]/
 /** Fonts known to have Bangla or Devanagari letters */
 const INDIC_FONTS = /nirmala|mangal|kokila|aparajita|utsaah|vrinda|shonar|kalpurush|solaiman|siyam|bangla|bengali|devanagari|hind|mukta|poppins|baloo|tiro|lohit|akshar|yatra|kohinoor/i
 
-/** Pick a font that has the caption's letters: most Latin fonts have no Indian scripts,
- *  and Text+ draws empty boxes for letters its font lacks. */
-export function fontFor(text: string, wanted: string): string {
-  if ((BENGALI.test(text) || DEVANAGARI.test(text)) && !INDIC_FONTS.test(wanted)) return 'Nirmala UI'
+/** Windows' own font for Indian scripts, used when the chosen font lacks the caption's letters */
+export const FALLBACK_FONT = 'Nirmala UI'
+
+/** Letters of the scripts Nirmala UI draws: Devanagari through Sinhala */
+const INDIC_RUN = /[ऀ-෿]+/g
+
+/** Does this font draw this text itself? The app asks the real font (renderer fonts.ts). */
+export type HasGlyphs = (text: string, font: string, style: string) => boolean
+
+/**
+ * Pick a font that has the caption's letters: most Latin fonts have no Indian scripts,
+ * and Text+ draws empty boxes for letters its font lacks. The chosen font stays whenever
+ * it can draw them; `has` asks the font itself. Without it (tests, scripts) the font's
+ * name is all there is to go by.
+ */
+export function fontFor(text: string, wanted: string, style = 'Regular', has?: HasGlyphs): string {
+  if (wanted === FALLBACK_FONT) return wanted
+  if (has) {
+    const indic = text.match(INDIC_RUN)
+    return indic && !has(indic.join(''), wanted, style) ? FALLBACK_FONT : wanted
+  }
+  if ((BENGALI.test(text) || DEVANAGARI.test(text)) && !INDIC_FONTS.test(wanted)) return FALLBACK_FONT
   return wanted
+}
+
+/** Nirmala UI comes in three weights: the nearest to the style that was asked for */
+export function fallbackStyle(style: string): string {
+  const s = style.replace(/\s/g, '').toLowerCase()
+  if (/thin|light/.test(s)) return 'Semilight'
+  if (/bold|black|heavy/.test(s)) return 'Bold'
+  return 'Regular'
 }
 
 const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
@@ -263,8 +291,10 @@ export function compileCue(cue: Cue, presetId: string, opts: Partial<CompileOpts
   const picked = new Set(autoWords(srcWords, highlight.rule))
   const final: (WordLook | null)[] = srcWords.map((_, i) =>
     own[i] ?? (picked.has(i) ? { color: highlight.color, scale: highlight.scale } : null))
-  const font = fontFor(cue.text, look.font)
-  const laid = layout(cue.text, { ...look, font }, final.map((w) => w?.scale ?? 1), measure, aspect, final.map((w) => !!w && ownText(w)))
+  const font = fontFor(cue.text, look.font, look.style, opts.hasGlyphs)
+  // A swapped font takes a style it has: Text+ has no "Nirmala UI Medium"
+  const style = font === look.font ? look.style : fallbackStyle(look.style)
+  const laid = layout(cue.text, { ...look, font, style }, final.map((w) => w?.scale ?? 1), measure, aspect, final.map((w) => !!w && ownText(w)))
   const center = centerOf(look, laid.width, laid.height)
 
   const tracks = timeTracks(withMotion(preset.tracks, motion), dur)
@@ -326,7 +356,7 @@ export function compileCue(cue: Cue, presetId: string, opts: Partial<CompileOpts
     endMs: cue.endMs,
     text: laid.text,
     look: {
-      font, style: look.style, size: look.size, tracking: look.tracking, lineSpacing: look.lineSpacing,
+      font, style, size: look.size, tracking: look.tracking, lineSpacing: look.lineSpacing,
       align: ALIGN[look.align], fill: look.fill, center, rotation: look.rotation,
       ...(look.outline.on ? { outline: { width: look.outline.width, color: look.outline.color } } : {}),
       ...(look.shadow.on ? { shadow: { blur: look.shadow.blur, distance: look.shadow.distance, opacity: look.shadow.opacity, color: look.shadow.color } } : {}),

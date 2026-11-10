@@ -27,6 +27,8 @@ interface Props {
   styles: { name: string; look: Partial<Look> }[]
   onSaveStyle: (name: string) => void
   fonts: FontFamily[]
+  /** The font this caption really gets, when the chosen one lacks its letters; else null */
+  fontUsed: string | null
   // Caption tab
   caption: { n: number; text: string; startMs: number; endMs: number; edited: boolean } | null
   fps: number
@@ -168,6 +170,7 @@ export function Inspector(p: Props) {
                   {styles.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
               </Row>
+              {p.fontUsed && <p className="hint2">“{L.font}” has no letters for this caption's language, so the caption uses {p.fontUsed}, here and in Resolve.</p>}
               <Seg label="Case" value={L.textCase} onChange={(v) => p.onLook({ textCase: v })} opts={[['as', 'As typed'], ['upper', 'AA'], ['lower', 'aa'], ['title', 'Aa']]} />
               <Seg label="Align" value={L.align} onChange={(v) => p.onLook({ align: v })} opts={[['left', 'Left'], ['center', 'Centre'], ['right', 'Right']]} />
             </Section>

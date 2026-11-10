@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { EASE } from './anim.ts'
-import { compileCue, fontFor, timeTracks, wordRange } from './compile.ts'
+import { compileCue, fallbackStyle, fontFor, timeTracks, wordRange } from './compile.ts'
 import { jobToLua, luaString, makeJob, toLua } from './job.ts'
+import { DEFAULT_LOOK } from './look.ts'
 import type { Cue } from './srt.ts'
 
 const cue = (text: string, startMs = 1000, endMs = 3000): Cue => ({ n: 1, index: 1, startMs, endMs, raw: text, text, line: 1 })
@@ -53,6 +54,25 @@ describe('fontFor', () => {
     expect(fontFor('Life', 'Open Sans')).toBe('Open Sans')
     expect(fontFor('জীবন', 'Kalpurush')).toBe('Kalpurush')
   })
+
+  it('keeps the chosen font when the font itself has the letters, whatever its name', () => {
+    const asked: string[] = []
+    const has = (text: string, font: string) => { asked.push(text); return font === 'Vesper Libre' }
+    expect(fontFor('अगर कोई अपने', 'Vesper Libre', 'Medium', has)).toBe('Vesper Libre')
+    expect(fontFor('अगर कोई अपने', 'Mukta', 'Medium', has)).toBe('Nirmala UI')
+    expect(fontFor('வாழ்க்கை', 'Open Sans', 'Bold', has)).toBe('Nirmala UI')
+    expect(fontFor('Life', 'Open Sans', 'Bold', has)).toBe('Open Sans')
+    // Only the Indian-script letters are asked about, so Latin words cannot hide a missing script
+    expect(fontFor('Hello जीवन now', 'Open Sans', 'Bold', has)).toBe('Nirmala UI')
+    expect(asked.at(-1)).toBe('जीवन')
+  })
+})
+
+describe('fallbackStyle', () => {
+  it('gives a swapped font a weight Nirmala UI has', () => {
+    expect(['Thin', 'Light', 'Regular', 'Medium', 'SemiBold', 'Bold', 'Black', 'Bold Italic'].map(fallbackStyle))
+      .toEqual(['Semilight', 'Semilight', 'Regular', 'Regular', 'Bold', 'Bold', 'Bold', 'Bold'])
+  })
 })
 
 describe('compileCue', () => {
@@ -62,6 +82,14 @@ describe('compileCue', () => {
     expect(c.words).toHaveLength(1)
     expect(c.words[0]).toMatchObject({ first: 18, last: 28 })
     expect(c.tracks.map((t) => `${t.target}.${t.input}`)).toEqual(['move.Size', 'text.Opacity1'])
+  })
+
+  it('sends the chosen font and style when the font has the letters, and a matching style when it is swapped', () => {
+    const look = { ...DEFAULT_LOOK, font: 'Vesper Libre', style: 'Medium' }
+    const kept = compileCue(cue('अगर कोई अपने'), 'fade', { look, hasGlyphs: () => true })
+    expect(kept.look).toMatchObject({ font: 'Vesper Libre', style: 'Medium' })
+    const swapped = compileCue(cue('अगर कोई अपने'), 'fade', { look, hasGlyphs: () => false })
+    expect(swapped.look).toMatchObject({ font: 'Nirmala UI', style: 'Regular' })
   })
 
   it('refuses an unknown preset', () => {

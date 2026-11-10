@@ -1,3 +1,4 @@
+import { FALLBACK_FONT, type HasGlyphs } from '@core/compile'
 import type { Measure } from '@core/look'
 
 // Fonts on this computer, for the Look tab. Resolve's Text+ takes a family (Font) and a
@@ -67,3 +68,10 @@ export const measure: Measure = (text, font, style) => {
   cache.set(key, em)
   return em
 }
+
+/**
+ * Does this font draw the text itself? `measure` falls back to Nirmala UI for letters a
+ * font lacks, so a font without them comes out exactly as wide as Nirmala UI does.
+ */
+export const hasGlyphs: HasGlyphs = (text, font, style) =>
+  font === FALLBACK_FONT || measure(text, font, style) !== measure(text, FALLBACK_FONT, style)
