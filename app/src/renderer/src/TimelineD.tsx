@@ -21,6 +21,8 @@ interface Props {
   onTarget: (t: Partial<Target>) => void
   fps: number
   onSend: () => void
+  /** "Send 26 captions to Resolve", or after a send "Update 3 changed captions" */
+  sendLabel: string
   playing: boolean
   /** Move the playhead (click or drag on the ruler) */
   onSeek: (ms: number) => void
@@ -90,12 +92,12 @@ export function TimelineD(p: Props) {
           </button>
         )}
         <button className={'tg' + (p.target.replace ? ' on' : '')} onClick={() => p.onTarget({ replace: !p.target.replace })}
-          title="Send again after changes and the last send's captions are replaced, not doubled"><i>✓</i>Replace last send</button>
+          title="On: sending again only makes the captions you changed again; the others stay as they are in Resolve. Off: every send adds another copy on a new track."><i>✓</i>Update last send</button>
         <span className="zoom" title="Zoom">
           <button onClick={() => setPps((v) => Math.max(10, v / 1.5))}>−</button>
           <button onClick={() => setPps((v) => Math.min(400, v * 1.5))}>+</button>
         </span>
-        <button className="go" disabled={!placed} onClick={p.onSend}>Send {placed} captions to Resolve</button>
+        <button className="go" disabled={!placed} onClick={p.onSend}>{p.sendLabel}</button>
       </div>
       <div className="tracks">
         <div className="heads" style={{ width: HEAD }}>

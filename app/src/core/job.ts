@@ -44,8 +44,40 @@ export interface Job {
   project?: string
   timeline?: string
   target?: JobTarget
-  cues: CompiledCue[]
+  cues: SentCue[]
   test?: JobTest
+}
+
+/** A caption in a job, with the signature of what the bridge builds from it */
+export type SentCue = CompiledCue & { sig: string }
+
+/** Goes into every signature. Raise it when the bridge builds a caption differently, so
+ *  captions already in Resolve are made again by the next update. */
+const BUILD = 1
+
+/** 64-bit string hash (cyrb53's two halves), as 16 hex digits */
+function hash(s: string): string {
+  let a = 0xdeadbeef
+  let b = 0x41c6ce57
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i)
+    a = Math.imul(a ^ c, 2654435761)
+    b = Math.imul(b ^ c, 1597334677)
+  }
+  a = Math.imul(a ^ (a >>> 16), 2246822507) ^ Math.imul(b ^ (b >>> 13), 3266489909)
+  b = Math.imul(b ^ (b >>> 16), 2246822507) ^ Math.imul(a ^ (a >>> 13), 3266489909)
+  return (b >>> 0).toString(16).padStart(8, '0') + (a >>> 0).toString(16).padStart(8, '0')
+}
+
+/**
+ * Signature of everything the bridge turns into a caption: its text, look and animation.
+ * Not its number or its place in time: the bridge compares frames itself. Two captions
+ * with the same signature at the same frames are the same caption in Resolve, so an
+ * update leaves that one alone (MotionCaption.lua, "What was sent").
+ */
+export function sigOf(cue: CompiledCue): string {
+  const { text, look, tracks, fixed, letters, words } = cue
+  return hash(JSON.stringify([BUILD, text, look, tracks, fixed, letters ?? null, words]))
 }
 
 export function makeJob(source: string, cues: CompiledCue[], test?: JobTest, now = new Date(),
@@ -58,7 +90,7 @@ export function makeJob(source: string, cues: CompiledCue[], test?: JobTest, now
     source,
     trackName: `MC ${source.replace(/\.[^.]+$/, '')}`.slice(0, 40),
     ...extra,
-    cues,
+    cues: cues.map((c) => ({ ...c, sig: sigOf(c) })),
     ...(test ? { test } : {}),
   }
 }

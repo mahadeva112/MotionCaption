@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { EASE } from './anim.ts'
 import { compileCue, fallbackStyle, fontFor, timeTracks, wordRange } from './compile.ts'
-import { jobToLua, luaString, makeJob, toLua } from './job.ts'
+import { jobToLua, luaString, makeJob, sigOf, toLua } from './job.ts'
 import { DEFAULT_LOOK } from './look.ts'
 import type { Cue } from './srt.ts'
 
@@ -107,6 +107,23 @@ describe('Lua job text', () => {
   it('writes tables, arrays and reserved-word keys', () => {
     expect(toLua({ a: 1, end: true, 'x-y': [1, 2], list: [{ b: 'c' }] })).toBe(
       '{\n  a = 1,\n  ["end"] = true,\n  ["x-y"] = { 1, 2 },\n  list = {\n    {\n      b = "c"\n    }\n  }\n}')
+  })
+
+  it('signs each caption by what Resolve builds from it, not by its number or time', () => {
+    const look = { ...DEFAULT_LOOK }
+    const a = compileCue(cue('Every moment'), 'fade', { look })
+    expect(sigOf(a)).toMatch(/^[0-9a-f]{16}$/)
+    // The same caption again, renumbered and two seconds later: the same signature
+    expect(sigOf(compileCue({ ...cue('Every moment', 3000, 5000), n: 7 }, 'fade', { look }))).toBe(sigOf(a))
+    // Anything Resolve would draw differently changes it
+    expect(sigOf(compileCue(cue('Every moment!'), 'fade', { look }))).not.toBe(sigOf(a))
+    expect(sigOf(compileCue(cue('Every moment'), 'pop', { look }))).not.toBe(sigOf(a))
+    expect(sigOf(compileCue(cue('Every moment'), 'fade', { look: { ...look, fill: [1, 0.8, 0.2] } }))).not.toBe(sigOf(a))
+    expect(sigOf(compileCue(cue('Every moment'), 'fade', { look: { ...look, font: 'Arial' } }))).not.toBe(sigOf(a))
+    expect(sigOf(compileCue(cue('Every moment', 1000, 3500), 'fade', { look }))).not.toBe(sigOf(a))
+    const job = makeJob('My talk.srt', [a], undefined, new Date('2026-11-03T10:00:00Z'))
+    expect(job.cues[0]!.sig).toBe(sigOf(a))
+    expect(jobToLua(job)).toContain(`sig = "${sigOf(a)}"`)
   })
 
   it('makes a loadable job', () => {
