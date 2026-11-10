@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { compileCue, type CompileOpts } from '@core/compile'
-import { jobToLua, makeJob } from '@core/job'
+import { jobToLua, makeJob, sigOf } from '@core/job'
 import { DEFAULT_HIGHLIGHT, DEFAULT_LOOK, DEFAULT_MOTION, type Highlight, type Look, type Motion, type WordLook } from '@core/look'
 import { presetById } from '@core/presets'
 import { parseSrt } from '@core/srt'
@@ -12,7 +12,10 @@ import { CaptionCard } from './CaptionCard'
 import { BUILT_IN_STYLES, Inspector, type Tab } from './Inspector'
 import { LibraryD } from './LibraryD'
 import { usableLayers } from '@core/layers'
-import { cuesOf, editsOf, FRAMES, layersOf, lookOf, norm, wordsIn, type Edits, type SafeArea, type Scope, type Source, type Target } from './model'
+import {
+  cuesOf, editsByStart, editsOf, editsOnto, FRAMES, layersOf, lookOf, norm, sentKey, sourceKey, wordsIn,
+  type Edits, type EditsByStart, type SafeArea, type Scope, type Source, type Target,
+} from './model'
 import { SendDialog } from './SendDialog'
 import { TimelineD } from './TimelineD'
 import { Viewer } from './Viewer'
@@ -27,6 +30,11 @@ function saved<T>(key: string, fallback: T): T {
 function store(key: string, v: unknown) {
   try { localStorage.setItem(key, JSON.stringify(v)) } catch { /* not kept; still applies now */ }
 }
+
+/** A source's caption changes as last kept on this computer (closing the app does not lose
+ *  them), on top of the looks its Text+ layers have in Resolve */
+const keptEdits = (src: Source): Edits =>
+  editsOnto(saved('mc.edits.' + sourceKey(src), { list: [] as EditsByStart }).list, cuesOf(src), editsOf(src))
 
 /** Look keys a whole-script change takes back from captions that had their own */
 const DEFAULT_PRESET = 'fade'
@@ -89,7 +97,10 @@ export function App() {
       // Subtitles first (the usual case); a timeline with only Text+ layers opens on those
       const track = keep ?? (subs.find((s) => s.cues.length) ?? subs[0])?.index ?? 'text'
       const next: Source = { kind: 'timeline', data: d, track }
-      if (!same || keep === null) { setEdits(editsOf(next)); setSel(new Set()); setSelWord(null); setActive(1) }
+      if (!same || keep === null) { setEdits(keptEdits(next)); setSel(new Set()); setSelWord(null); setActive(1) }
+      // The same captions read again: each change stays with its caption, by start time,
+      // even when captions were added or removed before it
+      else if (prev) { const was = cuesOf(prev); setEdits((e) => editsOnto(editsByStart(e, was), cuesOf(next), editsOf(next))) }
       return next
     })
   }, [])
@@ -111,8 +122,9 @@ export function App() {
     const picked = await window.mc.openSrt()
     if (!picked) return
     const parsed = parseSrt(picked.bytes)
-    setSource({ kind: 'srt', name: picked.name, cues: parsed.cues, notes: parsed.issues.map((x) => `Line ${x.line}: ${x.message}`) })
-    setEdits({}); setSel(new Set()); setSelWord(null); setActive(parsed.cues[0]?.n ?? 1)
+    const next: Source = { kind: 'srt', name: picked.name, cues: parsed.cues, notes: parsed.issues.map((x) => `Line ${x.line}: ${x.message}`) }
+    setSource(next)
+    setEdits(keptEdits(next)); setSel(new Set()); setSelWord(null); setActive(parsed.cues[0]?.n ?? 1)
     setTarget((t) => ({ ...t, track: 'new' }))
   }
 
@@ -126,6 +138,21 @@ export function App() {
   const presetOf = (n: number) => edits[n]?.preset ?? defaultPreset
   const effLook = cue ? lookOf(look, edits, cue.n) : look
 
+  // Caption changes are kept on this computer for each source as they are made
+  const srcKey = sourceKey(source)
+  useEffect(() => {
+    if (srcKey) store('mc.edits.' + srcKey, { list: editsByStart(edits, baseCues) })
+  }, [edits, srcKey, baseCues])
+
+  /** What each caption was in the last Send from this source that went in, by its time
+   *  (caption signatures, core/job.ts). null before the first: then Send places them all. */
+  const [sent, setSent] = useState<Record<string, string> | null>(null)
+  useEffect(() => {
+    setSent(srcKey ? saved('mc.sent.' + srcKey, { sigs: null as Record<string, string> | null }).sigs : null)
+  }, [srcKey])
+  /** How many captions differ from that Send; null while unknown */
+  const [changed, setChanged] = useState<number | null>(null)
+
   const opts = useCallback((n: number): Partial<CompileOpts> => ({
     look: lookOf(look, edits, n), words: edits[n]?.words ?? {}, highlight, motion, measure, aspect, hasGlyphs,
   }), [look, edits, highlight, motion, aspect])
@@ -135,6 +162,25 @@ export function App() {
     try { return compileCue(cue, hoverPreset ?? presetOf(cue.n), opts(cue.n)) } catch { return null }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cue, opts, defaultPreset, hoverPreset])
+
+  // Count the captions that differ from the last Send, a moment after the last change.
+  // The count is for the button; Resolve itself decides what an update touches.
+  useEffect(() => {
+    if (!sent) { setChanged(null); return }
+    const t = setTimeout(() => {
+      let n = 0
+      const seen = new Set<string>()
+      for (const c of cues) {
+        if (c.endMs <= c.startMs || !c.text.trim()) continue
+        seen.add(sentKey(c))
+        try { if (sent[sentKey(c)] !== sigOf(compileCue(c, presetOf(c.n), opts(c.n)))) n++ } catch { n++ }
+      }
+      for (const k of Object.keys(sent)) if (!seen.has(k)) n++
+      setChanged(n)
+    }, 300)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sent, cues, opts, defaultPreset])
 
   // ── Scope-aware changes ──
   const targets = (): number[] => (scope === 'selected' ? [...sel] : cue ? [cue.n] : [])
@@ -324,7 +370,7 @@ export function App() {
   function switchSource(track: number | 'text') {
     if (source?.kind !== 'timeline') return
     const next: Source = { ...source, track }
-    setSource(next); setEdits(editsOf(next)); setSel(new Set()); setSelWord(null); setActive(1)
+    setSource(next); setEdits(keptEdits(next)); setSel(new Set()); setSelWord(null); setActive(1)
   }
   const nLayers = source?.kind === 'timeline' ? usableLayers(source.data.texts).length : 0
   const sourceOptions = source?.kind === 'timeline' ? [
@@ -338,6 +384,8 @@ export function App() {
   }
   const where = target.track === 'new' ? 'a new track above everything'
     : `V${target.track} · ${timelineInfo?.video?.find((v) => v.index === target.track)?.name ?? ''} (empty spots; the rest on a new track)`
+  /** The job last handed to Send: its id and each caption's signature by its time */
+  const built = useRef<{ id: string; sigs: Record<string, string> } | null>(null)
   function buildJob() {
     const out = placeable.map((c) => compileCue(c, presetOf(c.n), opts(c.n)))
     const job = makeJob(srcName || 'Captions', out, undefined, new Date(), {
@@ -350,8 +398,20 @@ export function App() {
           : {}),
       },
     })
+    built.current = { id: job.id, sigs: Object.fromEntries(job.cues.map((c) => [sentKey(c), c.sig])) }
     return { id: job.id, lua: jobToLua(job) }
   }
+  /** The job went in: from here on, Send is an update of these captions */
+  function sentOk(jobId: string) {
+    if (!srcKey || built.current?.id !== jobId) return
+    setSent(built.current.sigs)
+    store('mc.sent.' + srcKey, { sigs: built.current.sigs })
+  }
+  const updating = sent !== null && target.replace
+  const sendLabel = !updating ? `Send ${placeable.length} captions to Resolve`
+    : changed === null ? 'Update in Resolve'
+      : changed === 0 ? 'Update · nothing changed'
+        : `Update ${changed} changed caption${changed === 1 ? '' : 's'}`
 
   const ownLook = (n: number) => !!(edits[n]?.look || edits[n]?.preset || Object.keys(edits[n]?.words ?? {}).length)
   const words = cue ? wordsIn(cue.text) : []
@@ -417,7 +477,7 @@ export function App() {
             onSrcTrack={switchSource}
             srcName={srcName} cues={cues} presetName={(n) => presetById(presetOf(n))?.name ?? ''} ownLook={ownLook}
             active={cue?.n ?? 0} sel={sel} onCue={pickCue} playing={playing} onSeek={seek}
-            target={target} onTarget={(t) => setTarget((x) => ({ ...x, ...t }))} fps={fps} onSend={() => setSending(true)}
+            target={target} onTarget={(t) => setTarget((x) => ({ ...x, ...t }))} fps={fps} onSend={() => setSending(true)} sendLabel={sendLabel}
           />
         </div>
       )}
@@ -428,7 +488,8 @@ export function App() {
           <button className="x" onClick={() => setUndo(null)} title="Close">✕</button>
         </div>
       )}
-      {sending && <SendDialog captions={placeable.length} where={where} timeline={tl?.name ?? null} linked={link.alive} build={buildJob} onClose={() => setSending(false)} />}
+      {sending && <SendDialog captions={placeable.length} where={where} timeline={tl?.name ?? null} linked={link.alive} build={buildJob}
+        update={updating ? { changed } : null} onDone={sentOk} onClose={() => setSending(false)} />}
     </div>
   )
 }

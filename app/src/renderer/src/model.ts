@@ -30,6 +30,34 @@ export function editsOf(src: Source | null): Edits {
   return Object.fromEntries(layersOf(src).map((t, i) => [i + 1, { words: {}, look: lookOfLayer(t.raw) }]))
 }
 
+/** Names a source for what the app keeps about it on this computer: which project,
+ *  timeline and track (or which SRT file) */
+export const sourceKey = (src: Source | null): string | null =>
+  !src ? null
+    : src.kind === 'srt' ? `srt|${src.name}`
+      : `${src.data.project ?? ''}|${src.data.timeline ? src.data.timeline.name : ''}|${src.track}`
+
+/** Caption changes listed by the caption's start time rather than its number, so they
+ *  stay with their caption when captions are added or removed before it */
+export type EditsByStart = [startMs: number, edit: CueEdit][]
+
+export const editsByStart = (edits: Edits, cues: Cue[]): EditsByStart =>
+  cues.flatMap((c) => (edits[c.n] ? [[c.startMs, edits[c.n]!] as [number, CueEdit]] : []))
+
+/** Puts listed changes back on the captions that start at the same time, over `base` */
+export function editsOnto(list: EditsByStart, cues: Cue[], base: Edits = {}): Edits {
+  const at = new Map(list)
+  const out: Edits = { ...base }
+  for (const c of cues) {
+    const e = at.get(c.startMs)
+    if (e) out[c.n] = { ...e, words: e.words ?? {} }
+  }
+  return out
+}
+
+/** How the app names a caption when it compares with what it last sent: by its time */
+export const sentKey = (c: { startMs: number; endMs: number }) => `${c.startMs}-${c.endMs}`
+
 /** Where captions go and what happens around them */
 export interface Target {
   track: number | 'new'

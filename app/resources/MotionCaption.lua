@@ -8,8 +8,9 @@
 --   %APPDATA%\MotionCaption\bridge.log   details
 --   %APPDATA%\MotionCaption\templates\  one Text+ template per frame rate, imported into a "MotionCaption" bin when needed
 --
--- Safe by design: captions go on new video tracks; nothing on the timeline is changed or
--- removed. The project is not saved. Frames come from the timeline's own frame rate.
+-- Safe by design: captions go on new video tracks; nothing of yours on the timeline is
+-- changed or removed. Sending again updates: captions that did not change stay untouched,
+-- the changed ones are made again. The project is not saved. Frames come from the timeline's own frame rate.
 -- With nothing new to place (no job yet, or this one is already in), it opens the app instead.
 -- Resolve's Lua host has no `require`, and os.execute flashes a console, so neither is used.
 
@@ -21,7 +22,8 @@ local JOB, RESULT, LOG, TEMPLATES = BASE .. "job.lua", BASE .. "result.json", BA
 local PROGRESS = BASE .. "progress.json"
 -- The open timeline's tracks and subtitles, read by the app (written on every click)
 local TIMELINE = BASE .. "timeline.json"
--- Which tracks the last send made, so the next send can replace them
+-- What the last send made, from before each timeline had its own record (sent_*.lua, see
+-- record_path). Still read once, so a send made by an older version is replaced, not doubled.
 local LAST_SEND = BASE .. "last_send.lua"
 -- While the Link window is open it writes the time here every half second; the app reads
 -- it to know a Send goes straight in. refresh.txt is the app asking for a new timeline read.
@@ -588,6 +590,24 @@ local function new_timeline(mp, project, name, rate)
     return tl
 end
 
+-- ── What was sent ──────────────────────────────────────────────────────────
+-- Each send leaves a record of the captions it made: one file per project and timeline,
+-- listing every caption's track, first frame, length and content signature (job cue.sig).
+-- The next send to that timeline keeps the captions that are still wanted exactly as they
+-- are, so an update only touches what changed, and whatever was adjusted by hand in
+-- Resolve on an unchanged caption stays.
+local function record_path(projectName, timelineName)
+    local h = 5381
+    for c in (tostring(projectName) .. "\n" .. tostring(timelineName)):gmatch(".") do h = (h * 33 + c:byte()) % 2147483648 end
+    return BASE .. string.format("sent_%08x.lua", h)
+end
+
+local function load_record(path)
+    local fn = loadfile(path)
+    local t = fn and (setfenv(fn, {}) and try(fn))
+    return type(t) == "table" and t or nil
+end
+
 -- ── Main ───────────────────────────────────────────────────────────────────
 -- Places every caption of the job on one timeline. Returns a summary of that timeline.
 local function place(job, tl, project, mp, tag)
@@ -614,50 +634,14 @@ local function place(job, tl, project, mp, tag)
     -- Where the captions go (job.target, from the app's "Put on"):
     --   track = "new" or a video track number; captions that would cover a clip there
     --           go on a new track above instead, so nothing on the timeline is replaced
-    --   replace = the last send's captions on this timeline are removed and their tracks reused
+    --   replace = an update: captions of the last send that are still wanted exactly as
+    --           they are stay untouched; the rest of that send is removed, its tracks reused
     local tgt = job.target or {}
-    local reuse = {}
-    if tgt.replace and not test.newTimeline then
-        local fn = loadfile(LAST_SEND)
-        local last = fn and (setfenv(fn, {}) and try(fn))
-        if type(last) == "table" and last.timeline == tl:GetName() and type(last.tracks) == "table" then
-            for idx = 1, tl:GetTrackCount("video") do
-                local name = try(function() return tl:GetTrackName("video", idx) end)
-                for _, want in ipairs(last.tracks) do
-                    if name == want then
-                        local old = objects(try(function() return tl:GetItemListInTrack("video", idx) end))
-                        if #old > 0 then try(function() tl:DeleteClips(old, false) end) end
-                        reuse[#reuse + 1] = idx
-                        log("OK    Removed " .. #old .. " captions of the last send from V" .. idx .. " " .. name)
-                    end
-                end
-            end
-            -- Captions the last send put on one of your own tracks: only those, by their start
-            for _, pl in ipairs(last.placed or {}) do
-                for _, it in ipairs(objects(try(function() return tl:GetItemListInTrack("video", pl.track) end))) do
-                    if try(function() return it:GetStart() end) == pl.start then try(function() tl:DeleteClips({ it }, false) end) end
-                end
-            end
-        end
-    end
-
-    -- Lanes: lane 1 is the chosen track (with the clips already on it), more lanes go on
-    -- tracks above. Each caption takes the first lane where it covers nothing.
-    local lanes = {}
     local fixedTrack = type(tgt.track) == "number" and tgt.track <= tl:GetTrackCount("video") and tgt.track or nil
-    if fixedTrack then
-        local busy = {}
-        for _, it in ipairs(objects(try(function() return tl:GetItemListInTrack("video", fixedTrack) end))) do
-            local st, en = try(function() return it:GetStart() end), try(function() return it:GetEnd() end)
-            if st and en then busy[#busy + 1] = { st - tlStart, en - tlStart } end
-        end
-        lanes[1] = { busy = busy, track = fixedTrack }
-    end
-    local function free(lane, s, e)
-        for _, b in ipairs(lane.busy) do if s < b[2] and e > b[1] then return false end end
-        return true
-    end
-    local infos, cueOf = {}, {}
+    local targetKey = fixedTrack and ("V " .. tostring(try(function() return tl:GetTrackName("video", fixedTrack) end))) or "new"
+
+    -- This job's captions, in frames
+    local wants = {}
     for _, cue in ipairs(job.cues) do
         local s, e = frames(cue.startMs), frames(cue.endMs)
         if e <= s then
@@ -665,32 +649,147 @@ local function place(job, tl, project, mp, tag)
             result.skipped = (result.skipped or 0) + 1
             log("NOTE  Caption " .. tostring(cue.n) .. " is shorter than one frame, so it was left out.")
         else
-            local lane
-            for li, ln in ipairs(lanes) do if free(ln, s, e) then lane = li break end end
-            if not lane then lanes[#lanes + 1] = { busy = {} }; lane = #lanes end
-            table.insert(lanes[lane].busy, { s, e })
-            infos[#infos + 1] = { lane = lane, len = e - s, info = { mediaPoolItem = template, startFrame = 0, endFrame = end_frame(e - s), recordFrame = tlStart + s } }
-            cueOf[#infos] = cue
+            wants[#wants + 1] = { cue = cue, s = s, e = e }
         end
     end
-    local trackOf, names, made, trackName = {}, {}, {}, {}
-    local r = 0
-    for li, ln in ipairs(lanes) do
-        local idx, name = ln.track, nil
-        if idx then
-            name = try(function() return tl:GetTrackName("video", idx) end) or ""
-        else
-            r = r + 1
-            idx = reuse[r]
-            name = job.trackName .. (li > 1 and (" " .. li) or "")
-            if not idx then
-                try(function() tl:AddTrack("video") end)
-                idx = tl:GetTrackCount("video")
-            end
-            try(function() tl:SetTrackName("video", idx, name) end)
-            made[#made + 1] = name
+
+    local recPath = record_path(try(function() return project:GetName() end), tl:GetName())
+    local reuse, keptCount, removed = {}, 0, 0
+    if tgt.replace and not test.newTimeline then
+        local last = load_record(recPath)
+        if not last then
+            -- A send made before each timeline had its own record
+            local old = load_record(LAST_SEND)
+            if old and not old.project then last = old end
         end
-        trackOf[li], names[#names + 1], trackName[li] = idx, "V" .. idx .. " " .. name, name
+        if last and last.timeline == tl:GetName() and type(last.tracks) == "table" then
+            -- What the last send made, by track name and first frame
+            local prev, ownStarts = {}, {}
+            for _, c in ipairs(type(last.clips) == "table" and last.clips or {}) do
+                prev[tostring(c.track) .. "|" .. tostring(c.start)] = c
+                if c.own then
+                    ownStarts[c.track] = ownStarts[c.track] or {}
+                    ownStarts[c.track][c.start] = true
+                end
+            end
+            local byStart = {}
+            for i, w in ipairs(wants) do
+                local st = tlStart + w.s
+                byStart[st] = byStart[st] or {}
+                table.insert(byStart[st], i)
+            end
+            -- Captions stay only when they still go to the same place ("Put on" unchanged)
+            local sameTarget = last.target == targetKey
+            -- The wanted caption a clip already is: same frames, same content. Or nil.
+            local function same(it, name)
+                if not sameTarget then return nil end
+                local st, du = try(function() return it:GetStart() end), try(function() return it:GetDuration() end)
+                local was = st and prev[name .. "|" .. st]
+                if not was or type(was.sig) ~= "string" or was.sig == "" or was.len ~= du then return nil end
+                for _, i in ipairs(byStart[st] or {}) do
+                    local w = wants[i]
+                    if not w.kept and w.cue.sig == was.sig and w.e - w.s == du then return i end
+                end
+            end
+            -- One track of the last send: clips still wanted as they are stay, the others go.
+            -- On a track of your own (mine = false) only the clips that send made are looked at.
+            local function sort_out(idx, name, mine)
+                local drop, stay = {}, 0
+                for _, it in ipairs(objects(try(function() return tl:GetItemListInTrack("video", idx) end))) do
+                    local st = try(function() return it:GetStart() end)
+                    if mine or (st and ownStarts[name][st]) then
+                        local i = (mine or idx == fixedTrack) and same(it, name)
+                        if i then wants[i].kept = idx; stay = stay + 1 else drop[#drop + 1] = it end
+                    end
+                end
+                if #drop > 0 then try(function() tl:DeleteClips(drop, false) end) end
+                keptCount, removed = keptCount + stay, removed + #drop
+                log("OK    V" .. idx .. " " .. name .. ": left " .. stay .. " unchanged captions, removed " .. #drop)
+            end
+            local isMine = {}
+            for _, n in ipairs(last.tracks) do isMine[n] = true end
+            for idx = 1, tl:GetTrackCount("video") do
+                local name = try(function() return tl:GetTrackName("video", idx) end)
+                if name and isMine[name] then
+                    sort_out(idx, name, true)
+                    reuse[#reuse + 1] = idx
+                elseif name and ownStarts[name] then
+                    sort_out(idx, name, false)
+                end
+            end
+            -- The same for a record from before records listed their clips
+            for _, pl in ipairs(type(last.placed) == "table" and last.placed or {}) do
+                for _, it in ipairs(objects(try(function() return tl:GetItemListInTrack("video", pl.track) end))) do
+                    if try(function() return it:GetStart() end) == pl.start then try(function() tl:DeleteClips({ it }, false) end) end
+                end
+            end
+        end
+    end
+
+    -- Lanes: lane 1 is the chosen track (with the clips already on it), then the last
+    -- send's tracks, then new tracks above. Each caption takes the first lane where it covers nothing.
+    local lanes, laneOf = {}, {}
+    if fixedTrack then
+        local busy = {}
+        for _, it in ipairs(objects(try(function() return tl:GetItemListInTrack("video", fixedTrack) end))) do
+            local st, en = try(function() return it:GetStart() end), try(function() return it:GetEnd() end)
+            if st and en then busy[#busy + 1] = { st - tlStart, en - tlStart } end
+        end
+        lanes[1] = { busy = busy, track = fixedTrack }
+        laneOf[fixedTrack] = 1
+    end
+    for _, idx in ipairs(reuse) do
+        if not laneOf[idx] then
+            lanes[#lanes + 1] = { busy = {}, track = idx, mine = true }
+            laneOf[idx] = #lanes
+        end
+    end
+    local function free(lane, s, e)
+        for _, b in ipairs(lane.busy) do if s < b[2] and e > b[1] then return false end end
+        return true
+    end
+    -- Captions that stay hold their place; the others go around them
+    for _, w in ipairs(wants) do
+        if w.kept then
+            w.lane = laneOf[w.kept]
+            lanes[w.lane].used = true
+            table.insert(lanes[w.lane].busy, { w.s, w.e })
+        end
+    end
+    local infos, cueOf = {}, {}
+    for _, w in ipairs(wants) do
+        if not w.kept then
+            local lane
+            for li, ln in ipairs(lanes) do if free(ln, w.s, w.e) then lane = li break end end
+            if not lane then lanes[#lanes + 1] = { busy = {}, mine = true }; lane = #lanes end
+            lanes[lane].used = true
+            table.insert(lanes[lane].busy, { w.s, w.e })
+            w.lane = lane
+            infos[#infos + 1] = { lane = lane, len = w.e - w.s, info = { mediaPoolItem = template, startFrame = 0, endFrame = end_frame(w.e - w.s), recordFrame = tlStart + w.s } }
+            cueOf[#infos] = w.cue
+        end
+    end
+    -- A track for every lane that holds a caption (a track of the last send that is no
+    -- longer needed stays as it is, empty)
+    local trackOf, names, made, trackName = {}, {}, {}, {}
+    local m = 0
+    for li, ln in ipairs(lanes) do
+        if ln.used then
+            local idx, name = ln.track, nil
+            if idx and not ln.mine then
+                name = try(function() return tl:GetTrackName("video", idx) end) or ""
+            else
+                m = m + 1
+                name = job.trackName .. (m > 1 and (" " .. m) or "")
+                if not idx then
+                    try(function() tl:AddTrack("video") end)
+                    idx = tl:GetTrackCount("video")
+                end
+                try(function() tl:SetTrackName("video", idx, name) end)
+                made[#made + 1] = name
+            end
+            trackOf[li], names[#names + 1], trackName[li] = idx, "V" .. idx .. " " .. name, name
+        end
     end
     -- Resolve stays live while this runs, so an Undo or an edit can take a caption track
     -- away mid-send; every caption after that then has no comp. Says what changed, or nil.
@@ -700,22 +799,26 @@ local function place(job, tl, project, mp, tag)
             return "the open timeline changed to " .. tostring(now and try(function() return now:GetName() end))
         end
         local count = try(function() return tl:GetTrackCount("video") end) or 0
-        for li, idx in ipairs(trackOf) do
+        for li, idx in pairs(trackOf) do
             if idx > count or try(function() return tl:GetTrackName("video", idx) end) ~= trackName[li] then
-                return "track " .. names[li] .. " was removed or renamed in Resolve"
+                return "track V" .. idx .. " " .. trackName[li] .. " was removed or renamed in Resolve"
             end
         end
     end
-    sum.tracks, sum.made = names, made
+    sum.tracks, sum.made, sum.kept, sum.removed = names, made, keptCount, removed
     local list, lens = {}, {}
     for i, x in ipairs(infos) do x.info.trackIndex = trackOf[x.lane]; list[i], lens[i] = x.info, x.len end
 
     local t0 = os.time()
     progress(job.id, "placing", 0, #list)
-    local items = try(function() return mp:AppendToTimeline(list) end) or {}
-    if #items ~= #list then fail("Resolve placed " .. #items .. " of " .. #list .. " captions on " .. tl:GetName() .. ".") end
+    -- With nothing changed there is nothing to place: every caption is already there
+    local items = {}
+    if #list > 0 then
+        items = try(function() return mp:AppendToTimeline(list) end) or {}
+        if #items ~= #list then fail("Resolve placed " .. #items .. " of " .. #list .. " captions on " .. tl:GetName() .. ".") end
+    end
     sum.missing = #list - #items
-    if #items == 0 then return sum end
+    if #list > 0 and #items == 0 then return sum end
 
     -- Each caption must start and last exactly as asked, at any frame rate
     for i, item in ipairs(items) do
@@ -732,6 +835,7 @@ local function place(job, tl, project, mp, tag)
     if sum.timingOff > 0 then fail(sum.timingOff .. " captions on " .. tl:GetName() .. " are not at their exact frames.") end
 
     local step = math.max(1, math.floor(#items / 50))
+    local built = {}
     for i, item in ipairs(items) do
         local cue = cueOf[i]
         if i == 1 or i % step == 0 then progress(job.id, "animating", i - 1, #items) end
@@ -787,28 +891,37 @@ local function place(job, tl, project, mp, tag)
             break
         elseif ok then
             sum.placed = sum.placed + 1
+            built[i] = true
         else
             sum.failed = sum.failed + 1
             fail("Caption " .. tostring(cue.n) .. ": " .. tostring(err))
         end
     end
-    log(string.format("Placed %d captions on %s in ~%d s", sum.placed, table.concat(names, ", "), os.time() - t0))
+    log(string.format("Placed %d captions on %s in ~%d s", sum.placed, table.concat(names, ", "), os.time() - t0)
+        .. (keptCount > 0 and (" · " .. keptCount .. " unchanged captions left as they were") or ""))
     if test.probe then
         log(string.format("Keys on their frames: %d of %d", sum.keys - sum.keysOff, sum.keys))
         if sum.keysOff > 0 then fail(sum.keysOff .. " keys on " .. tl:GetName() .. " are off their frame or value.") end
     end
 
     -- Remember what this send made, for the next send's replace; turn the subtitles off
-    if not test.newTimeline and sum.placed > 0 then
-        local made, pl = {}, {}
-        for _, n in ipairs(sum.made or {}) do made[#made + 1] = string.format("%q", n) end
-        if fixedTrack then
-            for _, x in ipairs(infos) do
-                if x.lane == 1 then pl[#pl + 1] = string.format("{ track = %d, start = %d }", fixedTrack, x.info.recordFrame) end
-            end
+    if not test.newTimeline and (sum.placed > 0 or keptCount > 0) then
+        local q, clips = {}, {}
+        for _, n in ipairs(sum.made or {}) do q[#q + 1] = string.format("%q", n) end
+        local function clip(lane, start, len, sig)
+            clips[#clips + 1] = string.format("  { track = %q, start = %d, len = %d, sig = %q%s }", trackName[lane], start, len,
+                tostring(sig or ""), lanes[lane].mine and "" or ", own = true")
         end
-        write_file(LAST_SEND, string.format("return { timeline = %q, tracks = { %s }, placed = { %s } }",
-            tl:GetName(), table.concat(made, ", "), table.concat(pl, ", ")))
+        for _, w in ipairs(wants) do
+            if w.kept then clip(w.lane, tlStart + w.s, w.e - w.s, w.cue.sig) end
+        end
+        -- A caption whose animation failed is listed with no signature, so the next send redoes it
+        for i, item in ipairs(items) do
+            local st, du = try(function() return item:GetStart() end), try(function() return item:GetDuration() end)
+            if st and du then clip(infos[i].lane, st, du, built[i] and cueOf[i].sig or "") end
+        end
+        write_file(recPath, string.format("return { project = %q, timeline = %q, target = %q, tracks = { %s }, clips = {\n%s\n} }\n",
+            tostring(try(function() return project:GetName() end)), tl:GetName(), targetKey, table.concat(q, ", "), table.concat(clips, ",\n")))
         if type(tgt.disableSubtitle) == "number" then
             local off = try(function() return tl:SetTrackEnable("subtitle", tgt.disableSubtitle, false) end)
             log((off and "OK    " or "WARN  ") .. "Subtitle track " .. tgt.disableSubtitle .. " turned off → " .. tostring(off))
@@ -1082,6 +1195,7 @@ local function main()
     local sum = place(job, tl, project, mp)
     result.timeline, result.fps, result.tracks = sum.timeline, fps, sum.tracks
     result.placed, result.failed = sum.placed, sum.failed
+    result.kept, result.removed = sum.kept or 0, sum.removed or 0
     result.ok = sum.failed == 0 and (sum.missing or 1) == 0 and (sum.timingOff or 0) == 0
 end
 
@@ -1095,7 +1209,7 @@ end
 local function run_once()
     local ok, err = pcall(main)
     if not ok then fail("Stopped early: " .. tostring(err)) end
-    if idle or (result.placed > 0 and not result.test) then try(read_timeline) end
+    if idle or ((result.placed > 0 or (result.kept or 0) > 0 or (result.removed or 0) > 0) and not result.test) then try(read_timeline) end
     -- With nothing to place, result.json stays as it was: it still says the last job is
     -- in Resolve, so a second click can never place the same captions twice
     if idle and #result.errors == 0 then return true end

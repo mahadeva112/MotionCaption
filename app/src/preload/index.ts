@@ -17,7 +17,10 @@ export interface ResolveStatus {
 export interface JobResult {
   jobId: string
   ok: boolean
+  /** Captions made by this send */
   placed: number
+  /** Captions of the last send that had not changed and were left as they are */
+  kept?: number
   failed: number
   errors: string[]
   /** Captions shorter than one frame at the timeline's rate, left out */
