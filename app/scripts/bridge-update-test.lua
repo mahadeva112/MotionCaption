@@ -249,4 +249,33 @@ os.remove(BASE .. "last_send.lua")
 run("fresh timeline in project P", "first", E, { placed = 6, kept = 0, removed = 0, clips = 6 })
 run("replace off", "no_replace", E, { placed = 6, kept = 0, untouched = 6, removed = 0, clips = 12 })
 
+-- 6. A test job left behind that failed: the next click opens the app (not the log) and makes
+--    no new test timeline. A real Send that failed is still made again by the next click.
+local opened = {}
+world.bmd.openfileexternal = function(_, p) opened[#opened + 1] = p end
+write(BASE .. "app.txt", BRIDGE) -- any file that is there stands in for the app's exe
+local F = new_timeline("Timeline 1", { { name = "Video 1", items = {} } })
+current = new_project("P", F)
+os.remove(BASE .. "last_send.lua")
+local first = read(JOBS .. "\\first.lua")
+local testJob = first:gsub('version = 1,', 'version = 1,\n  test = { newTimeline = "MC_Test" },', 1):gsub('id = "(%d+)', 'id = "8%1', 1)
+local testId = testJob:match('id = "([^"]+)"')
+local failedTest = '{"ok":false,"jobId":"' .. testId .. '","test":true,"errors":["Could not create timeline MC_Test_25"]}'
+write(BASE .. "job.lua", testJob)
+write(BASE .. "result.json", failedTest)
+assert(pcall(setfenv(assert(loadfile(BRIDGE)), world)))
+print(string.format("%-34s opened %s · tracks %d", "failed test job left behind", tostring(opened[#opened]), #F.tracks))
+check("failed test job: the click opens the app", opened[#opened], BRIDGE)
+check("failed test job: result.json is left as it was", read(BASE .. "result.json"), failedTest)
+check("failed test job: no new captions or tracks", #F.tracks .. "/" .. #F.tracks[1].items, "1/0")
+
+local firstId = first:match('id = "([^"]+)"')
+write(BASE .. "job.lua", first)
+write(BASE .. "result.json", '{"ok":false,"jobId":"' .. firstId .. '","errors":["Stopped early"]}')
+assert(pcall(setfenv(assert(loadfile(BRIDGE)), world)))
+local again = read(BASE .. "result.json") or ""
+print(string.format("%-34s placed %s · ok %s", "failed real send, clicked again", again:match('"placed":(%d+)'), tostring(again:find('"ok":true', 1, true) ~= nil)))
+check("failed real send: made again", tonumber(again:match('"placed":(%d+)')), 6)
+check("failed real send: now ok", again:find('"ok":true', 1, true) ~= nil, true)
+
 print(string.format("\n%d checks, %d failed", checks, fails))
