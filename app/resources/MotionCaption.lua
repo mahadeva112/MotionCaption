@@ -1111,12 +1111,14 @@ local function main()
     log("Job " .. job.id .. " · " .. tostring(job.source) .. " · " .. #job.cues .. " captions")
 
     local test = job.test or {}
-    -- A job that already went in (test jobs too) is done: the click opens the app instead.
-    -- A test job left behind used to run again on every click, making a new test timeline
-    -- each time and never opening the app.
+    -- A job that already went in is done: the click opens the app instead. A test job runs
+    -- once, whatever its result: one left behind used to run again on every click, making a
+    -- new test timeline each time, and when it failed the click opened the log, never the app.
+    -- A real Send that failed still runs again, so a second click can finish it.
     local prev = read_file(RESULT)
-    if prev and prev:find('"jobId":' .. json(job.id), 1, true) and prev:find('"ok":true', 1, true) then
-        log("These captions are already in Resolve. Opening MotionCaption.")
+    if prev and prev:find('"jobId":' .. json(job.id), 1, true) and (prev:find('"ok":true', 1, true) or job.test) then
+        log(job.test and "This test already ran (its result is in result.json). Opening MotionCaption."
+            or "These captions are already in Resolve. Opening MotionCaption.")
         idle = true
         return
     end
