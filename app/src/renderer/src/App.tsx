@@ -40,6 +40,9 @@ const keptEdits = (src: Source): Edits =>
 const DEFAULT_PRESET = 'fade'
 const DEFAULT_TARGET: Target = { track: 'new', turnOffSource: true, replace: true }
 
+type StyleBase = { name: string | null; look: Partial<Look> }
+const NO_STYLE: StyleBase = { name: null, look: {} }
+
 const without = (o: Partial<Look> | undefined, keys: string[]) => {
   if (!o) return o
   const c: Record<string, unknown> = { ...o }
@@ -72,9 +75,13 @@ export function App() {
   const [sending, setSending] = useState(false)
   const [resetting, setResetting] = useState(false)
   /** The work just before a reset, for one Undo */
-  const [undo, setUndo] = useState<{ look: Look; highlight: Highlight; motion: Motion; edits: Edits; preset: string; target: Target; safe: SafeArea } | null>(null)
+  const [undo, setUndo] = useState<{ look: Look; highlight: Highlight; motion: Motion; edits: Edits; preset: string; target: Target; safe: SafeArea; styleBase: StyleBase } | null>(null)
   const [recent, setRecent] = useState<string[]>(() => saved('mc.misc', { recent: [] as string[] }).recent)
   const [userStyles, setUserStyles] = useState<{ name: string; look: Partial<Look> }[]>(() => saved('mc.styles', { list: [] as { name: string; look: Partial<Look> }[] }).list)
+  /** The Style last picked: the Inspector's ↺ buttons put a setting back to its value */
+  const [styleBase, setStyleBase] = useState<StyleBase>(() => saved('mc.styleBase', NO_STYLE))
+  useEffect(() => store('mc.styleBase', styleBase), [styleBase])
+  const baseLook = useMemo<Look>(() => lookOf(DEFAULT_LOOK, { 0: { words: {}, look: styleBase.look } }, 0), [styleBase])
 
   useEffect(() => store('mc.look', look), [look])
   useEffect(() => store('mc.highlight', highlight), [highlight])
@@ -221,8 +228,11 @@ export function App() {
       for (const [n, i] of hits) {
         const cur = next[n] ?? { words: {} }
         const words = { ...cur.words }
-        if (partial === null) delete words[i]
-        else words[i] = { ...words[i], ...partial }
+        // An unset field follows the caption again; a word with nothing left has no own look
+        const w: Record<string, unknown> = partial === null ? {} : { ...words[i], ...partial }
+        for (const k of Object.keys(w)) if (w[k] === undefined) delete w[k]
+        if (Object.keys(w).length) words[i] = w as WordLook
+        else delete words[i]
         next[n] = { ...cur, words }
       }
       return next
@@ -299,8 +309,8 @@ export function App() {
 
   // ── Reset: this project's work back to how the app starts ──
   function resetAll() {
-    setUndo({ look, highlight, motion, edits, preset: defaultPreset, target, safe })
-    setLook(DEFAULT_LOOK); setHighlight(DEFAULT_HIGHLIGHT); setMotion(DEFAULT_MOTION)
+    setUndo({ look, highlight, motion, edits, preset: defaultPreset, target, safe, styleBase })
+    setLook(DEFAULT_LOOK); setHighlight(DEFAULT_HIGHLIGHT); setMotion(DEFAULT_MOTION); setStyleBase(NO_STYLE)
     // Text+ layers go back to the look they have in Resolve
     setEdits(editsOf(source)); setDefaultPreset(DEFAULT_PRESET); setTarget(DEFAULT_TARGET); setSafe('off')
     setSel(new Set()); setSelWord(null); setScope('all'); setEverywhere(false); setTab('Look')
@@ -310,7 +320,7 @@ export function App() {
   }
   function undoReset() {
     if (!undo) return
-    setLook(undo.look); setHighlight(undo.highlight); setMotion(undo.motion)
+    setLook(undo.look); setHighlight(undo.highlight); setMotion(undo.motion); setStyleBase(undo.styleBase)
     setEdits(undo.edits); setDefaultPreset(undo.preset); setTarget(undo.target); setSafe(undo.safe)
     setUndo(null)
   }
@@ -455,6 +465,8 @@ export function App() {
           <Inspector
             tab={tab} onTab={setTab} scope={scope} onScope={setScope} selected={sel.size} total={cues.length}
             look={effLook} onLook={changeLook} styles={[...BUILT_IN_STYLES, ...userStyles]}
+            base={baseLook} styleName={styleBase.name}
+            onPickStyle={(s) => { changeLook(s.look); setStyleBase({ name: s.name, look: s.look }) }}
             onSaveStyle={(name) => {
               const { font, style, size, tracking, lineSpacing, textCase, fill, outline, shadow, box } = effLook
               const list = [...userStyles.filter((s) => s.name !== name), { name, look: { font, style, size, tracking, lineSpacing, textCase, fill, outline, shadow, box } }]
