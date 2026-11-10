@@ -623,6 +623,37 @@ local function load_record(path)
     return type(t) == "table" and t or nil
 end
 
+-- Resolve draws a new clip that sits under the playhead as soon as it is placed, before its
+-- comp is built, and keeps showing that first render: the clip's Follower (Typewriter, Letter
+-- Cascade and the other letter animations) does not show until the project is opened again.
+-- A super is the one clip under a playhead left at the start. So while captions go in and are
+-- built, the playhead waits on a frame none of them covers; the returned function puts it back.
+local function park_playhead(tl, list, lens, rate, dropFrame)
+    local was = try(function() return tl:GetCurrentTimecode() end)
+    local function covered(f)
+        for i, x in ipairs(list) do
+            if f >= x.recordFrame and f < x.recordFrame + lens[i] then return true end
+        end
+        return false
+    end
+    local last = try(function() return tl:GetEndFrame() end)
+    local spots = { try(function() return tl:GetStartFrame() end) }
+    for i, x in ipairs(list) do spots[#spots + 1] = x.recordFrame + lens[i] end
+    table.sort(spots)
+    local park
+    for _, f in ipairs(spots) do
+        if not covered(f) and (not last or f <= last) then park = f break end
+    end
+    park = park or spots[#spots]
+    local function go(tc)
+        if not try(function() return tl:SetCurrentTimecode(tc) end) then
+            try(function() tl:SetCurrentTimecode((tc:gsub(";", ":"))) end)
+        end
+    end
+    if park then go(timecode(park, rate, dropFrame)) end
+    return function() if type(was) == "string" and was ~= "" then go(was) end end
+end
+
 -- ── Main ───────────────────────────────────────────────────────────────────
 -- Places every caption of the job on one timeline. Returns a summary of that timeline.
 local function place(job, tl, project, mp, tag)
@@ -834,13 +865,14 @@ local function place(job, tl, project, mp, tag)
     local t0 = os.time()
     progress(job.id, "placing", 0, #list)
     -- With nothing changed there is nothing to place: every caption is already there
+    local back = #list > 0 and park_playhead(tl, list, lens, fps, dropFrame) or function() end
     local items = {}
     if #list > 0 then
         items = try(function() return mp:AppendToTimeline(list) end) or {}
         if #items ~= #list then fail("Resolve placed " .. #items .. " of " .. #list .. " captions on " .. tl:GetName() .. ".") end
     end
     sum.missing = #list - #items
-    if #list > 0 and #items == 0 then return sum end
+    if #list > 0 and #items == 0 then back(); return sum end
 
     -- Each caption must start and last exactly as asked, at any frame rate
     for i, item in ipairs(items) do
@@ -921,6 +953,7 @@ local function place(job, tl, project, mp, tag)
     end
     log(string.format("Placed %d captions on %s in ~%d s", sum.placed, table.concat(names, ", "), os.time() - t0)
         .. (keptCount > 0 and (" · " .. keptCount .. " unchanged captions left as they were") or ""))
+    back()
     if test.probe then
         log(string.format("Keys on their frames: %d of %d", sum.keys - sum.keysOff, sum.keys))
         if sum.keysOff > 0 then fail(sum.keysOff .. " keys on " .. tl:GetName() .. " are off their frame or value.") end

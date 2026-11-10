@@ -47,8 +47,14 @@ local function new_item(start, len, label)
     return I
 end
 
+-- The playhead, as Resolve's timecode at 24 fps
+local function tc_frame(tc)
+    local h, m, sec, f = tostring(tc):match("^(%d+)[:;](%d+)[:;](%d+)[:;](%d+)$")
+    return h and ((tonumber(h) * 3600 + tonumber(m) * 60 + tonumber(sec)) * 24 + tonumber(f)) or nil
+end
+
 local function new_timeline(name, tracks)
-    local T = { name = name, tracks = tracks, overlaps = 0, deleted = 0 }
+    local T = { name = name, tracks = tracks, overlaps = 0, deleted = 0, tc = "01:00:00:00", underHead = 0 }
     T.u = obj({
         GetName = function() return T.name end,
         GetSetting = function(_, k)
@@ -77,7 +83,9 @@ local function new_timeline(name, tracks)
             return true
         end,
         SetTrackEnable = function() return true end, GetIsTrackEnabled = function() return true end,
-        SetCurrentTimecode = function() return true end,
+        GetCurrentTimecode = function() return T.tc end,
+        SetCurrentTimecode = function(_, tc) if not tc_frame(tc) then return false end T.tc = tc; return true end,
+        GetEndFrame = function() return START + 24 * 120 end,
     })
     return T
 end
@@ -98,6 +106,9 @@ local function new_project(name, timeline)
                 local tr = P.tl.tracks[info.trackIndex]
                 assert(tr, "append to a track that is not there: " .. tostring(info.trackIndex))
                 local s, e = info.recordFrame, info.recordFrame + info.endFrame
+                -- A clip placed under the playhead keeps its first render in Resolve
+                local head = tc_frame(P.tl.tc)
+                if head and head >= s and head < e then P.tl.underHead = P.tl.underHead + 1 end
                 for _, I in ipairs(tr.items) do
                     if s < I.start + I.len and e > I.start then P.tl.overlaps = P.tl.overlaps + 1 end
                 end
@@ -277,5 +288,21 @@ local again = read(BASE .. "result.json") or ""
 print(string.format("%-34s placed %s · ok %s", "failed real send, clicked again", again:match('"placed":(%d+)'), tostring(again:find('"ok":true', 1, true) ~= nil)))
 check("failed real send: made again", tonumber(again:match('"placed":(%d+)')), 6)
 check("failed real send: now ok", again:find('"ok":true', 1, true) ~= nil, true)
+
+-- 7. A super: a caption from the first frame, with the playhead left on it. While captions go
+--    in, the playhead waits where no new caption is, then goes back to where it was.
+local G = new_timeline("Timeline 1", { { name = "Video 1", items = { new_item(START, 24 * 60, "Interview") } } })
+current = new_project("P", G)
+os.remove(BASE .. "last_send.lua")
+write(JOBS .. "\\super.lua", (first:gsub("startMs = 1000,", "startMs = 0,", 1):gsub('id = "(%d+)', 'id = "7%1', 1)))
+G.tc = "01:00:00:00"
+run("super from the first frame", "super", G, { placed = 6, kept = 0, removed = 0, clips = 7 })
+check("super: no caption placed under the playhead", G.underHead, 0)
+check("super: the playhead is back where it was", G.tc, "01:00:00:00")
+-- An update that makes the first caption again (now from 1 s) with the playhead on it
+G.tc, G.underHead = "01:00:01:12", 0
+run("update, playhead on the changed one", "first", G, { placed = 1, kept = 5, removed = 1, clips = 7 })
+check("update: no caption placed under the playhead", G.underHead, 0)
+check("update: the playhead is back where it was", G.tc, "01:00:01:12")
 
 print(string.format("\n%d checks, %d failed", checks, fails))
