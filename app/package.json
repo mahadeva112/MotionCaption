@@ -50,6 +50,10 @@
           "run-in-resolve.ps1",
           "templates/*.drb"
         ]
+      },
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
       }
     ],
     "win": {

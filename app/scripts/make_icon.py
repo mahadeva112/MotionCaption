@@ -1,7 +1,9 @@
 # Draws the app icon: build/icon.png (1024) and build/icon.ico (16 to 256).
 #   python -I scripts/make_icon.py
-# A warm tile with a play mark (video) over two caption lines, the top one moving in
-# from the left (motion streaks). Drawn at 4x and scaled down for clean edges.
+# The same mark as the logo in the app's top bar (.menubar2 .logo in app.css): a
+# conic gradient tile with two white caption lines, the top one fainter. That logo is
+# 26px with 8px corners; here it is scaled up so the two always match.
+import math
 from pathlib import Path
 from PIL import Image, ImageDraw
 
@@ -9,57 +11,55 @@ S = 1024
 X = 4  # supersampling
 OUT = Path(__file__).resolve().parent.parent / "build"
 
+# conic-gradient(from 200deg, #ff3d6e, #ff6a3d, #ffb13d, #ff3d6e)
+START = 200
+STOPS = [(0.0, (255, 61, 110)), (1 / 3, (255, 106, 61)), (2 / 3, (255, 177, 61)), (1.0, (255, 61, 110))]
+
+M = 40  # space round the tile at 1024
+CSS = 26  # the logo's size in the app
+K = (S - 2 * M) / CSS  # one CSS pixel at 1024
+
 
 def lerp(a, b, t):
     return tuple(round(a[i] + (b[i] - a[i]) * t) for i in range(len(a)))
 
 
-def tile(size):
-    """Diagonal gradient on a rounded square"""
-    top, bottom = (255, 122, 69), (214, 38, 96)
+def colour(t):
+    for (t0, c0), (t1, c1) in zip(STOPS, STOPS[1:]):
+        if t <= t1:
+            return lerp(c0, c1, (t - t0) / (t1 - t0))
+    return STOPS[-1][1]
+
+
+def gradient(n):
+    """Conic gradient round the centre, angles clockwise from the top as in CSS"""
     g = Image.new("RGB", (256, 256))
     px = g.load()
     for y in range(256):
         for x in range(256):
-            px[x, y] = lerp(top, bottom, (x * 0.35 + y * 0.65) / 256)
-    g = g.resize((size, size), Image.BICUBIC)
-    mask = Image.new("L", (size, size), 0)
-    k = size / S  # tile drawn at any size
-    m = round(40 * k)
-    ImageDraw.Draw(mask).rounded_rectangle((m, m, size - m, size - m), radius=round(210 * k), fill=255)
-    out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    out.paste(g, (0, 0), mask)
-    return out, mask
+            a = math.degrees(math.atan2(x - 127.5, 127.5 - y)) % 360
+            px[x, y] = colour(((a - START) % 360) / 360)
+    return g.resize((n, n), Image.BICUBIC)
 
 
 def draw(size_px=S):
     n = size_px * X
-    img, mask = tile(n)
-    d = ImageDraw.Draw(img)
     u = lambda v: round(v * X * size_px / S)  # noqa: E731
+    c = lambda v: u(M + v * K)  # CSS pixel inside the logo -> pixel here  # noqa: E731
 
-    # Translucent parts go on their own layer: drawing them straight onto the tile
-    # would replace its colour instead of blending (they came out grey)
-    soft = Image.new("RGBA", (n, n), (0, 0, 0, 0))
-    ds = ImageDraw.Draw(soft)
+    mask = Image.new("L", (n, n), 0)
+    ImageDraw.Draw(mask).rounded_rectangle((c(0), c(0), c(CSS), c(CSS)), radius=u(8 * K), fill=255)
+    img = Image.new("RGBA", (n, n), (0, 0, 0, 0))
+    img.paste(gradient(n), (0, 0), mask)
 
-    # Play mark: a rounded triangle, drawn as a polygon with round joins
-    cx, cy, h = 520, 330, 250
-    pts = [(cx - h * 0.45, cy - h / 2), (cx - h * 0.45, cy + h / 2), (cx + h * 0.55, cy)]
-    pts = [(u(x), u(y)) for x, y in pts]
-    d.polygon(pts, fill="white")
-    d.line(pts + [pts[0]], fill="white", width=u(56), joint="curve")
-    for p in pts:
-        r = u(28)
-        d.ellipse((p[0] - r, p[1] - r, p[0] + r, p[1] + r), fill="white")
-
-    # Caption lines: the top one arrives from the left with streaks behind it
-    d.rounded_rectangle((u(360), u(580), u(840), u(668)), radius=u(44), fill="white")
-    if size_px > 24:
-        for x0, x1, a in ((260, 322, 210), (186, 230, 140), (130, 154, 80)):
-            ds.rounded_rectangle((u(x0), u(600), u(x1), u(648)), radius=u(24), fill=(255, 255, 255, a))
-    ds.rounded_rectangle((u(360), u(712), u(720), u(800)), radius=u(44), fill=(255, 255, 255, 165))
-    img = Image.alpha_composite(img, soft)
+    # The two lines: 10 x 3 at left 8, top 13, and its 60% white copy 5px higher
+    # (the ::after box and its box-shadow). Own layer so the faint one blends.
+    lines = Image.new("RGBA", (n, n), (0, 0, 0, 0))
+    d = ImageDraw.Draw(lines)
+    r = u(2 * K)
+    d.rounded_rectangle((c(8), c(8), c(18), c(11)), radius=r, fill=(255, 255, 255, 153))
+    d.rounded_rectangle((c(8), c(13), c(18), c(16)), radius=r, fill=(255, 255, 255, 255))
+    img = Image.alpha_composite(img, lines)
 
     return img.resize((size_px, size_px), Image.LANCZOS)
 
@@ -67,7 +67,7 @@ def draw(size_px=S):
 OUT.mkdir(exist_ok=True)
 big = draw()
 big.save(OUT / "icon.png")
-# Small sizes drawn on their own so thin parts stay sharp
+# Small sizes drawn on their own so the lines stay sharp
 sizes = [16, 24, 32, 48, 64, 128, 256]
 frames = [draw(s) if s <= 64 else big.resize((s, s), Image.LANCZOS) for s in sizes]
 frames[-1].save(OUT / "icon.ico", sizes=[(s, s) for s in sizes], append_images=frames[:-1])
