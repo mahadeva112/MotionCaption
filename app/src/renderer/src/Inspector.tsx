@@ -1,6 +1,7 @@
 import { useState, type CSSProperties, type ReactNode } from 'react'
 import { DEFAULT_HIGHLIGHT, DEFAULT_MOTION, type Highlight, type Look, type Motion, type Rgb, type WordLook } from '@core/look'
 import type { Pattern } from '@core/pattern'
+import type { Mood, Smart } from '@core/smart'
 import { FAMILIES, PRESETS, presetById } from '@core/presets'
 import type { FontFamily } from './fonts'
 import { hex, rgb, SWATCHES, timecode, type SafeArea, type Scope } from './model'
@@ -60,6 +61,10 @@ interface Props {
   patternOn: boolean
   onApplyPattern: () => void
   onStopPattern: () => void
+  smart: Smart
+  onSmart: (s: Partial<Smart>) => void
+  /** What Smart Auto saw in the captions, while it is on */
+  smartNote: string
   /** Library clicks add to the pattern */
   patternPick: boolean
   onPatternPick: (b: boolean) => void
@@ -357,6 +362,7 @@ export function Inspector(p: Props) {
                   onChange={(v) => p.onMotion({ stepMs: v })} />
               )}
             </Section>
+            <SmartSection {...p} />
             <PatternSection {...p} />
             <Section title="Out" right="all captions" r={mo('out', 'outMs')}>
               <Seg label="Animation" value={p.motion.out} r={mo('out')} onChange={(v) => p.onMotion({ out: v })}
@@ -370,6 +376,26 @@ export function Inspector(p: Props) {
         )}
       </div>
     </aside>
+  )
+}
+
+/** Smart Auto: every caption gets an animation that suits what it says and how long it shows */
+function SmartSection(p: Props) {
+  const S = p.smart
+  return (
+    <Section title={<>Smart Auto {S.on && <i className="badge">on</i>}</>} right={`all ${p.total} captions`}>
+      <Seg<Mood> label="Mood" value={S.mood} onChange={(v) => p.onSmart({ mood: v })}
+        opts={[['calm', 'Calm'], ['energetic', 'Energetic'], ['cinematic', 'Cinematic']]} />
+      {S.on && p.smartNote && <p className="hint2">Found {p.smartNote}.</p>}
+      <div className="btnrow">
+        <button className="go" disabled={S.on || !p.total} onClick={() => p.onSmart({ on: true })}>{S.on ? `On for all ${p.total}` : `Turn on for all ${p.total}`}</button>
+        {S.on && <button className="mini" title="Another draw from the same mood" onClick={() => p.onSmart({ seed: S.seed + 1 })}>Shuffle</button>}
+        {S.on && <button className="mini" title="All captions get the one animation picked above again" onClick={() => p.onSmart({ on: false })}>Turn off</button>}
+      </div>
+      <p className="hint2">Each caption gets an animation that suits it: the first line comes in as a hook, short strong lines hit,
+        long lines come in quietly so they can be read, never the same one twice in a row. With Highlight off, a number or the word
+        with “!” lights up. A caption you then give its own animation keeps it.</p>
+    </Section>
   )
 }
 

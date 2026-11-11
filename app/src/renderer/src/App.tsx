@@ -4,6 +4,7 @@ import { jobToLua, makeJob, sendSig, type Rendered } from '@core/job'
 import { DEFAULT_HIGHLIGHT, DEFAULT_LOOK, DEFAULT_MOTION, type Highlight, type Look, type Motion, type WordLook } from '@core/look'
 import { EMPTY_PATTERN, patternList, type Pattern } from '@core/pattern'
 import { presetById } from '@core/presets'
+import { DEFAULT_SMART, KIND_NAMES, smartList, type Kind, type Smart } from '@core/smart'
 import { parseSrt } from '@core/srt'
 import type { Cue } from '@core/srt'
 import type { LinkStatus, RenderProgress, TimelineData } from '../../preload'
@@ -101,6 +102,9 @@ export function App() {
    *  on: it runs over all captions in place of the one animation for all */
   const [pattern, setPattern] = useState<Pattern>(() => ({ ...EMPTY_PATTERN, ...saved('mc.pattern', { pattern: EMPTY_PATTERN }).pattern }))
   const [patternOn, setPatternOn] = useState(() => saved('mc.pattern', { on: false }).on)
+  /** Smart Auto: each caption gets an animation that suits it (core/smart.ts) */
+  const [smart, setSmart] = useState<Smart>(() => saved('mc.smart', DEFAULT_SMART))
+  useEffect(() => store('mc.smart' + stateKit, smart), [smart, stateKit])
   /** Clicks in the animation library add to the pattern instead of using the animation */
   const [patternPick, setPatternPick] = useState(false)
   useEffect(() => store('mc.pattern' + stateKit, { pattern, on: patternOn }), [pattern, patternOn, stateKit])
@@ -187,6 +191,7 @@ export function App() {
     setStyleBase(saved('mc.styleBase' + kit, NO_STYLE))
     const pt = saved('mc.pattern' + kit, { pattern: EMPTY_PATTERN, on: false })
     setPattern({ ...EMPTY_PATTERN, ...pt.pattern }); setPatternOn(pt.on); setPatternPick(false)
+    setSmart(saved('mc.smart' + kit, DEFAULT_SMART))
     setStateKit(kit)
   }, [kit, stateKit])
 
@@ -225,8 +230,14 @@ export function App() {
   /** Each caption's place in the script, for the pattern's chunks */
   const order = useMemo(() => new Map(baseCues.map((c, i) => [c.n, i])), [baseCues])
   const patterned = useMemo(() => (patternOn ? patternList(pattern, baseCues.length) : []), [patternOn, pattern, baseCues.length])
-  /** A caption's own animation, else the pattern's for its chunk, else the one for all */
-  const presetOf = (n: number) => edits[n]?.preset ?? patterned[order.get(n) ?? -1] ?? defaultPreset
+  /** Smart Auto's pick for each caption, by caption number */
+  const smartPicks = useMemo(() => {
+    if (!smart.on) return null
+    const list = smartList(cues, smart.mood, smart.seed)
+    return new Map(cues.map((c, i) => [c.n, list[i]!]))
+  }, [smart, cues])
+  /** A caption's own animation, else Smart Auto's, else the pattern's for its chunk, else the one for all */
+  const presetOf = (n: number) => edits[n]?.preset ?? smartPicks?.get(n)?.preset ?? patterned[order.get(n) ?? -1] ?? defaultPreset
   const effLook = cue ? lookOf(look, edits, cue.n) : look
 
   // Caption changes are kept on this computer for each source as they are made
@@ -244,15 +255,22 @@ export function App() {
   /** How many captions differ from that Send; null while unknown */
   const [changed, setChanged] = useState<number | null>(null)
 
+  /** A caption's word looks: its own, else (with no highlight rule) the word Smart Auto lights */
+  const wordsOf = useCallback((n: number) => {
+    const own = edits[n]?.words
+    if (own && Object.keys(own).length) return own
+    const em = smartPicks?.get(n)?.emphasis
+    return em != null && highlight.rule === 'off' ? { [em]: { color: highlight.color, scale: highlight.scale } } : {}
+  }, [edits, smartPicks, highlight])
   const opts = useCallback((n: number): Partial<CompileOpts> => ({
-    look: lookOf(look, edits, n), words: edits[n]?.words ?? {}, highlight, motion, measure, aspect, hasGlyphs,
-  }), [look, edits, highlight, motion, aspect])
+    look: lookOf(look, edits, n), words: wordsOf(n), highlight, motion, measure, aspect, hasGlyphs,
+  }), [look, edits, highlight, motion, aspect, wordsOf])
 
   const compiled = useMemo(() => {
     if (!cue || cue.endMs <= cue.startMs || !cue.text.trim()) return null
     try { return compileCue(cue, hoverPreset ?? presetOf(cue.n), opts(cue.n)) } catch { return null }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cue, opts, defaultPreset, patterned, hoverPreset])
+  }, [cue, opts, defaultPreset, patterned, hoverPreset, smartPicks])
 
   // Count the captions that differ from the last Send, a moment after the last change.
   // The count is for the button; Resolve itself decides what an update touches.
@@ -271,7 +289,7 @@ export function App() {
     }, 300)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sent, cues, opts, defaultPreset, patterned, drawn])
+  }, [sent, cues, opts, defaultPreset, patterned, drawn, smartPicks])
 
   // ── Scope-aware changes ──
   const targets = (): number[] => (scope === 'selected' ? [...sel] : cue ? [cue.n] : [])
@@ -293,6 +311,7 @@ export function App() {
     if (scope === 'all') {
       setDefaultPreset(id)
       setPatternOn(false)
+      setSmart((s) => ({ ...s, on: false }))
       setEdits((e) => Object.fromEntries(Object.entries(e).map(([n, x]) => [n, { ...x, preset: undefined }])))
       return
     }
@@ -318,8 +337,24 @@ export function App() {
       return
     }
     setPatternOn(true)
+    setSmart((s) => ({ ...s, on: false }))
     setEdits((e) => Object.fromEntries(Object.entries(e).map(([n, x]) => [n, { ...x, preset: undefined }])))
   }
+  /** Smart Auto on for all captions: their own animations and the pattern give way to it */
+  function changeSmart(x: Partial<Smart>) {
+    setSmart((s) => ({ ...s, ...x }))
+    if (x.on) {
+      setPatternOn(false); setPatternPick(false)
+      setEdits((e) => Object.fromEntries(Object.entries(e).map(([n, v]) => [n, { ...v, preset: undefined }])))
+    }
+  }
+  /** What Smart Auto saw, e.g. "1 opening hook · 2 short and strong · 5 lines" */
+  const smartNote = useMemo(() => {
+    if (!smartPicks) return ''
+    const count = new Map<Kind, number>()
+    for (const p of smartPicks.values()) count.set(p.kind, (count.get(p.kind) ?? 0) + 1)
+    return (Object.keys(KIND_NAMES) as Kind[]).filter((k) => count.get(k)).map((k) => `${count.get(k)} ${KIND_NAMES[k]}`).join(' · ')
+  }, [smartPicks])
   function changeWord(partial: Partial<WordLook> | null) {
     if (!cue || selWord === null) return
     const word = norm(wordsIn(cue.text)[selWord] ?? '')
@@ -414,7 +449,7 @@ export function App() {
   // ── Reset: this project's work back to how the app starts ──
   function resetAll() {
     setUndo({ look, highlight, motion, edits, preset: defaultPreset, target, safe, styleBase, pattern, patternOn })
-    setPattern(EMPTY_PATTERN); setPatternOn(false); setPatternPick(false)
+    setPattern(EMPTY_PATTERN); setPatternOn(false); setPatternPick(false); setSmart(DEFAULT_SMART)
     setLook(stateKit ? SUPER_LOOK : DEFAULT_LOOK); setHighlight(DEFAULT_HIGHLIGHT); setMotion(DEFAULT_MOTION); setStyleBase(NO_STYLE)
     // Text+ layers go back to the look they have in Resolve
     setEdits(editsOf(source)); setDefaultPreset(stateKit ? SUPER_PRESET : DEFAULT_PRESET); setTarget(DEFAULT_TARGET); setSafe('off')
@@ -598,6 +633,7 @@ export function App() {
             preset={cue ? presetOf(cue.n) : defaultPreset} onPreset={pickPreset}
             pattern={pattern} onPattern={(x) => setPattern((y) => ({ ...y, ...x }))} patternOn={patternOn}
             onApplyPattern={applyPattern} onStopPattern={() => setPatternOn(false)}
+            smart={smart} onSmart={changeSmart} smartNote={smartNote}
             patternPick={patternPick} onPatternPick={setPatternPick}
             motion={motion} onMotion={(m) => setMotion((x) => ({ ...x, ...m }))}
             safe={safe} onSafe={setSafe}
