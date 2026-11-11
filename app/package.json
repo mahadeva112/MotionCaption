@@ -1,7 +1,7 @@
 {
   "name": "motioncaption-studio",
   "productName": "MotionCaption Studio",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "description": "SRT to editable animated Text+ captions for DaVinci Resolve",
   "main": "out/main/index.js",
