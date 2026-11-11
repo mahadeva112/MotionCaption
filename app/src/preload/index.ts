@@ -78,7 +78,7 @@ export interface TextLayer {
 export interface RenderProgress {
   done: number
   total: number
-  note: 'drawing' | 'ready'
+  note: 'drawing' | 'encoding' | 'ready'
 }
 
 /** The Link window in Resolve (open: a Send goes straight in) */
@@ -107,7 +107,7 @@ const api = {
   jobResult: (jobId: string): Promise<JobResult | null> => ipcRenderer.invoke('job:result', jobId),
   jobProgress: (jobId: string): Promise<JobProgress | null> => ipcRenderer.invoke('job:progress', jobId),
   /** Draws captions as PNG frames with transparency, for Resolve to place as plain clips */
-  renderCues: (req: { width: number; height: number; fps: number; cues: CompiledCue[] }): Promise<Rendered[]> =>
+  renderCues: (req: { width: number; height: number; fps: number; cues: CompiledCue[]; mov?: boolean }): Promise<Rendered[]> =>
     ipcRenderer.invoke('render:cues', req),
   onRenderProgress: (cb: (p: RenderProgress) => void): (() => void) => {
     const f = (_e: unknown, p: RenderProgress) => cb(p)

@@ -89,7 +89,9 @@ export function App() {
   /** Whose settings the look, animation and highlight above are: '' the subtitles', '.supers' the supers' */
   const [stateKit, setStateKit] = useState('')
   const [delivery, setDelivery] = useState<Delivery>(() => saved('mc.delivery', { how: 'drawn' as Delivery }).how)
-  useEffect(() => store('mc.delivery', { how: delivery }), [delivery])
+  /** Finished clips as one MOV file each (ProRes 4444 with transparency) instead of PNG frames */
+  const [movOut, setMovOut] = useState(() => saved('mc.delivery', { mov: false }).mov)
+  useEffect(() => store('mc.delivery', { how: delivery, mov: movOut }), [delivery, movOut])
   const [active, setActive] = useState(1)
   const [sel, setSel] = useState<Set<number>>(new Set())
   const [scope, setScope] = useState<Scope>('all')
@@ -481,7 +483,7 @@ export function App() {
       for (const c of cues) {
         if (c.endMs <= c.startMs || !c.text.trim()) continue
         seen.add(sentKey(c))
-        try { if (sent[sentKey(c)] !== sendSig(compileCue(c, presetOf(c.n), opts(c.n)), drawn)) n++ } catch { n++ }
+        try { if (sent[sentKey(c)] !== sendSig(compileCue(c, presetOf(c.n), opts(c.n)), drawn, drawn && movOut)) n++ } catch { n++ }
       }
       for (const k of Object.keys(sent)) if (!seen.has(k)) n++
       setChanged(n)
@@ -759,7 +761,7 @@ export function App() {
     let renders: Rendered[] | undefined
     if (drawn && tl) {
       const off = onDraw ? window.mc.onRenderProgress(onDraw) : null
-      try { renders = await window.mc.renderCues({ width: tl.width, height: tl.height, fps: tl.rate, cues: out }) } finally { off?.() }
+      try { renders = await window.mc.renderCues({ width: tl.width, height: tl.height, fps: tl.rate, cues: out, mov: movOut }) } finally { off?.() }
     }
     const job = makeJob(srcName || 'Captions', out, undefined, new Date(), {
       renders,
@@ -917,7 +919,7 @@ export function App() {
         </div>
       )}
       {sending && <SendDialog captions={placeable.length} noun={noun} where={where} timeline={tl?.name ?? null} linked={link.alive} build={buildJob}
-        delivery={drawn ? 'drawn' : 'textplus'} canDraw={!!tl} onDelivery={setDelivery}
+        delivery={drawn ? 'drawn' : 'textplus'} canDraw={!!tl} onDelivery={setDelivery} mov={movOut} onMov={setMovOut}
         update={updating ? { changed } : null} onDone={sentOk} onClose={() => setSending(false)} />}
     </div>
   )

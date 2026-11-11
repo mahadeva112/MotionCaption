@@ -1,9 +1,10 @@
-import { BrowserWindow, screen } from 'electron'
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { app, BrowserWindow, screen } from 'electron'
+import { execFile } from 'node:child_process'
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { cpus } from 'node:os'
 import { join } from 'node:path'
 import type { CompiledCue } from '../core/compile.ts'
-import { renderKey, type Rendered } from '../core/job.ts'
+import { fpsText, renderKey, type Rendered } from '../core/job.ts'
 
 // Draws captions as PNG frames with a see-through background, for Resolve to place as
 // plain clips. A hidden off-screen window shows the app's own preview of one caption
@@ -16,9 +17,32 @@ export interface RenderRequest {
   /** Frames per second of the timeline, exact (24000/1001 for 23.976) */
   fps: number
   cues: CompiledCue[]
+  /** Also make each caption one MOV file (ProRes 4444 with transparency) from its frames */
+  mov?: boolean
 }
 
-type Progress = (done: number, total: number, note: string) => void
+type Progress = (done: number, total: number, note: 'drawing' | 'encoding' | 'ready') => void
+
+/** ffmpeg: shipped next to the app (installer, resources\ffmpeg), or from node_modules while developing */
+const ffmpegPath = () => (app.isPackaged
+  ? join(process.resourcesPath, 'ffmpeg', 'ffmpeg.exe')
+  : join(app.getAppPath(), 'node_modules', 'ffmpeg-static', 'ffmpeg.exe'))
+
+/** One caption's frames as dir\clip.mov: ProRes 4444 with its alpha, at the timeline's rate,
+ *  the same frames as the PNGs (so the same length and the same blank last frame) */
+async function makeMov(dir: string, frames: number, fps: number): Promise<string> {
+  const file = join(dir, 'clip.mov')
+  if (await stat(file).then((s) => s.size > 0, () => false)) return file
+  const part = join(dir, 'clip.part.mov')
+  const rate = fpsText(fps)
+  const args = ['-y', '-hide_banner', '-loglevel', 'error', '-framerate', rate, '-start_number', '0', '-i', join(dir, 'f_%05d.png'),
+    '-frames:v', String(frames), '-c:v', 'prores_ks', '-profile:v', '4444', '-pix_fmt', 'yuva444p10le', '-alpha_bits', '16',
+    '-vendor', 'apl0', '-r', rate, part]
+  await new Promise<void>((ok, no) => execFile(ffmpegPath(), args, { windowsHide: true, maxBuffer: 1 << 20 },
+    (err, _out, errText) => (err ? no(new Error(`Making the MOV in ${dir} failed: ${String(errText || err.message).trim()}`)) : ok())))
+  await rename(part, file)
+  return file
+}
 
 type Stage = { win: BrowserWindow; W: number; H: number; scale: number }
 
@@ -94,40 +118,55 @@ export async function renderCues(root: string, url: { dev?: string; file: string
   const total = todo.reduce((s, j) => s + j.frames, 0)
   let done = 0
   progress(0, total, todo.length ? 'drawing' : 'ready')
-  if (!todo.length) return out
-
-  await mkdir(root, { recursive: true })
-  const queue = todo.slice()
-  const worker = async (i: number) => {
-    const { win, scale } = await openStage(i, url, W, H)
-    const wc = win.webContents
-    // The page lays the caption out at the window's size; the scale makes up the rest
-    const cw = Math.round(W / scale)
-    const ch = Math.round(H / scale)
-    for (let j = queue.shift(); j; j = queue.shift()) await drawOne(j, wc, cw, ch)
-  }
-  const drawOne = async (j: (typeof todo)[number], wc: Electron.WebContents, cw: number, ch: number) => {
-    const dir = join(root, j.key)
-    const part = dir + '.part'
-    await rm(part, { recursive: true, force: true })
-    await mkdir(part, { recursive: true })
-    await wc.executeJavaScript(`window.__mcRender.show(${JSON.stringify(j.cue)}, ${cw}, ${ch}, 0)`)
-    const writes: Promise<void>[] = []
-    for (let i = 0; i < j.frames; i++) {
-      await wc.executeJavaScript(`window.__mcRender.seek(${(i * 1000) / fps})`)
-      let img = await wc.capturePage()
-      const size = img.getSize()
-      if (size.width !== W || size.height !== H) img = img.resize({ width: W, height: H, quality: 'best' })
-      writes.push(writeFile(join(part, `f_${String(i).padStart(5, '0')}.png`), img.toPNG()))
-      if (writes.length >= 16) await Promise.all(writes.splice(0))
-      done++
-      if (done % 5 === 0 || done === total) progress(done, total, 'drawing')
+  if (todo.length) await drawAll(todo)
+  if (req.mov) {
+    // Two at a time: ffmpeg already uses several cores for each
+    let made = 0
+    progress(0, out.length, 'encoding')
+    const queue = out.slice()
+    const worker = async () => {
+      for (let r = queue.shift(); r; r = queue.shift()) {
+        r.file = await makeMov(r.dir, r.frames, fps)
+        progress(++made, out.length, 'encoding')
+      }
     }
-    await Promise.all(writes)
-    await writeFile(join(part, 'done.json'), JSON.stringify({ frames: j.frames, width: W, height: H, fps, n: j.cue.n }), 'utf8')
-    await rm(dir, { recursive: true, force: true })
-    await rename(part, dir)
+    await Promise.all([worker(), worker()])
   }
-  await Promise.all(Array.from({ length: Math.min(MAX_STAGES, todo.length) }, (_, i) => worker(i)))
   return out
+
+  async function drawAll(todo: { cue: CompiledCue; key: string; frames: number }[]) {
+    await mkdir(root, { recursive: true })
+    const queue = todo.slice()
+    const worker = async (i: number) => {
+      const { win, scale } = await openStage(i, url, W, H)
+      const wc = win.webContents
+      // The page lays the caption out at the window's size; the scale makes up the rest
+      const cw = Math.round(W / scale)
+      const ch = Math.round(H / scale)
+      for (let j = queue.shift(); j; j = queue.shift()) await drawOne(j, wc, cw, ch)
+    }
+    const drawOne = async (j: (typeof todo)[number], wc: Electron.WebContents, cw: number, ch: number) => {
+      const dir = join(root, j.key)
+      const part = dir + '.part'
+      await rm(part, { recursive: true, force: true })
+      await mkdir(part, { recursive: true })
+      await wc.executeJavaScript(`window.__mcRender.show(${JSON.stringify(j.cue)}, ${cw}, ${ch}, 0)`)
+      const writes: Promise<void>[] = []
+      for (let i = 0; i < j.frames; i++) {
+        await wc.executeJavaScript(`window.__mcRender.seek(${(i * 1000) / fps})`)
+        let img = await wc.capturePage()
+        const size = img.getSize()
+        if (size.width !== W || size.height !== H) img = img.resize({ width: W, height: H, quality: 'best' })
+        writes.push(writeFile(join(part, `f_${String(i).padStart(5, '0')}.png`), img.toPNG()))
+        if (writes.length >= 16) await Promise.all(writes.splice(0))
+        done++
+        if (done % 5 === 0 || done === total) progress(done, total, 'drawing')
+      }
+      await Promise.all(writes)
+      await writeFile(join(part, 'done.json'), JSON.stringify({ frames: j.frames, width: W, height: H, fps, n: j.cue.n }), 'utf8')
+      await rm(dir, { recursive: true, force: true })
+      await rename(part, dir)
+    }
+    await Promise.all(Array.from({ length: Math.min(MAX_STAGES, todo.length) }, (_, i) => worker(i)))
+  }
 }
