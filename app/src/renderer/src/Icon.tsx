@@ -10,6 +10,9 @@ const PATHS = {
   pause: 'M8 5v14M16 5v14',
   minus: 'M5 12h14',
   plus: 'M12 5v14M5 12h14',
+  check: 'M5 12.5l4.5 4.5L19 7.5',
+  film: 'M4 5h16v14H4zM8 5v14M16 5v14M4 9.5h4M4 14.5h4M16 9.5h4M16 14.5h4',
+  upload: 'M12 15V4M7.5 8.5 12 4l4.5 4.5M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3',
 } as const
 
 export type IconName = keyof typeof PATHS
