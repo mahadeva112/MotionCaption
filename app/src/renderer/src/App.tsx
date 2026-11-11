@@ -183,7 +183,9 @@ export function App() {
 
   async function openSrt() {
     const picked = await window.mc.openSrt()
-    if (!picked) return
+    if (picked) loadSrt(picked)
+  }
+  function loadSrt(picked: { name: string; bytes: Uint8Array }) {
     const parsed = parseSrt(picked.bytes)
     const next: Source = withExtras({ kind: 'srt', name: picked.name, cues: parsed.cues, notes: parsed.issues.map((x) => `Line ${x.line}: ${x.message}`) })
     setSource(next)
@@ -786,6 +788,11 @@ export function App() {
           <span className="link"><i className="dot" />Linked <b>{tl.name}</b><i className="sep" />{tl.width}×{tl.height}<i className="sep" />{tl.fps} fps
             {readAt && <><i className="sep" />read {readAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</>}</span>
         )}
+        {!source && (
+          <span className="link">{link.alive
+            ? <><i className="dot" />Resolve linked{link.timeline && <><i className="sep" /><b>{link.timeline}</b></>}</>
+            : <><i className="dot wait" />Waiting for Resolve</>}</span>
+        )}
         {source?.kind === 'srt' && (
           <span className="link"><i className="dot off" />{source.name}<i className="sep" />frame
             <select className="sl" value={frame} onChange={(e) => setFrame(e.target.value)}>{FRAMES.map((f) => <option key={f.label}>{f.label}</option>)}</select>
@@ -795,12 +802,12 @@ export function App() {
         <button className="mini" title="Read the timeline open in Resolve again"
           onClick={() => (link.alive ? window.mc.refreshTimeline() : window.mc.runInResolve())}><Icon name="refresh" />Refresh from Resolve</button>
         {source && <button className="mini" title="Put every setting and caption change back to how the app starts" onClick={() => setResetting(true)}><Icon name="undo" />Reset</button>}
-        <button className="mini" onClick={openSrt}><Icon name="file" />Open SRT…</button>
+        {source && <button className="mini" onClick={openSrt}><Icon name="file" />Open SRT…</button>}
         {source && <button className="go cta" disabled={!placeable.length} onClick={() => setSending(true)}><Icon name="send" />{sendLabel}</button>}
       </header>
 
       {!source ? (
-        <Welcome info={timelineInfo} last={last} onLast={() => showTimeline(last)} onSrt={openSrt} />
+        <Welcome info={timelineInfo} last={last} link={link} onLast={() => showTimeline(last)} onSrt={openSrt} onSrtFile={loadSrt} />
       ) : (
         <div className={'studio2' + (aspect >= 1 ? ' wide' : '')}>
           <Viewer cue={compiled} aspect={aspect} fps={fps} safe={safe} selWord={selWord} playing={playing} loop={!!hoverPreset}
@@ -922,31 +929,112 @@ async function isCurrent(d: TimelineData): Promise<boolean> {
   return !!d.timeline && l.timeline === d.timeline.name
 }
 
-function Welcome({ info, last, onLast, onSrt }: { info: TimelineData | null; last: TimelineData | null; onLast: () => void; onSrt: () => void }) {
-  const lastAt = last ? new Date(last.readAt) : null
+/** When a timeline was read: "Today, 13:29" or "11 Nov, 13:29" */
+function whenRead(iso: string): string | null {
+  const at = new Date(iso)
+  if (isNaN(+at)) return null
+  const time = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return at.toDateString() === new Date().toDateString() ? `Today, ${time}`
+    : `${at.toLocaleDateString([], { day: 'numeric', month: 'short' })}, ${time}`
+}
+
+function Welcome({ info, last, link, onLast, onSrt, onSrtFile }: {
+  info: TimelineData | null; last: TimelineData | null; link: LinkStatus
+  onLast: () => void; onSrt: () => void; onSrtFile: (f: { name: string; bytes: Uint8Array }) => void
+}) {
+  const [over, setOver] = useState(false)
+  const [asking, setAsking] = useState(false)
+  const [why, setWhy] = useState<string | null>(null)
   const noSubs = info?.timeline && !info.subtitle?.length && !usableLayers(info.texts).length
+
+  // A file dropped anywhere else would make the window open it as a page
+  useEffect(() => {
+    const stop = (e: DragEvent) => e.preventDefault()
+    window.addEventListener('dragover', stop)
+    window.addEventListener('drop', stop)
+    return () => { window.removeEventListener('dragover', stop); window.removeEventListener('drop', stop) }
+  }, [])
+
+  async function readResolve() {
+    setWhy(null); setAsking(true)
+    try {
+      if (link.alive) { await window.mc.refreshTimeline(); return }
+      const r = await window.mc.runInResolve()
+      setWhy(r === 'OK' ? null : r === 'NO_RESOLVE' ? 'DaVinci Resolve is not open. Open it with your timeline, then try again.'
+        : r.startsWith('NO_MENU') ? `Resolve's menu has no ${r.slice(8)} entry. Click Workspace → Scripts → MotionCaption there.`
+        : 'Resolve did not answer. Click Workspace → Scripts → MotionCaption there.')
+    } finally { setAsking(false) }
+  }
+
+  async function drop(e: React.DragEvent) {
+    e.preventDefault(); setOver(false)
+    const f = [...e.dataTransfer.files].find((x) => /\.srt$/i.test(x.name))
+    if (!f) { setWhy(e.dataTransfer.files.length ? 'Only .srt files open here.' : null); return }
+    setWhy(null)
+    onSrtFile({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })
+  }
+
+  const lt = last?.timeline || null
+  const lastCount = last ? (last.subtitle?.find((t) => t.cues.length)?.cues.length ?? usableLayers(last.texts).length) : 0
+  const lastWhen = last ? whenRead(last.readAt) : null
+  const ratio = lt && lt.width && lt.height ? lt.width / lt.height : 16 / 9
+  const thumb = ratio >= 1 ? { width: 58, height: Math.round(58 / ratio) } : { width: Math.round(40 * ratio), height: 40 }
+  const step = (n: number) => (link.alive ? (n < 3 ? 'done' : 'now') : n === 2 ? 'now' : '')
+
   return (
-    <main className="welcome">
-      <div className="card2">
-        <h1>Start from your timeline</h1>
+    <main className="welcome" onDragOver={(e) => { e.preventDefault(); setOver(true) }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOver(false) }} onDrop={drop}>
+      <div className="wel">
+        <h1>Bring your captions in</h1>
+        <p className="sub">From a Resolve timeline, or from an .srt file.</p>
+
         {noSubs && info?.timeline ? (
-          <p className="warn">“{info.timeline.name}” has no subtitle track and no Text+ layers yet. Add your subtitles (File → Import → Subtitle) or a Text+ title in Resolve, then click MotionCaption there again.</p>
+          <p className="wwarn">“{info.timeline.name}” has no subtitle track and no Text+ layers yet. Add your subtitles (File → Import → Subtitle) or a Text+ title in Resolve, then click MotionCaption there again.</p>
         ) : info && info.timeline === false ? (
-          <p className="warn">Resolve had no timeline open. Open one, then click MotionCaption again.</p>
+          <p className="wwarn">Resolve had no timeline open. Open one, then click MotionCaption again.</p>
         ) : null}
-        <ol className="how">
-          <li><b>In Resolve,</b> open the timeline that has your subtitles on a subtitle track.</li>
-          <li>Click <kbd>Workspace → Scripts → MotionCaption</kbd>. Its subtitle and video tracks appear here.</li>
-          <li>Pick an animation and a look, then <b>Send</b>. One more click on MotionCaption in Resolve places them on a video track.</li>
-        </ol>
-        <p className="hint2">No subtitle track? <button className="link" onClick={onSrt}>Open an .srt file instead</button></p>
-        {last?.timeline && (
-          <div className="last">
-            <span>Last time: <b>{last.timeline.name}</b>{last.project ? <> · {last.project}</> : null}
-              {lastAt && !isNaN(+lastAt) && <> · {lastAt.toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</>}
-              <br /><em>Resolve may have another timeline open now.</em></span>
-            <button className="mini" onClick={onLast}>Open it</button>
-          </div>
+
+        <div className="wel-row">
+          <section className="wcard">
+            <div className="wcard-t"><Icon name="film" />From DaVinci Resolve<span className="tag">Recommended</span></div>
+            <ol className="steps">
+              <li className={step(1)}><span className="n">{step(1) === 'done' ? <Icon name="check" /> : 1}</span>
+                <span><b>Open your timeline</b>with subtitles on a subtitle track, or Text+ titles</span></li>
+              <li className={step(2)}><span className="n">{step(2) === 'done' ? <Icon name="check" /> : 2}</span>
+                <span><b>{link.alive && link.timeline ? <>Linked to “{link.timeline}”</> : 'Run MotionCaption there'}</b>
+                  <kbd>Workspace</kbd> › <kbd>Scripts</kbd> › <kbd>MotionCaption</kbd></span></li>
+              <li className={step(3)}><span className="n">3</span>
+                <span><b>Pick a look and Send</b>One more click on MotionCaption in Resolve places them on a video track</span></li>
+            </ol>
+            <div className="act">
+              <button className="go" disabled={asking} onClick={readResolve}><Icon name="refresh" />
+                {link.alive ? (link.timeline ? `Read “${link.timeline}”` : 'Read the timeline') : 'Run it in Resolve for me'}</button>
+              {!link.alive && <span className="listen"><i className="dot wait" />Listening… this page fills in by itself</span>}
+            </div>
+          </section>
+
+          <button className={'wcard drop' + (over ? ' over' : '')} onClick={onSrt}>
+            <span className="bub"><Icon name="upload" /></span>
+            <b>{over ? 'Drop to open' : 'Drop an .srt here'}</b>
+            <span className="hint2">No subtitle track? Use a file.</span>
+            <span className="mini">Browse…</span>
+          </button>
+        </div>
+        {why && <p className="wwarn">{why}</p>}
+
+        {lt && last && (
+          <>
+            <p className="wel-k">Continue where you left off</p>
+            <div className="wcard recent">
+              <span className="thumb"><i style={thumb} /></span>
+              <span className="info">
+                <b>{lt.name}</b>
+                <span>{[last.project, lastCount ? `${lastCount} captions` : null, lt.width && lt.height ? `${lt.width}×${lt.height}` : null, lt.fps ? `${lt.fps} fps` : null].filter(Boolean).join(' · ')}</span>
+                <em>{lastWhen ? `${lastWhen} · ` : ''}Resolve may have another timeline open now</em>
+              </span>
+              <button className="mini" onClick={onLast}>Open it</button>
+            </div>
+          </>
         )}
       </div>
     </main>
