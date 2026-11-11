@@ -487,3 +487,7 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
 .vpath circle { fill: #7fd3ff; stroke: #0b0d10; stroke-width: 1.5; }
 .vpath circle.home { fill: #fff; }
 .sl.tmpl { max-width: 120px; }
+
+/* Send window: Finished clips as PNG frames or one MOV each */
+.movrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 8px; font-size: 12px; color: var(--t2); }
+.movrow small { flex-basis: 100%; color: var(--t3); font-size: 11px; }

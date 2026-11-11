@@ -16,6 +16,9 @@ interface Props {
   /** Drawing needs the timeline read from Resolve (an SRT alone has no size or rate) */
   canDraw: boolean
   onDelivery: (d: Delivery) => void
+  /** Finished clips as one MOV file each instead of PNG frames */
+  mov: boolean
+  onMov: (mov: boolean) => void
   /** Set when these captions were sent before: this send only makes the changed ones
    *  again. `changed` is how many the app counts, null while it does not know. */
   update: { changed: number | null } | null
@@ -34,7 +37,7 @@ function percent(p: JobProgress | null, r: JobResult | null): number | null {
   return p.phase === 'placing' ? 5 : 2
 }
 
-export function SendDialog({ captions, noun, where, timeline, linked, build, delivery, canDraw, onDelivery, update: updateNow, onDone, onClose }: Props) {
+export function SendDialog({ captions, noun, where, timeline, linked, build, delivery, canDraw, onDelivery, mov, onMov, update: updateNow, onDone, onClose }: Props) {
   // What this dialog was opened for: a first send stays worded as one after it has gone in
   const [update] = useState(updateNow)
   const [status, setStatus] = useState<ResolveStatus | null>(null)
@@ -86,7 +89,8 @@ export function SendDialog({ captions, noun, where, timeline, linked, build, del
   const drawPct = draw && draw.total > 0 ? Math.round((100 * draw.done) / draw.total) : null
   const pct = phase === 'drawing' ? drawPct : percent(progress, result)
   const label = phase === 'drawing'
-    ? (draw && draw.total > 0 ? `Drawing the ${noun}: frame ${draw.done} of ${draw.total}` : `Drawing the ${noun}…`)
+    ? (draw?.note === 'encoding' ? `Making MOV files: ${draw.done} of ${draw.total}`
+      : draw && draw.total > 0 ? `Drawing the ${noun}: frame ${draw.done} of ${draw.total}` : `Drawing the ${noun}…`)
     : result
     ? (result.ok ? 'Finished' : 'Finished with problems')
     : !progress
@@ -122,6 +126,17 @@ export function SendDialog({ captions, noun, where, timeline, linked, build, del
               <span>Text and look stay editable in Resolve. Letter and word animations go through Fusion, and may not show in Resolve Free.</span>
             </button>
             {!canDraw && <p className="hint2">Finished clips need the timeline read from Resolve: click MotionCaption in Resolve first.</p>}
+            {delivery === 'drawn' && (
+              <div className="movrow">
+                <span>Clips as</span>
+                <div className="seg">
+                  <button className={!mov ? 'on' : ''} disabled={phase === 'drawing' || phase === 'sending'} onClick={() => onMov(false)}>PNG frames</button>
+                  <button className={mov ? 'on' : ''} disabled={phase === 'drawing' || phase === 'sending'} onClick={() => onMov(true)}>MOV video</button>
+                </div>
+                <small>{mov ? 'One ProRes 4444 file per caption, with transparency: tidy in the Media Pool, easy to use in other projects.'
+                  : 'A folder of PNG frames per caption: the quickest to make.'}</small>
+              </div>
+            )}
           </div>
           {status && !status.resolveFound && <p className="warn">DaVinci Resolve was not found on this computer. Install Resolve (Free or Studio), then come back.</p>}
           {direct === false ? (

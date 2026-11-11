@@ -244,7 +244,8 @@ local function comp_of(v, i) if type(v) == "table" then return v[i] end return v
 -- ── Drawn captions ─────────────────────────────────────────────────────────
 -- A caption the app drew itself as PNG frames with transparency (job cue.render). It is
 -- imported once as an image sequence into MotionCaption › Drawn and placed like any clip:
--- no Text+, no Fusion comp, nothing that Resolve Free draws differently.
+-- no Text+, no Fusion comp, nothing that Resolve Free draws differently. When the app also
+-- made the frames into one MOV (render.file: ProRes 4444 with alpha), that file goes in instead.
 local drawnBin, drawnItems = nil, {}
 local function drawn_bin(mp)
     if drawnBin then return drawnBin end
@@ -264,34 +265,48 @@ end
 
 -- The Media Pool clip of a drawn caption's frames, imported the first time it is needed
 local function drawn_item(mp, r, rateText)
-    if drawnItems[r.dir] then return drawnItems[r.dir] end
+    local mov = type(r.file) == "string" and r.file ~= ""
+    local id = mov and r.file or r.dir
+    if drawnItems[id] then return drawnItems[id] end
     local bin = drawn_bin(mp)
     if not bin then return nil, "could not make the MotionCaption › Drawn bin in the Media Pool" end
-    -- Each caption's frames have their own folder, named by what they show
+    -- Each caption's frames have their own folder, named by what they show; its MOV is in it
     local key = tostring(r.dir):match("([^\\/]+)$") or r.dir
     for _, clip in ipairs(objects(try(function() return bin:GetClipList() end))) do
         local path = tostring(try(function() return clip:GetClipProperty("File Path") end) or "")
-        if path:find(key, 1, true) then drawnItems[r.dir] = clip; return clip end
+        local isMov = path:lower():match("%.mov$") ~= nil
+        if path:find(key, 1, true) and isMov == mov then drawnItems[id] = clip; return clip end
     end
     local was = try(function() return mp:GetCurrentFolder() end)
     try(function() mp:SetCurrentFolder(bin) end)
-    local got = objects(try(function()
-        return mp:ImportMedia({ { FilePath = r.dir .. "\\f_%05d.png", StartIndex = 0, EndIndex = r.frames - 1 } })
-    end))
-    local how = "ImportMedia"
-    if #got == 0 then
-        -- The folder holds nothing but the frames, so Resolve takes it as one sequence
-        got = objects(try(function() return rv:GetMediaStorage():AddItemListToMediaPool({ r.dir }) end))
-        how = "AddItemListToMediaPool"
+    local got, how
+    if mov then
+        got = objects(try(function() return mp:ImportMedia({ r.file }) end))
+        how = "ImportMedia MOV"
+        if #got == 0 then
+            got = objects(try(function() return rv:GetMediaStorage():AddItemListToMediaPool({ r.file }) end))
+            how = "AddItemListToMediaPool MOV"
+        end
+    else
+        got = objects(try(function()
+            return mp:ImportMedia({ { FilePath = r.dir .. "\\f_%05d.png", StartIndex = 0, EndIndex = r.frames - 1 } })
+        end))
+        how = "ImportMedia"
+        if #got == 0 then
+            -- The folder holds nothing but the frames, so Resolve takes it as one sequence
+            got = objects(try(function() return rv:GetMediaStorage():AddItemListToMediaPool({ r.dir }) end))
+            how = "AddItemListToMediaPool"
+        end
     end
     if was then try(function() mp:SetCurrentFolder(was) end) end
     local clip = got[1]
-    if not clip then return nil, "Resolve did not take the drawn frames in " .. r.dir end
+    if not clip then return nil, "Resolve did not take the drawn " .. (mov and ("MOV " .. r.file) or ("frames in " .. r.dir)) end
     local frames = tonumber(try(function() return clip:GetClipProperty("Frames") end))
-    -- An image sequence plays at the project's rate; it must be the timeline's
+    -- An image sequence plays at the project's rate; it must be the timeline's (a MOV has the
+    -- timeline's rate in it already)
     local rate = clip_rate(clip)
     local set
-    if not rate or math.abs(rate - fps) > 0.0001 then
+    if not mov and (not rate or math.abs(rate - fps) > 0.0001) then
         set = try(function() return clip:SetClipProperty("FPS", rateText) end)
         rate = clip_rate(clip)
     end
@@ -307,7 +322,7 @@ local function drawn_item(mp, r, rateText)
         return nil, "the drawn frames came in at " .. tostring(rate) .. " fps, not the timeline's " .. tostring(rateText)
             .. ". Set Project Settings → Timeline frame rate to " .. tostring(rateText) .. ", then Send again."
     end
-    drawnItems[r.dir] = clip
+    drawnItems[id] = clip
     return clip
 end
 

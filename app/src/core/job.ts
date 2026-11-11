@@ -60,6 +60,8 @@ export interface Rendered {
   frames: number
   width: number
   height: number
+  /** The same frames as one MOV file (ProRes 4444 with transparency), when asked for */
+  file?: string
 }
 
 /** A caption in a job, with the signature of what the bridge builds from it */
@@ -96,7 +98,13 @@ export function sigOf(cue: CompiledCue): string {
 
 /** The signature a caption is sent with: a drawn caption and a Text+ caption of the same
  *  look are different clips in Resolve, so switching between them makes it again */
-export const sendSig = (cue: CompiledCue, rendered: boolean): string => sigOf(cue) + (rendered ? 'r' : '')
+export const sendSig = (cue: CompiledCue, rendered: boolean, mov = false): string => sigOf(cue) + (rendered ? (mov ? 'm' : 'r') : '')
+
+/** A frame rate as ffmpeg takes it: the NTSC rates exactly (24000/1001), others as they are */
+export function fpsText(fps: number): string {
+  const n = Math.round(fps * 1.001)
+  return Math.abs(fps - (n * 1000) / 1001) < 1e-6 && Math.abs(fps - n) > 1e-3 ? `${n * 1000}/1001` : String(Math.round(fps * 1e6) / 1e6)
+}
 
 /** Bump when the app draws frames differently, so frames drawn before are not reused */
 export const RENDER_VERSION = 1
@@ -119,7 +127,7 @@ export function makeJob(source: string, cues: CompiledCue[], test?: JobTest, now
     cues: cues.map((c, i) => {
       const render = renders?.[i]
       const look = c.look.image ? { ...c.look, image: { ...c.look.image, src: '' } } : c.look
-      return { ...c, look, sig: sendSig(c, !!render), ...(render ? { render } : {}) }
+      return { ...c, look, sig: sendSig(c, !!render, !!render?.file), ...(render ? { render } : {}) }
     }),
     ...(test ? { test } : {}),
   }
