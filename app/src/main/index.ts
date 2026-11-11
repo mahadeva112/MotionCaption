@@ -46,6 +46,8 @@ function createWindow(): void {
     minHeight: 700,
     backgroundColor: '#0e0f13',
     title: 'MotionCaption Studio',
+    // The top-bar logo, for the title bar and taskbar (build/icon.ico, made by scripts/make_icon.py)
+    icon: app.isPackaged ? join(process.resourcesPath, 'icon.ico') : join(__dirname, '..', '..', 'build', 'icon.ico'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -202,6 +204,9 @@ ipcMain.handle('job:progress', async (_e, jobId: string) => {
 
 // Clicking MotionCaption in Resolve opens the app when there is nothing to place. If it
 // is already open, bring that window forward instead of starting a second copy.
+// Same id as the installer's Start menu shortcut, so the taskbar groups the window
+// under that shortcut and shows its icon, not Electron's
+app.setAppUserModelId('com.motioncaption.studio')
 if (!app.requestSingleInstanceLock()) app.quit()
 app.on('second-instance', () => {
   const win = BrowserWindow.getAllWindows()[0]
