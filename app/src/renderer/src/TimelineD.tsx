@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type MouseEvent, type PointerEvent, type R
 
 import type { Cue } from '@core/srt'
 import type { TimelineData } from '../../preload'
-import { useClock } from './clock'
+import { retime, type Grip, type Span } from '@core/retime'
+import { clock, useClock } from './clock'
 import { Icon } from './Icon'
 import { isTextSrc, layersIn, srcChoices, srcTrackOf, timecode, type SrcTrack, type Target } from './model'
 
@@ -30,9 +31,27 @@ interface Props {
   supers: number
   /** Adds a super at the playhead; set while the supers are shown */
   onAddSuper: (() => void) | null
+  /** Move or trim a block by dragging it or its edges (supers only); end: the drag is over */
+  onRetime: ((n: number, span: Span, end: boolean) => void) | null
 }
 
+/** How near (in pixels) an edge must come to the playhead or another block to stick */
+const SNAP_PX = 8
+
 const HEAD = 200
+
+/** What the supers' timeline does, for the Shortcuts hint */
+const SUPER_KEYS = [
+  'Drag a super to move it; drag its edge to make it shorter or longer.',
+  'It sticks to the playhead and to other supers. Hold Alt to place it freely.',
+  '',
+  'S or Ctrl+B: cut the super at the playhead',
+  'Delete: delete the selected supers',
+  'Ctrl+C / Ctrl+V: copy, and paste at the playhead',
+  'Ctrl+D: duplicate right after',
+  ', and . : move one frame (with Shift: 10 frames)',
+  'Ctrl+Z / Ctrl+Y: undo / redo',
+].join('\n')
 
 export function TimelineD(p: Props) {
   const [pps, setPps] = useState(70) // pixels per second
@@ -70,7 +89,50 @@ export function TimelineD(p: Props) {
     const r = e.currentTarget.getBoundingClientRect()
     p.onSeek(Math.max(0, ((e.clientX - r.left) / pps) * 1000))
   }
-  const click = (n: number) => (e: MouseEvent) => p.onCue(n, e.shiftKey ? 'range' : e.ctrlKey || e.metaKey ? 'toggle' : 'set')
+  const pickMode = (e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }) => (e.shiftKey ? 'range' : e.ctrlKey || e.metaKey ? 'toggle' : 'set')
+  const click = (n: number) => (e: MouseEvent) => p.onCue(n, pickMode(e))
+
+  // Drag a block to move it, or its edge to trim it; a click without moving picks it.
+  // Edges stick to the playhead and to the other blocks (hold Alt to place freely).
+  const grab = useRef<{ n: number; grip: Grip; x0: number; span: Span; snaps: number[]; moved: boolean } | null>(null)
+  const [dragging, setDragging] = useState<number | null>(null)
+  const [guide, setGuide] = useState<number | null>(null)
+  const down = (c: Cue) => (e: PointerEvent<HTMLElement>) => {
+    if (e.button !== 0 || !p.onRetime) return
+    const grip = ((e.target as HTMLElement).closest('[data-grip]')?.getAttribute('data-grip') ?? 'move') as Grip
+    e.currentTarget.setPointerCapture(e.pointerId)
+    const snaps = [0, clock.get(), ...p.cues.filter((o) => o.n !== c.n).flatMap((o) => [o.startMs, o.endMs])]
+    grab.current = { n: c.n, grip, x0: e.clientX, span: { startMs: c.startMs, endMs: c.endMs }, snaps, moved: false }
+  }
+  const drag = (e: PointerEvent<HTMLElement>, end: boolean) => {
+    const g = grab.current
+    if (!g || !p.onRetime) return
+    const dx = e.clientX - g.x0
+    if (!g.moved && Math.abs(dx) < 3) return
+    if (!g.moved) { g.moved = true; setDragging(g.n) }
+    const r = retime(g.span, g.grip, (dx / pps) * 1000, { fps: p.fps, snaps: g.snaps, snapMs: e.altKey ? 0 : (SNAP_PX / pps) * 1000 })
+    setGuide(end ? null : r.snap)
+    p.onRetime(g.n, { startMs: r.startMs, endMs: r.endMs }, end)
+  }
+  const up = (e: PointerEvent<HTMLElement>) => {
+    const g = grab.current
+    if (!g) return
+    if (g.moved) drag(e, true)
+    else p.onCue(g.n, pickMode(e))
+    grab.current = null
+    setDragging(null); setGuide(null)
+  }
+  /** A block's mouse handling: draggable (supers) or click to pick */
+  const handlers = (c: Cue) => (p.onRetime
+    ? { onPointerDown: down(c), onPointerMove: (e: PointerEvent<HTMLElement>) => drag(e, false), onPointerUp: up, onPointerCancel: up }
+    : { onClick: click(c.n) })
+  /** Trim handles on both edges, when the block is wide enough to keep room to move it */
+  const grips = (c: Cue) => (p.onRetime && x(c.endMs - c.startMs) >= 22
+    ? <><span className="grip l" data-grip="start" title="Drag to change the start" /><span className="grip r" data-grip="end" title="Drag to change the end" /></>
+    : null)
+  const tip = (c: Cue | undefined) => (c
+    ? <span className="tltip" style={{ left: x(c.startMs) }}>{timecode(c.startMs, p.fps)} · {((c.endMs - c.startMs) / 1000).toFixed(2)} s</span>
+    : null)
   const step = pps > 120 ? 1 : pps > 50 ? 2 : pps > 20 ? 5 : 10
   const marks = Array.from({ length: Math.ceil(endMs / 1000 / step) + 1 }, (_, i) => i * step)
   const newTrack = p.target.track === 'new'
@@ -89,6 +151,7 @@ export function TimelineD(p: Props) {
         ) : <b className="ro">{p.srcName}</b>}
         {p.onAddSuper && <button className="mini addsuper" onClick={p.onAddSuper} title="A new super at the playhead, 3 s long. Write it, time it and animate it here; Send places it in Resolve.">
           <Icon name="plus" />Add super</button>}
+        {p.onRetime && <span className="khint" title={SUPER_KEYS}>Shortcuts</span>}
         <span className="arrow">→</span>
         <span>Put on</span>
         <select className="sl" value={String(p.target.track)} onChange={(e) => p.onTarget({ track: e.target.value === 'new' ? 'new' : Number(e.target.value) })}>
@@ -125,19 +188,21 @@ export function TimelineD(p: Props) {
         <div className="lanes" ref={lanes}>
           <div style={{ width, position: 'relative' }}>
             <div className="ruler" onPointerDown={scrub} onPointerMove={scrub} title="Click or drag to move the playhead">{marks.map((s) => <span key={s} style={{ left: x(s * 1000) }}>{timecode(s * 1000, p.fps).slice(3, 8)}</span>)}</div>
-            <div className="lane cap">
+            <div className={'lane cap' + (p.onRetime ? ' edit' : '')}>
               {tgtTrack?.clips.map((c, i) => <i key={'o' + i} className="occ" style={{ left: x(c.start), width: Math.max(2, x(c.end - c.start) - 1) }} title={`Already on V${tgtTrack.index}: ${c.name}`}>{c.name}</i>)}
               {p.cues.map((c) => (
-                <i key={c.n} className={(c.n === p.active ? 'cur ' : '') + (p.sel.has(c.n) ? 'sel ' : '') + (p.ownLook(c.n) ? 'own' : '')}
-                  style={{ left: x(c.startMs), width: Math.max(2, x(c.endMs - c.startMs) - 1) }} onClick={click(c.n)} title={c.text}><b>{c.text}</b><small>{p.presetName(c.n)}</small></i>
+                <i key={c.n} className={(c.n === p.active ? 'cur ' : '') + (p.sel.has(c.n) ? 'sel ' : '') + (p.ownLook(c.n) ? 'own ' : '') + (dragging === c.n ? 'drag' : '')}
+                  style={{ left: x(c.startMs), width: Math.max(2, x(c.endMs - c.startMs) - 1) }} {...handlers(c)} title={c.text}><b>{c.text}</b><small>{p.presetName(c.n)}</small>{grips(c)}</i>
               ))}
+              {tip(p.cues.find((c) => c.n === dragging))}
             </div>
-            <div className="lane st src">
+            <div className={'lane st src' + (p.onRetime ? ' edit' : '')}>
               {p.cues.map((c) => (
-                <i key={c.n} className={(c.n === p.active ? 'cur ' : '') + (p.sel.has(c.n) ? 'sel' : '')}
-                  style={{ left: x(c.startMs), width: Math.max(2, x(c.endMs - c.startMs) - 1) }} onClick={click(c.n)} title={c.text}>{c.text}</i>
+                <i key={c.n} className={(c.n === p.active ? 'cur ' : '') + (p.sel.has(c.n) ? 'sel ' : '') + (dragging === c.n ? 'drag' : '')}
+                  style={{ left: x(c.startMs), width: Math.max(2, x(c.endMs - c.startMs) - 1) }} {...handlers(c)} title={c.text}>{c.text}{grips(c)}</i>
               ))}
             </div>
+            {guide !== null && <div className="snapline" style={{ left: x(guide) }} />}
             <Playhead x={x} lanes={lanes} playing={p.playing} />
           </div>
         </div>

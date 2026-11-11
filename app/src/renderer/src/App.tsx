@@ -5,6 +5,7 @@ import { DEFAULT_HIGHLIGHT, DEFAULT_LOOK, DEFAULT_MOTION, type Highlight, type L
 import { EMPTY_PATTERN, patternList, type Pattern } from '@core/pattern'
 import { presetById } from '@core/presets'
 import { DEFAULT_SMART, KIND_NAMES, smartList, type Kind, type Smart } from '@core/smart'
+import { nudge, onFrame, splitAt, type Span } from '@core/retime'
 import { parseSrt } from '@core/srt'
 import type { Cue } from '@core/srt'
 import type { LinkStatus, RenderProgress, TimelineData } from '../../preload'
@@ -217,19 +218,98 @@ export function App() {
     const list = source.supers ?? []
     const n = Math.max(0, ...list.map((c) => c.n)) + 1
     const at = Math.max(0, Math.round(clock.get()))
+    remember()
     setSupers((l) => [...l, superCue({ n, startMs: at, endMs: at + SUPER_MS, text: 'New super' })])
     setActive(n); setSel(new Set([n])); setScope('all'); setTab('Caption'); setPlaying(false)
   }
   function updateSuper(n: number, patch: Partial<SavedSuper>) {
     setSupers((l) => l.map((c) => (c.n !== n ? c : superCue({ n, startMs: c.startMs, endMs: c.endMs, text: c.text, ...patch }))))
   }
-  function deleteSuper(n: number) {
-    const i = cues.findIndex((c) => c.n === n)
-    const next = cues[i + 1] ?? cues[i - 1]
-    setSupers((l) => l.filter((c) => c.n !== n))
-    setEdits((e) => { const x = { ...e }; delete x[n]; return x })
-    setSel((s) => { const x = new Set(s); x.delete(n); return x })
+  function deleteSupers(ns: number[]) {
+    if (!ns.length) return
+    remember()
+    const gone = new Set(ns)
+    const i = cues.findIndex((c) => c.n === (cue?.n ?? ns[0]))
+    const next = cues.slice(i + 1).find((c) => !gone.has(c.n)) ?? cues.slice(0, Math.max(0, i)).reverse().find((c) => !gone.has(c.n))
+    setSupers((l) => l.filter((c) => !gone.has(c.n)))
+    setEdits((e) => { const x = { ...e }; for (const n of ns) delete x[n]; return x })
+    setSel(new Set())
     if (next) setActive(next.n)
+  }
+
+  // Undo and redo for the supers: their times, texts and own looks, as before each change
+  type SupersState = { list: Cue[]; edits: Edits }
+  const history = useRef<{ undo: SupersState[]; redo: SupersState[] }>({ undo: [], redo: [] })
+  const supersNow = (): SupersState => ({ list: source?.kind === 'timeline' ? source.supers ?? [] : [], edits })
+  function remember() {
+    const h = history.current
+    h.undo.push(supersNow())
+    if (h.undo.length > 60) h.undo.shift()
+    h.redo = []
+  }
+  function undoSupers(redo: boolean) {
+    const h = history.current
+    const s = (redo ? h.redo : h.undo).pop()
+    if (!s) return
+    ;(redo ? h.undo : h.redo).push(supersNow())
+    setSupers(() => s.list); setEdits(s.edits); setSel(new Set()); setPlaying(false)
+    if (!s.list.some((c) => c.n === cue?.n) && s.list[0]) setActive(s.list[0].n)
+  }
+  // Another timeline: its own history
+  const supersAt = source?.kind === 'timeline' ? supersKey(source.data) : ''
+  useEffect(() => { history.current = { undo: [], redo: [] } }, [supersAt])
+
+  /** Supers being worked on: the selected ones, else the current one */
+  const pickedSupers = () => cues.filter((c) => (sel.size ? sel.has(c.n) : c.n === cue?.n))
+  /** Copies of supers (with their own looks), the first starting at `at`, the rest as far after it as before */
+  function placeCopies(list: { cue: Cue; edit?: Edits[number] }[], at: number) {
+    if (!list.length || source?.kind !== 'timeline') return
+    remember()
+    const from = Math.min(...list.map((x) => x.cue.startMs))
+    let n = Math.max(0, ...(source.supers ?? []).map((c) => c.n))
+    const made = list.map((x) => ({ ...x, n: ++n, startMs: x.cue.startMs - from + at, endMs: x.cue.endMs - from + at }))
+    setSupers((l) => [...l, ...made.map((m) => superCue({ n: m.n, startMs: m.startMs, endMs: m.endMs, text: m.cue.text }))])
+    setEdits((e) => { const x = { ...e }; for (const m of made) if (m.edit) x[m.n] = m.edit; return x })
+    const first = made[0]!
+    setSel(new Set(made.map((m) => m.n))); setActive(first.n); setSelWord(null); setPlaying(false)
+    clock.set(first.startMs + Math.min(1200, (first.endMs - first.startMs) / 2))
+  }
+  const clip = useRef<{ cue: Cue; edit?: Edits[number] }[]>([])
+  const withEdits = (list: Cue[]) => list.map((c) => ({ cue: c, edit: edits[c.n] }))
+  /** Cut the current super in two at the playhead; the second half keeps its look */
+  function splitSuper() {
+    if (!cue || source?.kind !== 'timeline') return
+    const halves = splitAt(cue, clock.get(), fps)
+    if (!halves) return
+    remember()
+    const n = Math.max(0, ...(source.supers ?? []).map((c) => c.n)) + 1
+    const [a, b] = halves
+    setSupers((l) => [...l.map((c) => (c.n === cue.n ? superCue({ n: c.n, text: c.text, ...a }) : c)), superCue({ n, text: cue.text, ...b })])
+    const own = edits[cue.n]
+    if (own) setEdits((e) => ({ ...e, [n]: own }))
+    setActive(n); setSel(new Set([n])); setSelWord(null); setPlaying(false)
+  }
+  function nudgeSupers(frames: number, again: boolean) {
+    const list = pickedSupers()
+    if (!list.length) return
+    if (!again) remember()
+    const moved = new Map(list.map((c) => [c.n, nudge(c, frames, fps)]))
+    setSupers((l) => l.map((c) => { const m = moved.get(c.n); return m ? superCue({ n: c.n, text: c.text, ...m }) : c }))
+    // The playhead goes along, so the preview keeps showing it
+    const c = moved.get(cue?.n ?? -1)
+    if (c && !playing) clock.set(Math.min(c.endMs - 1, Math.max(c.startMs, clock.get() + frames * (1000 / fps))))
+  }
+  /** A drag on the timeline: one undo step for the whole drag */
+  const retiming = useRef<number | null>(null)
+  function retimeSuper(n: number, span: Span, end: boolean) {
+    if (retiming.current !== n) { remember(); retiming.current = n; setPlaying(false) }
+    updateSuper(n, span)
+    if (!end) return
+    retiming.current = null
+    setActive(n); setSelWord(null)
+    if (!sel.has(n)) setSel(new Set([n]))
+    // Park the playhead inside it, so the preview shows it where it now is
+    if (clock.get() < span.startMs || clock.get() >= span.endMs) clock.set(span.startMs + Math.min(1200, (span.endMs - span.startMs) / 2))
   }
 
   const baseCues = useMemo(() => cuesOf(source), [source])
@@ -506,6 +586,23 @@ export function App() {
     if (next) seekCue(next.n)
   }
 
+  /** Supers' timeline keys (the Shortcuts hint on the timeline lists them) */
+  function superKey(e: KeyboardEvent) {
+    const ctrl = e.ctrlKey || e.metaKey
+    const k = e.key.toLowerCase()
+    const done = () => e.preventDefault()
+    // , and . move a frame (as in Resolve); with Shift they arrive as < and >
+    const back = e.code === 'Comma' || e.key === ',' || e.key === '<'
+    const fwd = e.code === 'Period' || e.key === '.' || e.key === '>'
+    if (e.key === 'Delete' || e.key === 'Backspace') { deleteSupers(pickedSupers().map((c) => c.n)); done() }
+    else if (ctrl && k === 'z') { undoSupers(e.shiftKey); done() }
+    else if (ctrl && k === 'y') { undoSupers(true); done() }
+    else if (ctrl && k === 'c') { clip.current = withEdits(pickedSupers()); done() }
+    else if (ctrl && k === 'v') { placeCopies(clip.current, onFrame(clock.get(), fps)); done() }
+    else if (ctrl && k === 'd') { const l = pickedSupers(); if (l.length) placeCopies(withEdits(l), Math.max(...l.map((c) => c.endMs))); done() }
+    else if ((k === 's' && !ctrl && !e.altKey) || (ctrl && k === 'b')) { splitSuper(); done() }
+    else if (!ctrl && (back || fwd)) { nudgeSupers((back ? -1 : 1) * (e.shiftKey ? 10 : 1), e.repeat); done() }
+  }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement
@@ -516,6 +613,7 @@ export function App() {
       else if (e.key === 'Home') { seek(0); e.preventDefault() }
       else if (e.key === 'End') { seek(endMs); e.preventDefault() }
       else if (e.key === 'Escape') { setSel(new Set()); setSelWord(null); if (scope === 'selected') setScope('all') }
+      else if (supersOn) superKey(e)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -613,7 +711,8 @@ export function App() {
               : cue ? `${supersOn ? 'Super' : 'Caption'} ${cues.indexOf(cue) + 1} of ${cues.length} · ${presetById(presetOf(cue.n))?.name ?? ''}`
                 : supersOn ? 'No supers yet: Add super on the timeline' : 'No captions'}
             onPlaying={setPlaying} onPrev={() => step(-1)} onNext={() => step(1)}
-            onPickWord={(i) => { setSelWord(i); setTab('Words'); setPlaying(false) }} onDrag={drag} />
+            onPickWord={(i) => { setSelWord(i); setTab('Words'); setPlaying(false) }} onDrag={drag}
+            onSize={(size) => { changeLook({ size }); setPlaying(false) }} onTurn={(rotation) => { changeLook({ rotation }); setPlaying(false) }} />
           <CaptionCard caption={cue} total={cues.length} words={words} selWord={selWord} styled={styledWords} fps={fps}
             onWord={(i) => { setSelWord(i); setTab('Words'); setPlaying(false) }} />
           <LibraryD current={cue ? presetOf(cue.n) : defaultPreset} target={scopeTarget} recent={recent} onHover={tryPreset}
@@ -631,9 +730,9 @@ export function App() {
             fonts={fonts} fontUsed={compiled && compiled.look.font !== effLook.font ? compiled.look.font : null}
             caption={cue ? { n: cue.n, text: cue.text, startMs: cue.startMs, endMs: cue.endMs, edited: edits[cue.n]?.text !== undefined } : null}
             superEdit={supersOn && cue ? {
-              onStart: (ms) => updateSuper(cue.n, { startMs: Math.max(0, Math.min(ms, cue.endMs - 40)) }),
-              onEnd: (ms) => updateSuper(cue.n, { endMs: Math.max(ms, cue.startMs + 40) }),
-              onDelete: () => deleteSuper(cue.n),
+              onStart: (ms) => { remember(); updateSuper(cue.n, { startMs: Math.max(0, Math.min(ms, cue.endMs - 40)) }) },
+              onEnd: (ms) => { remember(); updateSuper(cue.n, { endMs: Math.max(ms, cue.startMs + 40) }) },
+              onDelete: () => deleteSupers([cue.n]),
             } : null}
             fps={fps} onText={setText}
             words={words} selWord={selWord} onSelWord={(i) => { setSelWord(i); setPlaying(false) }}
@@ -656,6 +755,7 @@ export function App() {
             active={cue?.n ?? 0} sel={sel} onCue={pickCue} playing={playing} onSeek={seek}
             target={target} onTarget={(t) => setTarget((x) => ({ ...x, ...t }))} fps={fps} lengthMs={tlLength}
             supers={source.kind === 'timeline' ? (source.supers ?? []).length : 0} onAddSuper={supersOn ? addSuper : null}
+            onRetime={supersOn ? retimeSuper : null}
           />
         </div>
       )}

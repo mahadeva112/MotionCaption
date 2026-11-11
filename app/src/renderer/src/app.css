@@ -123,6 +123,19 @@ span.link { text-decoration: none; cursor: default; border: 1px solid var(--seam
 .vsolo { position: absolute; transform: translate(-50%, -50%); white-space: pre; cursor: pointer; z-index: 3; line-height: 1.2; }
 .vsolo-in { display: inline-block; transform-origin: 50% 60%; }
 .vsolo.sel { outline: 1px dashed var(--sel); outline-offset: 3px; }
+/* Handles on the caption while the preview stands still: corners resize, the round one turns */
+.vblock.edit:hover { outline: 1px dashed rgba(255, 255, 255, .5); outline-offset: 4px; }
+.vh { position: absolute; width: 10px; height: 10px; margin: -5px; border-radius: 2px; background: #fff; box-shadow: 0 0 0 1px var(--sel), 0 1px 3px rgba(0, 0, 0, .6);
+  z-index: 4; opacity: 0; transition: opacity .12s; touch-action: none; }
+.vblock.edit:hover .vh, .vblock.edit:active .vh { opacity: 1; }
+.vh.c1 { left: -4px; top: -4px; cursor: nwse-resize; }
+.vh.c2 { right: -4px; top: -4px; cursor: nesw-resize; }
+.vh.c3 { left: -4px; bottom: -4px; cursor: nesw-resize; }
+.vh.c4 { right: -4px; bottom: -4px; cursor: nwse-resize; }
+.vh.turn { right: -24px; top: 50%; border-radius: 50%; cursor: grab; background: var(--sel); box-shadow: 0 0 0 2px #fff, 0 1px 3px rgba(0, 0, 0, .6); }
+.vguide { position: absolute; background: #7fd3ff; box-shadow: 0 0 4px #7fd3ff; pointer-events: none; z-index: 5; }
+.vguide.v { left: 50%; top: 0; bottom: 0; width: 1px; }
+.vguide.h { top: 50%; left: 0; right: 0; height: 1px; }
 .safe { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
 .safe .zone { position: absolute; background: rgba(255, 80, 80, .06); border: 1px dashed rgba(255, 90, 90, .45); }
 .safe .rail { display: flex; flex-direction: column; justify-content: space-around; align-items: center; }
@@ -275,6 +288,16 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
 .lane i:hover { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .25); }
 .lane i.sel { box-shadow: inset 0 0 0 1px var(--sel); background-image: linear-gradient(rgba(255, 122, 61, .28), rgba(255, 122, 61, .28)); }
 .lane i.cur { box-shadow: 0 0 0 2px #fff; }
+/* Supers: drag to move, drag an edge to trim */
+.lane.edit i { cursor: grab; touch-action: none; user-select: none; }
+.lane.edit i.drag { cursor: grabbing; z-index: 4; opacity: .92; }
+.lane i .grip { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; z-index: 1; transition: background .12s; }
+.lane i .grip.l { left: 0; border-radius: 7px 0 0 7px; }
+.lane i .grip.r { right: 0; border-radius: 0 7px 7px 0; }
+.lane i .grip:hover, .lane i.drag .grip { background: rgba(255, 255, 255, .28); }
+.snapline { position: absolute; top: 26px; bottom: 0; width: 1px; margin-left: -.5px; background: #7fd3ff; box-shadow: 0 0 6px #7fd3ff; pointer-events: none; z-index: 5; }
+.tltip { position: absolute; top: -2px; transform: translateY(-100%); padding: 2px 7px; border-radius: 6px; background: #000c; color: #fff; font-size: 10px; white-space: nowrap; pointer-events: none; z-index: 6; font-variant-numeric: tabular-nums; }
+.khint { font-size: 11px; color: var(--t3); border-bottom: 1px dotted var(--t3); cursor: help; }
 .lane.cap i.occ { flex-direction: row; align-items: center; background: repeating-linear-gradient(135deg, #22252b 0 6px, #1c1f24 6px 12px); color: var(--t3); border: 1px dashed var(--r5); cursor: default; z-index: 0; }
 .th.tgt, .th.src { color: var(--t); }
 .playhead { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--head); pointer-events: none; z-index: 3; }
