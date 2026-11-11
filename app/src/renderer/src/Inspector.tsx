@@ -81,6 +81,11 @@ interface Props {
   onMotion: (m: Partial<Motion>) => void
   safe: SafeArea
   onSafe: (s: SafeArea) => void
+  /** Captions go in as Finished clips (drawn by the app): gradient, picture and counting show in Resolve */
+  drawn: boolean
+  /** Clicks in the viewer add points to the caption's path */
+  pathDraw: boolean
+  onPathDraw: (on: boolean) => void
 }
 
 // ── Small controls ──
@@ -142,6 +147,16 @@ export function Inspector(p: Props) {
   const L = p.look
   const [saving, setSaving] = useState<string | null>(null)
   const [savingMine, setSavingMine] = useState<string | null>(null)
+  const [imgNote, setImgNote] = useState('')
+  /** A picture file as a data: URL, kept with the look (so it travels with saved styles and brand kits) */
+  const pickImage = (f: File | undefined) => {
+    if (!f) return
+    if (f.size > 1_500_000) { setImgNote('That picture is over 1.5 MB. Use a smaller PNG or SVG.'); return }
+    const r = new FileReader()
+    r.onload = () => { setImgNote(''); p.onLook({ image: { ...L.image, on: true, src: String(r.result) } }) }
+    r.readAsDataURL(f)
+  }
+  const drawnNote = p.drawn ? null : <p className="hint2 warn2">Shows in Resolve only with Finished clips (Send window). Editable Text+ leaves it out.</p>
   const saveMine = () => { if (savingMine?.trim()) { p.onSaveMine(savingMine.trim()); setSavingMine(null) } }
   const fam = p.fonts.find((f) => f.family === L.font)
   const styles = fam?.styles.length ? fam.styles : ['Regular', 'Bold']
@@ -152,7 +167,7 @@ export function Inspector(p: Props) {
     dirty: keys.some((k) => !same(L[k], B[k])),
     reset: () => p.onLook(Object.fromEntries(keys.map((k) => [k, B[k]])) as Partial<Look>),
   })
-  const sub = <K extends 'outline' | 'shadow' | 'box'>(k: K, f: keyof Look[K]): R => ({
+  const sub = <K extends 'outline' | 'shadow' | 'box' | 'gradient' | 'image' | 'count'>(k: K, f: keyof Look[K]): R => ({
     dirty: !same(L[k][f], B[k][f]),
     reset: () => p.onLook({ [k]: { ...L[k], [f]: B[k][f] } }),
   })
@@ -274,6 +289,36 @@ export function Inspector(p: Props) {
               <Slider label="Corners" value={L.box.round} r={sub('box', 'round')} min={0} max={1} onChange={(v) => p.onLook({ box: { ...L.box, round: v } })} />
               <Slider label="Padding" value={L.box.pad} r={sub('box', 'pad')} min={0} max={1} onChange={(v) => p.onLook({ box: { ...L.box, pad: v } })} />
             </Section>
+            <Section title={<>Gradient <Toggle on={L.gradient.on} onChange={(on) => p.onLook({ gradient: { ...L.gradient, on } })}>On</Toggle></>} off={!L.gradient.on} r={lk('gradient')}>
+              <Color label="To colour" value={L.gradient.color} r={sub('gradient', 'color')} onChange={(c) => p.onLook({ gradient: { ...L.gradient, color: c } })} />
+              <Slider label="Angle" value={L.gradient.angle} r={sub('gradient', 'angle')} min={0} max={360} step={5} fmt={(v) => `${v}°`}
+                onChange={(v) => p.onLook({ gradient: { ...L.gradient, angle: v } })} />
+              <p className="hint2">From the Fill colour to this one.</p>
+              {L.gradient.on && drawnNote}
+            </Section>
+            <Section title={<>Picture <Toggle on={L.image.on} onChange={(on) => p.onLook({ image: { ...L.image, on } })}>On</Toggle></>} off={!L.image.on} r={lk('image')}>
+              <Row label="File" wide>
+                <label className="mini filebtn">{L.image.src ? 'Change…' : 'Choose a logo or picture…'}
+                  <input type="file" accept="image/png,image/svg+xml,image/webp,image/jpeg" hidden onChange={(e) => { pickImage(e.target.files?.[0]); e.target.value = '' }} />
+                </label>
+                {L.image.src && <img className="imgthumb" src={L.image.src} alt="" />}
+              </Row>
+              {imgNote && <p className="hint2 warn2">{imgNote}</p>}
+              <Slider label="Size" value={L.image.size} r={sub('image', 'size')} min={0.5} max={6} step={0.1} fmt={(v) => `${v.toFixed(1)}×`}
+                onChange={(v) => p.onLook({ image: { ...L.image, size: v } })} />
+              <Seg label="Place" value={L.image.place} r={sub('image', 'place')} onChange={(v) => p.onLook({ image: { ...L.image, place: v } })}
+                opts={[['left', 'Left'], ['above', 'Above'], ['right', 'Right']]} />
+              <p className="hint2">A PNG with a see-through background looks best. Emoji can go straight in the text.</p>
+              {L.image.on && drawnNote}
+            </Section>
+            <Section title={<>Count up numbers <Toggle on={L.count.on} onChange={(on) => p.onLook({ count: { ...L.count, on } })}>On</Toggle></>} off={!L.count.on} r={lk('count')}>
+              <Row label="Start at" r={sub('count', 'from')}>
+                <input className="sl num" type="number" value={L.count.from} onChange={(e) => p.onLook({ count: { ...L.count, from: Number(e.target.value) || 0 } })} />
+              </Row>
+              <Slider label="Length ms" value={L.count.ms} r={sub('count', 'ms')} min={200} max={4000} step={50} onChange={(v) => p.onLook({ count: { ...L.count, ms: v } })} />
+              <p className="hint2">Every number in the text counts up to its value, e.g. “1,000+ followers”.</p>
+              {L.count.on && drawnNote}
+            </Section>
           </>
         )}
 
@@ -292,6 +337,17 @@ export function Inspector(p: Props) {
             <Section title="Transform" r={lk('rotation', 'maxWidth')}>
               <Slider label="Rotation" value={L.rotation} r={lk('rotation')} min={-30} max={30} step={0.5} onChange={(v) => p.onLook({ rotation: v })} />
               <Slider label="Max width" value={L.maxWidth} r={lk('maxWidth')} min={0.3} max={1} onChange={(v) => p.onLook({ maxWidth: v })} />
+            </Section>
+            <Section title="Path" right={scopeLabel} r={lk('path')}>
+              <Row label="Draw" wide>
+                <Toggle on={p.pathDraw} onChange={p.onPathDraw}>{p.pathDraw ? 'Click in the viewer to add points' : 'Off'}</Toggle>
+              </Row>
+              <Row label="Points"><span className="ro">{L.path.length ? `${L.path.length} after its place` : 'none'}</span></Row>
+              <div className="btnrow">
+                <button className="mini" disabled={!L.path.length} onClick={() => p.onLook({ path: L.path.slice(0, -1) })}>Remove last</button>
+                <button className="mini" disabled={!L.path.length} onClick={() => p.onLook({ path: [] })}>Clear path</button>
+              </div>
+              <p className="hint2">The caption travels from its place through each point, over its whole time on screen. It replaces the animation's own move.</p>
             </Section>
             <Section title="Safe area" right="viewer only">
               <Row label="Show" wide>

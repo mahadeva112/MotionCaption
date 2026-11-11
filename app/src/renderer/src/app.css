@@ -467,3 +467,23 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
 .cv-picks button { font-size: 10.5px; padding: 3px 7px; border-radius: 6px; border: 1px solid var(--seam); background: var(--r2); color: var(--t2); }
 .cv-picks button.on { border-color: var(--sel); color: var(--t); background: var(--sel-soft); }
 .cv-side small { font-size: 10px; color: var(--t3); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+/* Gradient letters keep their box as a layer behind; a picture sits beside or above the text */
+.vtext { white-space: pre; }
+.vtext.grad { display: inline-block; }
+.vimg { position: absolute; display: block; width: auto; max-width: none; pointer-events: none; }
+.vimg.left { right: 100%; top: 50%; transform: translateY(-50%); margin-right: .3em; }
+.vimg.right { left: 100%; top: 50%; transform: translateY(-50%); margin-left: .3em; }
+.vimg.above { bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: .15em; }
+.hint2.warn2 { color: var(--warn); }
+.filebtn { cursor: pointer; display: inline-flex; align-items: center; }
+.imgthumb { height: 28px; max-width: 80px; object-fit: contain; border-radius: 4px; background: repeating-conic-gradient(#2a2d33 0 25%, #1c1f24 0 50%) 0 0 / 10px 10px; }
+.sl.num { width: 90px; }
+
+/* A caption's path over the frame; while drawing, clicks add points */
+.vframe.drawing { cursor: crosshair; }
+.vpath { position: absolute; inset: 0; z-index: 4; pointer-events: none; overflow: visible; }
+.vpath polyline { fill: none; stroke: #7fd3ff; stroke-width: 1.5; stroke-dasharray: 5 4; }
+.vpath circle { fill: #7fd3ff; stroke: #0b0d10; stroke-width: 1.5; }
+.vpath circle.home { fill: #fff; }
+.sl.tmpl { max-width: 120px; }

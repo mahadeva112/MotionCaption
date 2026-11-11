@@ -23,6 +23,7 @@ import {
 } from './model'
 import { SendDialog } from './SendDialog'
 import { TimelineD } from './TimelineD'
+import { TEMPLATES } from './templates'
 import { Viewer } from './Viewer'
 
 // Per-computer conveniences: they survive restarts when storage works, and the app works without them
@@ -103,6 +104,9 @@ export function App() {
   const [frame, setFrame] = useState(() => saved('mc.misc', { frame: '9:16' }).frame)
   const [sending, setSending] = useState(false)
   const [resetting, setResetting] = useState(false)
+  const [branding, setBranding] = useState(false)
+  /** Clicks in the viewer add points to the caption's path (Position tab) */
+  const [pathDraw, setPathDraw] = useState(false)
   /** The work just before a reset, for one Undo */
   const [undo, setUndo] = useState<{ look: Look; highlight: Highlight; motion: Motion; edits: Edits; extra?: Cue[]; preset: string; target: Target; safe: SafeArea; styleBase: StyleBase; pattern: Pattern; patternOn: boolean } | null>(null)
   /** Animations that take turns over the captions, a chunk at a time (core/pattern.ts);
@@ -243,6 +247,18 @@ export function App() {
     remember()
     setSupers((l) => [...l, superCue({ n, startMs: at, endMs: at + SUPER_MS, text: 'New super' })])
     setActive(n); setSel(new Set([n])); setScope('all'); setTab('Caption'); setPlaying(false)
+  }
+  /** A ready-made super at the playhead: its text, own look, animation and length from the template */
+  function addTemplate(id: string) {
+    const t = TEMPLATES.find((x) => x.id === id)
+    if (!t || source?.kind !== 'timeline') return
+    const n = Math.max(0, ...(source.supers ?? []).map((c) => c.n)) + 1
+    const at = Math.max(0, Math.round(clock.get()))
+    remember()
+    setSupers((l) => [...l, superCue({ n, startMs: at, endMs: at + t.ms, text: t.text })])
+    setEdits((e) => ({ ...e, [n]: { words: t.words?.(t.text) ?? {}, look: t.look, preset: t.preset } }))
+    setActive(n); setSel(new Set([n])); setScope('this'); setTab('Caption'); setPlaying(false)
+    clock.set(at + Math.min(1200, t.ms / 2))
   }
   function updateSuper(n: number, patch: Partial<SavedSuper>) {
     setSupers((l) => l.map((c) => (c.n !== n ? c : superCue({ n, startMs: c.startMs, endMs: c.endMs, text: c.text, ...patch }))))
@@ -801,6 +817,7 @@ export function App() {
         <span className="grow" />
         <button className="mini" title="Read the timeline open in Resolve again"
           onClick={() => (link.alive ? window.mc.refreshTimeline() : window.mc.runInResolve())}><Icon name="refresh" />Refresh from Resolve</button>
+        <button className="mini" title="Your looks, styles, animation settings and My Animations in one file: save it, or load one" onClick={() => setBranding(true)}>Brand kit</button>
         {source && <button className="mini" title="Put every setting and caption change back to how the app starts" onClick={() => setResetting(true)}><Icon name="undo" />Reset</button>}
         {source && <button className="mini" onClick={openSrt}><Icon name="file" />Open SRT…</button>}
         {source && <button className="go cta" disabled={!placeable.length} onClick={() => setSending(true)}><Icon name="send" />{sendLabel}</button>}
@@ -817,7 +834,11 @@ export function App() {
                 : supersOn ? 'No supers yet: Add super on the timeline' : 'No captions'}
             onPlaying={setPlaying} onPrev={() => step(-1)} onNext={() => step(1)}
             onPickWord={(i) => { setSelWord(i); setTab('Words'); setPlaying(false) }} onDrag={drag}
-            onSize={(size) => { changeLook({ size }); setPlaying(false) }} onTurn={(rotation) => { changeLook({ rotation }); setPlaying(false) }} />
+            onSize={(size) => { changeLook({ size }); setPlaying(false) }} onTurn={(rotation) => { changeLook({ rotation }); setPlaying(false) }}
+            path={cue && (pathDraw || (tab === 'Position' && effLook.path.length > 0)) ? {
+              points: effLook.path, draw: pathDraw,
+              onAdd: (dx, dy) => { const r = (v: number) => Math.round(v * 1000) / 1000; changeLook({ path: [...effLook.path, [r(dx), r(dy)]] }); setPlaying(false) },
+            } : null} />
           <CaptionCard caption={cue} total={cues.length} words={words} selWord={selWord} styled={styledWords} fps={fps}
             onWord={(i) => { setSelWord(i); setTab('Words'); setPlaying(false) }} />
           <LibraryD current={cue ? presetOf(cue.n) : defaultPreset} target={scopeTarget} recent={recent} onHover={tryPreset}
@@ -831,8 +852,8 @@ export function App() {
             base={baseLook} styleName={styleBase.name}
             onPickStyle={(s) => { changeLook(s.look); setStyleBase({ name: s.name, look: s.look }) }}
             onSaveStyle={(name) => {
-              const { font, style, size, tracking, lineSpacing, textCase, fill, outline, shadow, box } = effLook
-              const list = [...userStyles.filter((s) => s.name !== name), { name, look: { font, style, size, tracking, lineSpacing, textCase, fill, outline, shadow, box } }]
+              const { font, style, size, tracking, lineSpacing, textCase, fill, outline, shadow, box, gradient, image } = effLook
+              const list = [...userStyles.filter((s) => s.name !== name), { name, look: { font, style, size, tracking, lineSpacing, textCase, fill, outline, shadow, box, gradient, image } }]
               setUserStyles(list); store('mc.styles', { list })
             }}
             fonts={fonts} fontUsed={compiled && compiled.look.font !== effLook.font ? compiled.look.font : null}
@@ -863,6 +884,7 @@ export function App() {
             patternPick={patternPick} onPatternPick={setPatternPick}
             motion={motion} onMotion={(m) => setMotion((x) => ({ ...x, ...m }))}
             safe={safe} onSafe={setSafe}
+            drawn={drawn} pathDraw={pathDraw} onPathDraw={setPathDraw}
           />
           <TimelineD
             data={source.kind === 'timeline' ? source.data : null}
@@ -872,11 +894,22 @@ export function App() {
             active={cue?.n ?? 0} sel={sel} onCue={pickCue} playing={playing} onSeek={seek}
             target={target} onTarget={(t) => setTarget((x) => ({ ...x, ...t }))} fps={fps} lengthMs={tlLength}
             supers={source.kind === 'timeline' ? (source.supers ?? []).length : 0} onAddSuper={supersOn ? addSuper : null}
-            onRetime={retimeCues}
+            onRetime={retimeCues} onTemplate={supersOn ? addTemplate : null}
           />
         </div>
       )}
       {resetting && <ResetDialog onReset={resetAll} onClose={() => setResetting(false)} />}
+      {branding && <BrandDialog onClose={() => setBranding(false)}
+        current={() => ({ kit: stateKit, look, motion, highlight })}
+        onLoaded={(k) => {
+          // Styles, My Animations and Favourites are added to; the looks and settings replace these
+          setUserStyles((l) => { const list = [...l.filter((s) => !k.styles.some((x) => x.name === s.name)), ...k.styles]; store('mc.styles', { list }); return list })
+          setMine((l) => [...l.filter((m) => !k.mine.some((x) => x.name === m.name)), ...k.mine])
+          setFavs((f) => [...new Set([...f, ...k.favs])])
+          setLook(saved('mc.look' + stateKit, stateKit ? SUPER_LOOK : DEFAULT_LOOK))
+          setMotion(saved('mc.motion' + stateKit, DEFAULT_MOTION))
+          setHighlight(saved('mc.highlight' + stateKit, DEFAULT_HIGHLIGHT))
+        }} />}
       {undo && (
         <div className="toast">Everything is back to default.
           <button className="mini" onClick={undoReset}>Undo</button>
@@ -886,6 +919,92 @@ export function App() {
       {sending && <SendDialog captions={placeable.length} noun={noun} where={where} timeline={tl?.name ?? null} linked={link.alive} build={buildJob}
         delivery={drawn ? 'drawn' : 'textplus'} canDraw={!!tl} onDelivery={setDelivery}
         update={updating ? { changed } : null} onDone={sentOk} onClose={() => setSending(false)} />}
+    </div>
+  )
+}
+
+/** A brand kit file: everything that makes captions look like yours, for another computer or a teammate */
+interface BrandKit {
+  app: 'MotionCaption'
+  kind: 'brand-kit'
+  version: 1
+  savedAt: string
+  styles: { name: string; look: Partial<Look> }[]
+  captions: { look: Look; motion: Motion; highlight: Highlight }
+  supers: { look: Look; motion: Motion; highlight: Highlight }
+  mine: MyAnimation[]
+  favs: string[]
+}
+
+function BrandDialog({ onClose, current, onLoaded }: {
+  onClose: () => void
+  /** The settings in use (the open kit's are newer than the ones kept) */
+  current: () => { kit: string; look: Look; motion: Motion; highlight: Highlight }
+  onLoaded: (k: BrandKit) => void
+}) {
+  const [note, setNote] = useState('')
+  const kitOf = (k: string) => {
+    const c = current()
+    if (c.kit === k) return { look: c.look, motion: c.motion, highlight: c.highlight }
+    return {
+      look: saved('mc.look' + k, k ? SUPER_LOOK : DEFAULT_LOOK), motion: saved('mc.motion' + k, DEFAULT_MOTION),
+      highlight: saved('mc.highlight' + k, DEFAULT_HIGHLIGHT),
+    }
+  }
+  function save() {
+    const kit: BrandKit = {
+      app: 'MotionCaption', kind: 'brand-kit', version: 1, savedAt: new Date().toISOString(),
+      styles: saved('mc.styles', { list: [] as BrandKit['styles'] }).list,
+      captions: kitOf(''), supers: kitOf('.supers'),
+      mine: saved('mc.mine', { list: [] as MyAnimation[] }).list, favs: saved('mc.favs', { list: [] as string[] }).list,
+    }
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(kit, null, 2)], { type: 'application/json' }))
+    a.download = 'MotionCaption brand kit.json'
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000)
+    setNote('Saved. Keep the file, or send it to whoever should make captions like yours.')
+  }
+  async function load(f: File | undefined) {
+    if (!f) return
+    try {
+      const k = JSON.parse(await f.text()) as BrandKit
+      if (k.kind !== 'brand-kit' || k.app !== 'MotionCaption') { setNote('That file is not a MotionCaption brand kit.'); return }
+      for (const [key, part] of [['', k.captions], ['.supers', k.supers]] as const) {
+        if (!part) continue
+        store('mc.look' + key, { ...(key ? SUPER_LOOK : DEFAULT_LOOK), ...part.look })
+        store('mc.motion' + key, { ...DEFAULT_MOTION, ...part.motion })
+        store('mc.highlight' + key, { ...DEFAULT_HIGHLIGHT, ...part.highlight })
+      }
+      onLoaded({ ...k, styles: k.styles ?? [], mine: k.mine ?? [], favs: k.favs ?? [] })
+      setNote(`Loaded “${f.name}”.`)
+    } catch { setNote('That file could not be read as a brand kit.') }
+  }
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', esc)
+    return () => window.removeEventListener('keydown', esc)
+  }, [onClose])
+  return (
+    <div className="modal" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="dlg2">
+        <div className="dlg2-t"><b>Brand kit</b><button className="x" onClick={onClose} title="Close">✕</button></div>
+        <div className="dlg2-b">
+          <p className="lead">One file with what makes your captions yours:</p>
+          <ul className="how">
+            <li>The look, animation settings and word highlight of subtitles, and of supers</li>
+            <li>Your saved styles (with their gradient and logo), My Animations and Favourites</li>
+          </ul>
+          <p className="lead">Loading one replaces the looks and settings here, and adds its styles and animations to yours. Captions' own changes stay.</p>
+          <div className="btnrow">
+            <button className="go big" onClick={save}>Save brand kit…</button>
+            <label className="mini filebtn">Load a brand kit…
+              <input type="file" accept=".json,application/json" hidden onChange={(e) => { load(e.target.files?.[0]); e.target.value = '' }} />
+            </label>
+          </div>
+          {note && <p className="hint2">{note}</p>}
+        </div>
+      </div>
     </div>
   )
 }

@@ -39,7 +39,18 @@ export interface Look {
   /** Widest a line may be, as a share of the frame width */
   maxWidth: number
   lines: Lines
+  /** A second fill colour: the letters run from fill to this one, at this angle (Finished clips) */
+  gradient: { on: boolean; color: Rgb; angle: number }
+  /** A picture with the text, e.g. a logo, as a data: URL; size is its height in letter heights (Finished clips) */
+  image: { on: boolean; src: string; size: number; place: ImagePlace }
+  /** Numbers in the text count up to their value, from `from`, over `ms` (Finished clips) */
+  count: { on: boolean; from: number; ms: number }
+  /** A way the caption travels while it is on screen: points as offsets from its place,
+   *  shares of the frame (x right, y up), reached one after another over its time */
+  path: readonly (readonly [number, number])[]
 }
+
+export type ImagePlace = 'left' | 'right' | 'above'
 
 export const DEFAULT_LOOK: Look = {
   font: 'Open Sans', style: 'Bold', size: 0.07, tracking: 1, lineSpacing: 1, textCase: 'as', align: 'center',
@@ -48,6 +59,10 @@ export const DEFAULT_LOOK: Look = {
   shadow: { on: true, blur: 0.5, distance: 0.3, opacity: 0.6, color: [0, 0, 0] },
   box: { on: false, color: [0, 0, 0], opacity: 0.55, round: 0.3, pad: 0.3 },
   anchor: 7, x: 0, y: 0, rotation: 0, maxWidth: 0.8, lines: '2',
+  gradient: { on: false, color: [1, 0.55, 0.2], angle: 90 },
+  image: { on: false, src: '', size: 1.6, place: 'left' },
+  count: { on: false, from: 0, ms: 1200 },
+  path: [],
 }
 
 export type WordEffect = 'none' | 'pop' | 'shake' | 'glow' | 'bounce'
@@ -241,4 +256,22 @@ export function autoWords(words: string[], rule: HighlightRule): number[] {
   }
   if (rule === 'numbers') return words.flatMap((w, i) => (/\p{N}/u.test(w) ? [i] : []))
   return []
+}
+
+/**
+ * The text with every number counted part of the way up to its value: `t` 0 shows `from`,
+ * 1 the number itself. Each number keeps its width in letters (padded with figure spaces)
+ * and its thousands commas, so the caption's layout does not move while it counts.
+ */
+export function countUp(text: string, t: number, from: number): string {
+  const p = Math.min(1, Math.max(0, t))
+  return text.replace(/\d[\d,]*(\.\d+)?/g, (m) => {
+    const target = Number(m.replace(/,/g, ''))
+    if (!Number.isFinite(target)) return m
+    const dec = m.includes('.') ? m.split('.')[1]!.length : 0
+    const v = from + (target - from) * p
+    let s = dec ? v.toFixed(dec) : String(Math.round(v))
+    if (m.includes(',')) s = Number(s).toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec })
+    return s.length >= m.length ? s.slice(-m.length) : ' '.repeat(m.length - s.length) + s
+  })
 }

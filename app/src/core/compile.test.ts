@@ -164,3 +164,30 @@ describe('withMotion', () => {
     expect(withMotion(fade, { ...M, easeIn: c })[0]!.keys.slice(2).map((k) => k.ease)).toEqual(fade[0]!.keys.slice(2).map((k) => k.ease))
   })
 })
+
+describe('Phase 3 looks', () => {
+  it('counts numbers up and keeps their width', async () => {
+    const { countUp } = await import('./look.ts')
+    expect(countUp('1,000+ followers', 1, 0)).toBe('1,000+ followers')
+    expect(countUp('1,000+ followers', 0.5, 0)).toBe('  500+ followers')
+    expect(countUp('Score 99', 0, 0)).toBe('Score  0')
+    expect(countUp('No numbers', 0.3, 0)).toBe('No numbers')
+  })
+
+  it('sends a path as the caption’s centre over its whole time', () => {
+    const c = compileCue(cue('Hello', 1000, 3000), 'rise', { look: { ...DEFAULT_LOOK, path: [[0.1, 0], [0.1, 0.2]] } })
+    const centre = c.tracks.filter((t) => t.target === 'move' && t.input === 'Center')
+    expect(centre).toHaveLength(1)
+    expect(centre[0]!.keys.map((k) => [k.ms, k.v])).toEqual([[0, [0.5, 0.5]], [1000, [0.6, 0.5]], [2000, [0.6, 0.7]]])
+  })
+
+  it('keeps a picture out of the job file but in the signature', () => {
+    const look = { ...DEFAULT_LOOK, image: { on: true, src: 'data:image/png;base64,AAAA', size: 1.5, place: 'left' as const } }
+    const a = compileCue(cue('Hi'), 'fade', { look })
+    const b = compileCue(cue('Hi'), 'fade', { look: { ...look, image: { ...look.image, src: 'data:image/png;base64,BBBB' } } })
+    expect(a.look.image?.src).toContain('AAAA')
+    const job = makeJob('x', [a])
+    expect(job.cues[0]!.look.image?.src).toBe('')
+    expect(sigOf(a)).not.toBe(sigOf(b))
+  })
+})

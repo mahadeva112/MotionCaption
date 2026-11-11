@@ -1,5 +1,6 @@
 import { BrowserWindow, screen } from 'electron'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { cpus } from 'node:os'
 import { join } from 'node:path'
 import type { CompiledCue } from '../core/compile.ts'
 import { renderKey, type Rendered } from '../core/job.ts'
@@ -19,7 +20,12 @@ export interface RenderRequest {
 
 type Progress = (done: number, total: number, note: string) => void
 
-let stage: { win: BrowserWindow; W: number; H: number; scale: number } | null = null
+type Stage = { win: BrowserWindow; W: number; H: number; scale: number }
+
+/** Hidden windows that draw, one caption each at a time. A few draw side by side: each
+ *  picture is mostly waiting on the page, so the computer's other cores do the rest. */
+let stages: Stage[] = []
+const MAX_STAGES = Number(process.env['MC_STAGES']) || Math.max(1, Math.min(3, cpus().length - 1))
 
 /** Frame numbers as the bridge counts them (MotionCaption.lua, frames) */
 const frameOf = (ms: number, fps: number) => Math.floor((ms * fps) / 1000 + 0.5)
@@ -39,9 +45,10 @@ function scaleFor(W: number, H: number): number {
   return Math.max(1, Math.ceil(Math.max(W / (area.width - 40), H / (area.height - 40))))
 }
 
-async function openStage(url: { dev?: string; file: string }, W: number, H: number): Promise<{ win: BrowserWindow; scale: number }> {
-  if (stage && !stage.win.isDestroyed() && stage.W === W && stage.H === H) return stage
-  closeStage()
+async function openStage(i: number, url: { dev?: string; file: string }, W: number, H: number): Promise<Stage> {
+  const have = stages[i]
+  if (have && !have.win.isDestroyed() && have.W === W && have.H === H) return have
+  if (have && !have.win.isDestroyed()) have.win.destroy()
   const scale = scaleFor(W, H)
   const win = new BrowserWindow({
     show: false, width: Math.round(W / scale), height: Math.round(H / scale), useContentSize: true, frame: false, transparent: true,
@@ -57,13 +64,14 @@ async function openStage(url: { dev?: string; file: string }, W: number, H: numb
     if (await win.webContents.executeJavaScript('!!window.__mcRender').catch(() => false)) break
     await new Promise((r) => setTimeout(r, 100))
   }
-  stage = { win, W, H, scale }
+  const stage = { win, W, H, scale }
+  stages[i] = stage
   return stage
 }
 
 export function closeStage() {
-  if (stage && !stage.win.isDestroyed()) stage.win.destroy()
-  stage = null
+  for (const s of stages) if (!s.win.isDestroyed()) s.win.destroy()
+  stages = []
 }
 
 /**
@@ -89,12 +97,16 @@ export async function renderCues(root: string, url: { dev?: string; file: string
   if (!todo.length) return out
 
   await mkdir(root, { recursive: true })
-  const { win, scale } = await openStage(url, W, H)
-  const wc = win.webContents
-  // The page lays the caption out at the window's size; the scale makes up the rest
-  const cw = Math.round(W / scale)
-  const ch = Math.round(H / scale)
-  for (const j of todo) {
+  const queue = todo.slice()
+  const worker = async (i: number) => {
+    const { win, scale } = await openStage(i, url, W, H)
+    const wc = win.webContents
+    // The page lays the caption out at the window's size; the scale makes up the rest
+    const cw = Math.round(W / scale)
+    const ch = Math.round(H / scale)
+    for (let j = queue.shift(); j; j = queue.shift()) await drawOne(j, wc, cw, ch)
+  }
+  const drawOne = async (j: (typeof todo)[number], wc: Electron.WebContents, cw: number, ch: number) => {
     const dir = join(root, j.key)
     const part = dir + '.part'
     await rm(part, { recursive: true, force: true })
@@ -116,5 +128,6 @@ export async function renderCues(root: string, url: { dev?: string; file: string
     await rm(dir, { recursive: true, force: true })
     await rename(part, dir)
   }
+  await Promise.all(Array.from({ length: Math.min(MAX_STAGES, todo.length) }, (_, i) => worker(i)))
   return out
 }
