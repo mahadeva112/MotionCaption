@@ -176,7 +176,7 @@ function Safe({ area }: { area: Exclude<SafeArea, 'off'> }) {
   )
 }
 
-interface CapProps {
+export interface CapProps {
   cue: CompiledCue
   ms: number
   W: number
@@ -189,7 +189,7 @@ interface CapProps {
   onUp: (e: PointerEvent) => void
 }
 
-function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMove, onUp }: CapProps) {
+export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMove, onUp }: CapProps) {
   const L = cue.look
   const share = fontShare(aspect)
   const fontPx = L.size * W * share
@@ -236,7 +236,8 @@ function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMove, onU
         style={{
           ...base,
           left: L.center[0] * W, top: (1 - L.center[1]) * H, fontSize: fontPx, color: css(L.fill), textAlign: (['left', 'center', 'right'] as const)[L.align],
-          opacity, filter: blur ? `blur(${blur * 0.12}px)` : undefined,
+          opacity, // Text+ softness, scaled with the frame so a drawn frame matches the preview
+          filter: blur ? `blur(${blur * W * 0.0003}px)` : undefined,
           ...(L.box ? { background: css(L.box.color, L.box.opacity), padding: `${L.box.pad * 0.25}em ${L.box.pad * 0.5}em`, borderRadius: `${L.box.round * 0.6}em` } : {}),
         }}
       >

@@ -36,6 +36,8 @@ interface Props {
   fontUsed: string | null
   // Caption tab
   caption: { n: number; text: string; startMs: number; endMs: number; edited: boolean } | null
+  /** A super made in the app: its timing can be changed here, and it can be deleted */
+  superEdit: { onStart: (ms: number) => void; onEnd: (ms: number) => void; onDelete: () => void } | null
   fps: number
   onText: (text: string | null) => void
   // Words tab
@@ -188,15 +190,25 @@ export function Inspector(p: Props) {
           <>
             <Section title="Text" right={`caption ${p.caption.n}`}>
               <textarea className="textbox" value={p.caption.text} onChange={(e) => p.onText(e.target.value)} rows={3} />
-              <p className="hint2">Changes this caption only. The subtitle track in Resolve is not touched.
-                {p.caption.edited && <> <button className="link" onClick={() => p.onText(null)}>Undo my changes</button></>}</p>
+              {p.superEdit
+                ? <p className="hint2">This super lives in the app. Send puts it in Resolve as a finished clip.</p>
+                : <p className="hint2">Changes this caption only. The subtitle track in Resolve is not touched.
+                  {p.caption.edited && <> <button className="link" onClick={() => p.onText(null)}>Undo my changes</button></>}</p>}
             </Section>
-            <Section title="Timing" right={`${Number(p.fps.toFixed(3))} fps`}>
+            {p.superEdit && (
+              <Section title="Timing" right={`${Number(p.fps.toFixed(3))} fps`}>
+                <Row label="Start (s)"><SecondsInput ms={p.caption.startMs} onChange={p.superEdit.onStart} /></Row>
+                <Row label="End (s)"><SecondsInput ms={p.caption.endMs} onChange={p.superEdit.onEnd} /></Row>
+                <Row label="Length"><span className="ro">{((p.caption.endMs - p.caption.startMs) / 1000).toFixed(2)} s · {timecode(p.caption.startMs, p.fps)}</span></Row>
+                <button className="mini danger" onClick={p.superEdit.onDelete}>Delete this super</button>
+              </Section>
+            )}
+            {!p.superEdit && <Section title="Timing" right={`${Number(p.fps.toFixed(3))} fps`}>
               <Row label="Start"><span className="ro">{timecode(p.caption.startMs, p.fps)}</span></Row>
               <Row label="End"><span className="ro">{timecode(p.caption.endMs, p.fps)}</span></Row>
               <Row label="Length"><span className="ro">{((p.caption.endMs - p.caption.startMs) / 1000).toFixed(2)} s</span></Row>
               <p className="hint2">Times come from the subtitle track. Change them in Resolve, then click MotionCaption there to refresh.</p>
-            </Section>
+            </Section>}
             <Section title="Line breaks" right={scopeLabel} r={lk('lines', 'maxWidth')}>
               <Seg label="Lines" value={L.lines} r={lk('lines')} onChange={(v) => p.onLook({ lines: v })}
                 opts={[['keep', 'As in subtitles'], ['1', 'One'], ['2', 'Up to two'], ['auto', 'As needed']]} />
@@ -417,5 +429,15 @@ function PatternSection(p: Props) {
         ? 'Changes here show at once. Captions added later in Resolve get the pattern too. A caption you give its own animation keeps it.'
         : 'On all captions it stays live: new captions get it too. On selected captions each one gets its animation as its own.'}</p>
     </Section>
+  )
+}
+
+/** Seconds, typed: takes the value when it is a number, and shows the real one again on leaving */
+function SecondsInput({ ms, onChange }: { ms: number; onChange: (ms: number) => void }) {
+  const [text, setText] = useState<string | null>(null)
+  return (
+    <input className="secs" type="number" min={0} step={0.1} value={text ?? (ms / 1000).toFixed(2)}
+      onChange={(e) => { setText(e.target.value); const v = parseFloat(e.target.value); if (Number.isFinite(v) && v >= 0) onChange(Math.round(v * 1000)) }}
+      onBlur={() => setText(null)} />
   )
 }

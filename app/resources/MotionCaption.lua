@@ -241,6 +241,77 @@ end
 
 local function comp_of(v, i) if type(v) == "table" then return v[i] end return v end
 
+-- ── Drawn captions ─────────────────────────────────────────────────────────
+-- A caption the app drew itself as PNG frames with transparency (job cue.render). It is
+-- imported once as an image sequence into MotionCaption › Drawn and placed like any clip:
+-- no Text+, no Fusion comp, nothing that Resolve Free draws differently.
+local drawnBin, drawnItems = nil, {}
+local function drawn_bin(mp)
+    if drawnBin then return drawnBin end
+    local root = mp:GetRootFolder()
+    local bin
+    for _, sub in ipairs(objects(try(function() return root:GetSubFolderList() end))) do
+        if sub:GetName() == "MotionCaption" then bin = sub end
+    end
+    bin = bin or try(function() return mp:AddSubFolder(root, "MotionCaption") end)
+    if not bin then return nil end
+    for _, sub in ipairs(objects(try(function() return bin:GetSubFolderList() end))) do
+        if sub:GetName() == "Drawn" then drawnBin = sub end
+    end
+    drawnBin = drawnBin or try(function() return mp:AddSubFolder(bin, "Drawn") end)
+    return drawnBin
+end
+
+-- The Media Pool clip of a drawn caption's frames, imported the first time it is needed
+local function drawn_item(mp, r, rateText)
+    if drawnItems[r.dir] then return drawnItems[r.dir] end
+    local bin = drawn_bin(mp)
+    if not bin then return nil, "could not make the MotionCaption › Drawn bin in the Media Pool" end
+    -- Each caption's frames have their own folder, named by what they show
+    local key = tostring(r.dir):match("([^\\/]+)$") or r.dir
+    for _, clip in ipairs(objects(try(function() return bin:GetClipList() end))) do
+        local path = tostring(try(function() return clip:GetClipProperty("File Path") end) or "")
+        if path:find(key, 1, true) then drawnItems[r.dir] = clip; return clip end
+    end
+    local was = try(function() return mp:GetCurrentFolder() end)
+    try(function() mp:SetCurrentFolder(bin) end)
+    local got = objects(try(function()
+        return mp:ImportMedia({ { FilePath = r.dir .. "\\f_%05d.png", StartIndex = 0, EndIndex = r.frames - 1 } })
+    end))
+    local how = "ImportMedia"
+    if #got == 0 then
+        -- The folder holds nothing but the frames, so Resolve takes it as one sequence
+        got = objects(try(function() return rv:GetMediaStorage():AddItemListToMediaPool({ r.dir }) end))
+        how = "AddItemListToMediaPool"
+    end
+    if was then try(function() mp:SetCurrentFolder(was) end) end
+    local clip = got[1]
+    if not clip then return nil, "Resolve did not take the drawn frames in " .. r.dir end
+    local frames = tonumber(try(function() return clip:GetClipProperty("Frames") end))
+    -- An image sequence plays at the project's rate; it must be the timeline's
+    local rate = clip_rate(clip)
+    local set
+    if not rate or math.abs(rate - fps) > 0.0001 then
+        set = try(function() return clip:SetClipProperty("FPS", rateText) end)
+        rate = clip_rate(clip)
+    end
+    -- PNG transparency: Resolve usually reads it; the log says when it does not
+    local alpha = tostring(try(function() return clip:GetClipProperty("Alpha mode") end))
+    if alpha == "None" then
+        try(function() clip:SetClipProperty("Alpha mode", "Straight") end)
+        alpha = alpha .. " → " .. tostring(try(function() return clip:GetClipProperty("Alpha mode") end))
+    end
+    log(string.format("OK    Drawn frames %s: %s, %s frames at %s fps%s, alpha %s", key, how, tostring(frames), tostring(rate),
+        set ~= nil and (" (set " .. tostring(set) .. ")") or "", alpha))
+    if not rate or math.abs(rate - fps) > 0.0001 then
+        return nil, "the drawn frames came in at " .. tostring(rate) .. " fps, not the timeline's " .. tostring(rateText)
+            .. ". Set Project Settings → Timeline frame rate to " .. tostring(rateText) .. ", then Send again."
+    end
+    drawnItems[r.dir] = clip
+    return clip
+end
+
+
 -- App keys {ms, v, ease = {x1, y1, x2, y2}} → Fusion keyframes with Bezier handles.
 -- The ease runs from a key to the next one, exactly like CSS cubic-bezier.
 -- SetKeyFrames takes handles as offsets from their own key (bridge test 2 probes),
@@ -669,8 +740,14 @@ local function place(job, tl, project, mp, tag)
     log("Timeline " .. tl:GetName() .. " · " .. tostring(rateText) .. " fps (" .. string.format("%.6f", fps) .. ")"
         .. (dropFrame and " DF" or "") .. " · starts at frame " .. tlStart .. " = " .. timecode(tlStart, fps, dropFrame))
 
-    local template, tRate = template_of(mp, fps)
-    if not template then fail("No Text+ template. Reinstall MotionCaption, or drag Effects → Titles → Text+ into the Media Pool."); return sum end
+    -- The Text+ template is only needed for captions the app did not draw
+    local anyText = false
+    for _, cue in ipairs(job.cues) do if type(cue.render) ~= "table" then anyText = true end end
+    local template, tRate = nil, fps
+    if anyText then
+        template, tRate = template_of(mp, fps)
+        if not template then fail("No Text+ template. Reinstall MotionCaption, or drag Effects → Titles → Text+ into the Media Pool."); return sum end
+    end
     -- Resolve turns endFrame into floor(endFrame × timeline rate ÷ template rate) frames
     local function end_frame(len)
         if math.abs(tRate - fps) < 0.0001 then return len end
@@ -811,14 +888,26 @@ local function place(job, tl, project, mp, tag)
     end
     local infos, cueOf = {}, {}
     for _, w in ipairs(wants) do
-        if not w.kept then
+        local drawn, why
+        if not w.kept and type(w.cue.render) == "table" then
+            drawn, why = drawn_item(mp, w.cue.render, rateText)
+            if not drawn then
+                w.skip = true
+                sum.failed = sum.failed + 1
+                fail("Caption " .. tostring(w.cue.n) .. ": " .. tostring(why))
+            end
+        end
+        if not w.kept and not w.skip then
             local lane
             for li, ln in ipairs(lanes) do if free(ln, w.s, w.e) then lane = li break end end
             if not lane then lanes[#lanes + 1] = { busy = {}, mine = true }; lane = #lanes end
             lanes[lane].used = true
             table.insert(lanes[lane].busy, { w.s, w.e })
             w.lane = lane
-            infos[#infos + 1] = { lane = lane, len = w.e - w.s, info = { mediaPoolItem = template, startFrame = 0, endFrame = end_frame(w.e - w.s), recordFrame = tlStart + w.s } }
+            local info = drawn
+                and { mediaPoolItem = drawn, startFrame = 0, endFrame = w.e - w.s, recordFrame = tlStart + w.s }
+                or { mediaPoolItem = template, startFrame = 0, endFrame = end_frame(w.e - w.s), recordFrame = tlStart + w.s }
+            infos[#infos + 1] = { lane = lane, len = w.e - w.s, info = info, drawn = drawn ~= nil }
             cueOf[#infos] = w.cue
         end
     end
@@ -874,6 +963,39 @@ local function place(job, tl, project, mp, tag)
     sum.missing = #list - #items
     if #list > 0 and #items == 0 then back(); return sum end
 
+    -- Drawn clips have one blank frame more than they need. Should Resolve count endFrame
+    -- as the last frame (not one past it), each comes in a frame long: put those in again
+    -- one frame shorter, at the same place.
+    local again, idx = {}, {}
+    for i, item in ipairs(items) do
+        if infos[i] and infos[i].drawn and try(function() return item:GetDuration() end) == lens[i] + 1 then
+            again[#again + 1] = item
+            idx[#idx + 1] = i
+        end
+    end
+    if #again > 0 then
+        try(function() tl:DeleteClips(again, false) end)
+        local redo = {}
+        for k, i in ipairs(idx) do
+            local x = {}
+            for kk, v in pairs(list[i]) do x[kk] = v end
+            x.endFrame = x.endFrame - 1
+            redo[k] = x
+        end
+        local got = try(function() return mp:AppendToTimeline(redo) end) or {}
+        for k, i in ipairs(idx) do items[i] = got[k] end
+        log("NOTE  " .. #again .. " drawn captions came in a frame long; placed " .. #got .. " of them again one frame shorter")
+        if #got < #again then
+            fail("Resolve placed " .. (#list - #again + #got) .. " of " .. #list .. " captions on " .. tl:GetName() .. ".")
+            sum.missing = #again - #got
+            local packed, cues2, infos2, lens2 = {}, {}, {}, {}
+            for i = 1, #list do
+                if items[i] then packed[#packed + 1] = items[i]; cues2[#packed] = cueOf[i]; infos2[#packed] = infos[i]; lens2[#packed] = lens[i] end
+            end
+            items, cueOf, infos, lens = packed, cues2, infos2, lens2
+        end
+    end
+
     -- Each caption must start and last exactly as asked, at any frame rate
     for i, item in ipairs(items) do
         local want = list[i]
@@ -894,7 +1016,9 @@ local function place(job, tl, project, mp, tag)
         local cue = cueOf[i]
         if i == 1 or i % step == 0 then progress(job.id, "animating", i - 1, #items) end
         probes = {}
-        local ok, err = pcall(build, item, cue)
+        -- A drawn caption is finished once it is placed; a Text+ one gets its look and animation now
+        local ok, err = true, nil
+        if infos[i] and infos[i].drawn then sum.drawn = (sum.drawn or 0) + 1 else ok, err = pcall(build, item, cue) end
         if i == 1 and test.probe then
             local comp = try(function() return item:GetFusionCompByIndex(1) end)
             local at = comp and try(function() return comp:GetAttrs() end) or {}
@@ -1279,7 +1403,8 @@ local function main()
         log("OK    Switched to the timeline “" .. job.timeline .. "” the captions were made for")
     end
     local sum = place(job, tl, project, mp)
-    if sum.placed > 0 then try(function() redraw(project, mp, tl) end) end
+    -- Only Text+ captions can show a stale first drawing; drawn ones are plain clips
+    if sum.placed > (sum.drawn or 0) then try(function() redraw(project, mp, tl) end) end
     result.timeline, result.fps, result.tracks = sum.timeline, fps, sum.tracks
     result.placed, result.failed = sum.placed, sum.failed
     result.kept, result.removed = sum.kept or 0, sum.removed or 0

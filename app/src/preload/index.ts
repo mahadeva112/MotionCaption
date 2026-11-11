@@ -1,4 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { CompiledCue } from '../core/compile.ts'
+import type { Rendered } from '../core/job.ts'
 
 export interface OpenedFile {
   path: string
@@ -71,6 +73,13 @@ export interface TextLayer {
   raw: Record<string, number | string | [number, number]>
 }
 
+/** How far drawing the captions' frames has got */
+export interface RenderProgress {
+  done: number
+  total: number
+  note: 'drawing' | 'ready'
+}
+
 /** The Link window in Resolve (open: a Send goes straight in) */
 export interface LinkStatus {
   alive: boolean
@@ -96,6 +105,14 @@ const api = {
   sendJob: (lua: string): Promise<string> => ipcRenderer.invoke('job:send', lua),
   jobResult: (jobId: string): Promise<JobResult | null> => ipcRenderer.invoke('job:result', jobId),
   jobProgress: (jobId: string): Promise<JobProgress | null> => ipcRenderer.invoke('job:progress', jobId),
+  /** Draws captions as PNG frames with transparency, for Resolve to place as plain clips */
+  renderCues: (req: { width: number; height: number; fps: number; cues: CompiledCue[] }): Promise<Rendered[]> =>
+    ipcRenderer.invoke('render:cues', req),
+  onRenderProgress: (cb: (p: RenderProgress) => void): (() => void) => {
+    const f = (_e: unknown, p: RenderProgress) => cb(p)
+    ipcRenderer.on('render:progress', f)
+    return () => { ipcRenderer.removeListener('render:progress', f) }
+  },
 }
 
 export type Api = typeof api

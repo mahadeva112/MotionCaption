@@ -1,13 +1,21 @@
 import { useEffect, useState } from 'react'
-import type { JobProgress, JobResult, ResolveStatus } from '../../preload'
+import type { JobProgress, JobResult, RenderProgress, ResolveStatus } from '../../preload'
+import type { Delivery } from './App'
 
 interface Props {
   captions: number
+  /** 'captions' or 'supers' */
+  noun: string
   where: string
   timeline: string | null
   /** The Link window is open in Resolve: Send is the only step */
   linked: boolean
-  build: () => { id: string; lua: string }
+  /** Makes the job; when drawing, draws the frames first and tells how far it has got */
+  build: (onDraw: (p: RenderProgress) => void) => Promise<{ id: string; lua: string }>
+  delivery: Delivery
+  /** Drawing needs the timeline read from Resolve (an SRT alone has no size or rate) */
+  canDraw: boolean
+  onDelivery: (d: Delivery) => void
   /** Set when these captions were sent before: this send only makes the changed ones
    *  again. `changed` is how many the app counts, null while it does not know. */
   update: { changed: number | null } | null
@@ -16,7 +24,7 @@ interface Props {
   onClose: () => void
 }
 
-type Phase = 'ready' | 'sending' | 'waiting' | 'done'
+type Phase = 'ready' | 'drawing' | 'sending' | 'waiting' | 'done'
 
 /** Placing all captions is one Resolve call; animating them is most of the work */
 function percent(p: JobProgress | null, r: JobResult | null): number | null {
@@ -26,7 +34,7 @@ function percent(p: JobProgress | null, r: JobResult | null): number | null {
   return p.phase === 'placing' ? 5 : 2
 }
 
-export function SendDialog({ captions, where, timeline, linked, build, update: updateNow, onDone, onClose }: Props) {
+export function SendDialog({ captions, noun, where, timeline, linked, build, delivery, canDraw, onDelivery, update: updateNow, onDone, onClose }: Props) {
   // What this dialog was opened for: a first send stays worded as one after it has gone in
   const [update] = useState(updateNow)
   const [status, setStatus] = useState<ResolveStatus | null>(null)
@@ -38,6 +46,7 @@ export function SendDialog({ captions, where, timeline, linked, build, update: u
   /** Could the app press MotionCaption in Resolve's menu itself? null before trying */
   const [direct, setDirect] = useState<boolean | null>(null)
   const [why, setWhy] = useState<string | null>(null)
+  const [draw, setDraw] = useState<RenderProgress | null>(null)
 
   useEffect(() => { window.mc.resolveStatus().then(setStatus) }, [])
 
@@ -54,9 +63,10 @@ export function SendDialog({ captions, where, timeline, linked, build, update: u
   }, [phase, jobId])
 
   async function send() {
-    setPhase('sending'); setError(null); setResult(null); setProgress(null)
+    setPhase(delivery === 'drawn' ? 'drawing' : 'sending'); setError(null); setResult(null); setProgress(null); setDraw(null)
     try {
-      const job = build()
+      const job = await build(setDraw)
+      setPhase('sending')
       await window.mc.sendJob(job.lua)
       setJobId(job.id)
       // The Link window (Studio) takes it by itself; otherwise press the menu in Resolve
@@ -73,8 +83,11 @@ export function SendDialog({ captions, where, timeline, linked, build, update: u
     }
   }
 
-  const pct = percent(progress, result)
-  const label = result
+  const drawPct = draw && draw.total > 0 ? Math.round((100 * draw.done) / draw.total) : null
+  const pct = phase === 'drawing' ? drawPct : percent(progress, result)
+  const label = phase === 'drawing'
+    ? (draw && draw.total > 0 ? `Drawing the ${noun}: frame ${draw.done} of ${draw.total}` : `Drawing the ${noun}…`)
+    : result
     ? (result.ok ? 'Finished' : 'Finished with problems')
     : !progress
       ? (direct !== false ? 'Placing in Resolve…' : <>Waiting for Resolve… click <kbd>Workspace → Scripts → MotionCaption</kbd></>)
@@ -92,13 +105,24 @@ export function SendDialog({ captions, where, timeline, linked, build, update: u
         <div className="dlg2-t"><b>{update ? 'Update in Resolve' : 'Send to Resolve'}</b><button className="x" onClick={onClose} title="Close">✕</button></div>
         <div className="dlg2-b">
           {!update ? (
-            <p className="lead">{captions} captions go on <b>{where}</b>{timeline ? <> in <b>{timeline}</b></> : ''}. Clips already on the timeline are not moved or replaced.</p>
+            <p className="lead">{captions} {noun} go on <b>{where}</b>{timeline ? <> in <b>{timeline}</b></> : ''}. Clips already on the timeline are not moved or replaced.</p>
           ) : update.changed === 0 ? (
             <p className="lead">Nothing has changed since the last send. Update checks {timeline ? <b>{timeline}</b> : 'the timeline'} and puts back any caption that is missing there; the others are not touched.</p>
           ) : (
             <p className="lead">{update.changed === null ? 'Only the captions you changed are' : <><b>{update.changed}</b> changed caption{s(update.changed)} {update.changed === 1 ? 'is' : 'are'}</>} made
               again{timeline ? <> in <b>{timeline}</b></> : ''}. Every other caption stays in Resolve exactly as it is, with anything you adjusted there.</p>
           )}
+          <div className="howgo">
+            <button className={'opt2' + (delivery === 'drawn' ? ' on' : '')} disabled={!canDraw || phase === 'drawing' || phase === 'sending'} onClick={() => onDelivery('drawn')}>
+              <b>Finished clips <em>works every time in Resolve Free</em></b>
+              <span>The app draws each one exactly as the preview shows it and Resolve only places it. Change them here and Send again.</span>
+            </button>
+            <button className={'opt2' + (delivery === 'textplus' ? ' on' : '')} disabled={phase === 'drawing' || phase === 'sending'} onClick={() => onDelivery('textplus')}>
+              <b>Editable Text+</b>
+              <span>Text and look stay editable in Resolve. Letter and word animations go through Fusion, and may not show in Resolve Free.</span>
+            </button>
+            {!canDraw && <p className="hint2">Finished clips need the timeline read from Resolve: click MotionCaption in Resolve first.</p>}
+          </div>
           {status && !status.resolveFound && <p className="warn">DaVinci Resolve was not found on this computer. Install Resolve (Free or Studio), then come back.</p>}
           {direct === false ? (
             <p className="warn">{why} Open Resolve with {timeline ? <b>{timeline}</b> : 'the timeline'}'s project, then click <kbd>Workspace → Scripts → MotionCaption</kbd> there, or press Send again.</p>
@@ -106,13 +130,13 @@ export function SendDialog({ captions, where, timeline, linked, build, update: u
             <p className="how1"><i className="dot" /> Press {update ? 'Update' : 'Send'} and the captions go straight onto {timeline ? <b>{timeline}</b> : 'the open timeline'} in Resolve. Keep Resolve open.</p>
           )}
           <div className="btnrow">
-            <button className="go big" disabled={phase === 'sending' || (status !== null && !status.resolveFound)} onClick={send}>
+            <button className="go big" disabled={phase === 'drawing' || phase === 'sending' || (status !== null && !status.resolveFound)} onClick={send}>
               {(update ? 'Update' : 'Send') + (phase === 'ready' ? '' : ' again')}
             </button>
             <button className="mini" onClick={onClose}>{phase === 'done' ? 'Close' : 'Cancel'}</button>
           </div>
           {error && <p className="warn">{error}</p>}
-          {(phase === 'waiting' || phase === 'done') && (
+          {(phase === 'drawing' || phase === 'waiting' || phase === 'done') && (
             <div className="progress">
               <div className="ptext"><span>{label}</span>{pct !== null && <b>{pct}%</b>}</div>
               <div className={'pbar2' + (pct === null ? ' idle' : '') + (result && !result.ok ? ' bad' : '')}><i style={pct === null ? undefined : { width: `${pct}%` }} /></div>

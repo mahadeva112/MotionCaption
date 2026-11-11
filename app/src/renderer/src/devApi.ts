@@ -1,6 +1,6 @@
 // Lets the UI run in a plain browser during development (no Electron preload there).
 // Only installed when window.mc is missing and Vite is in dev mode.
-import type { Api, TimelineData } from '../../preload'
+import type { Api, RenderProgress, TimelineData } from '../../preload'
 
 const SAMPLE = `1
 00:00:01,000 --> 00:00:03,200
@@ -57,6 +57,8 @@ export const DEV_TIMELINE: TimelineData = {
   ],
 }
 
+const renderListeners = new Set<(p: RenderProgress) => void>()
+
 export function installDevApi() {
   if (window.mc || !import.meta.env.DEV) return
   let sentId: string | null = null
@@ -92,6 +94,16 @@ export function installDevApi() {
       if (jobId !== sentId || t < 0) return null
       return t < 0.1 ? { jobId, phase: 'placing', done: 0, total: 40 } : { jobId, phase: 'animating', done: Math.floor(Math.min(1, t) * 40), total: 40 }
     },
+    // Pretends to draw: 1 s for all the frames, reported as it goes
+    renderCues: async (req) => {
+      const total = req.cues.reduce((s, c) => s + Math.round(((c.endMs - c.startMs) * req.fps) / 1000) + 1, 0)
+      for (let i = 1; i <= 10; i++) {
+        await new Promise((r) => setTimeout(r, 100))
+        renderListeners.forEach((f) => f({ done: Math.round((total * i) / 10), total, note: 'drawing' }))
+      }
+      return req.cues.map((c, i) => ({ dir: `C:\\dev\\renders\\${i}`, frames: Math.round(((c.endMs - c.startMs) * req.fps) / 1000) + 1, width: req.width, height: req.height }))
+    },
+    onRenderProgress: (cb) => { renderListeners.add(cb); return () => { renderListeners.delete(cb) } },
   }
   ;(window as unknown as { mc: Api }).mc = api
 }

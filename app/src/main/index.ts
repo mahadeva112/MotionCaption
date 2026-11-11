@@ -3,6 +3,7 @@ import { watch } from 'node:fs'
 import { execFile } from 'node:child_process'
 import { copyFile, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
+import { closeStage, renderCues, type RenderRequest } from './render.ts'
 
 // Where Resolve looks for Workspace → Scripts entries, and where the bridge reads jobs.
 const APPDATA = process.env['APPDATA'] ?? app.getPath('appData')
@@ -20,6 +21,8 @@ const TIMELINE = join(MC_DIR, 'timeline.json')
 const LINK = join(MC_DIR, 'link.json')
 /** The app asking the Link window for a new timeline read */
 const REFRESH = join(MC_DIR, 'refresh.txt')
+/** Captions the app drew as PNG frames, one folder each (main/render.ts) */
+const RENDERS = join(MC_DIR, 'renders')
 
 const resource = (name: string) =>
   app.isPackaged ? join(process.resourcesPath, name) : join(__dirname, '..', '..', 'resources', name)
@@ -69,7 +72,23 @@ function createWindow(): void {
   } else {
     win.loadFile(join(__dirname, '../renderer/index.html'))
   }
+  win.on('closed', () => closeStage())
 }
+
+/** The app's page, for the hidden window that draws captions */
+const PAGE = { dev: process.env['ELECTRON_RENDERER_URL'], file: join(__dirname, '../renderer/index.html') }
+
+/** One drawing at a time: a second Send waits for the first */
+let drawing: Promise<unknown> = Promise.resolve()
+
+/** Draws the captions as PNG frames for Resolve; tells the page how far it has got */
+ipcMain.handle('render:cues', (e, req: RenderRequest) => {
+  const run = drawing.then(() => renderCues(RENDERS, PAGE, req, (done, total, note) => {
+    if (!e.sender.isDestroyed()) e.sender.send('render:progress', { done, total, note })
+  }))
+  drawing = run.catch(() => {})
+  return run
+})
 
 // The SRT is only ever read. Edits live in the app, never in the original file.
 ipcMain.handle('srt:open', async () => {
@@ -193,6 +212,17 @@ app.on('second-instance', () => {
 })
 
 app.whenReady().then(() => {
+  // Test hook: MC_RENDER_TEST=<request.json> draws its captions, writes <request.json>.out.json, and quits
+  const test = process.env['MC_RENDER_TEST']
+  if (test) {
+    const t0 = Date.now()
+    readFile(test, 'utf8')
+      .then((s) => renderCues(join(MC_DIR, 'renders-test'), PAGE, JSON.parse(s) as RenderRequest, () => {}))
+      .then((r) => writeFile(test + '.out.json', JSON.stringify({ ok: true, ms: Date.now() - t0, renders: r }, null, 1)))
+      .catch((err) => writeFile(test + '.out.json', JSON.stringify({ ok: false, error: String(err && err.stack || err) })))
+      .finally(() => { closeStage(); app.quit() })
+    return
+  }
   // The font list comes from the system (Local Font Access), for the Look tab
   const fonts = (p: string) => p === 'local-fonts' || p === 'fonts'
   session.defaultSession.setPermissionCheckHandler((_wc, p) => fonts(p as string))

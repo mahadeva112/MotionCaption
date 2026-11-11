@@ -48,8 +48,22 @@ export interface Job {
   test?: JobTest
 }
 
+/**
+ * A caption the app drew itself, frame by frame, as PNG images with transparency. The
+ * bridge only imports them and places the clip: no Text+, no Fusion, so nothing in
+ * Resolve Free can change how it looks or moves.
+ */
+export interface Rendered {
+  /** Folder of the frames: f_00000.png … */
+  dir: string
+  /** How many frames there are: the caption's length plus one blank frame at the end */
+  frames: number
+  width: number
+  height: number
+}
+
 /** A caption in a job, with the signature of what the bridge builds from it */
-export type SentCue = CompiledCue & { sig: string }
+export type SentCue = CompiledCue & { sig: string; render?: Rendered }
 
 /** Goes into every signature. Raise it when the bridge builds a caption differently, so
  *  captions already in Resolve are made again by the next update. */
@@ -80,17 +94,32 @@ export function sigOf(cue: CompiledCue): string {
   return hash(JSON.stringify([BUILD, text, look, tracks, fixed, letters ?? null, words]))
 }
 
+/** The signature a caption is sent with: a drawn caption and a Text+ caption of the same
+ *  look are different clips in Resolve, so switching between them makes it again */
+export const sendSig = (cue: CompiledCue, rendered: boolean): string => sigOf(cue) + (rendered ? 'r' : '')
+
+/** Bump when the app draws frames differently, so frames drawn before are not reused */
+export const RENDER_VERSION = 1
+
+/** Names the frames of one caption at one frame size and rate: the same key, the same images */
+export const renderKey = (cue: CompiledCue, width: number, height: number, fps: number): string =>
+  hash(JSON.stringify([RENDER_VERSION, sigOf(cue), cue.endMs - cue.startMs, width, height, fps]))
+
 export function makeJob(source: string, cues: CompiledCue[], test?: JobTest, now = new Date(),
-  extra: { project?: string; timeline?: string; target?: JobTarget } = {}): Job {
+  extra: { project?: string; timeline?: string; target?: JobTarget; renders?: (Rendered | undefined)[] } = {}): Job {
   const stamp = now.toISOString()
+  const { renders, ...rest } = extra
   return {
     version: 1,
     id: `${stamp.replace(/\D/g, '').slice(0, 14)}-${Math.random().toString(36).slice(2, 8)}`,
     createdAt: stamp,
     source,
     trackName: `MC ${source.replace(/\.[^.]+$/, '')}`.slice(0, 40),
-    ...extra,
-    cues: cues.map((c) => ({ ...c, sig: sigOf(c) })),
+    ...rest,
+    cues: cues.map((c, i) => {
+      const render = renders?.[i]
+      return { ...c, sig: sendSig(c, !!render), ...(render ? { render } : {}) }
+    }),
     ...(test ? { test } : {}),
   }
 }

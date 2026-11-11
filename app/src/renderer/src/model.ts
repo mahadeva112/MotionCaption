@@ -17,19 +17,22 @@ export interface CueEdit {
 export type Edits = Record<number, CueEdit>
 
 /** Which captions of a timeline: a subtitle track (its number), every Text+ layer on its
- *  video tracks ('text'), or only the Text+ on one video track ('text:2' for V2, e.g. a super) */
-export type SrcTrack = number | 'text' | `text:${number}`
+ *  video tracks ('text'), only the Text+ on one video track ('text:2' for V2, e.g. a super),
+ *  or the supers made in this app for this timeline ('supers') */
+export type SrcTrack = number | 'text' | `text:${number}` | 'supers'
 
 /** Where captions come from: a timeline read from Resolve (see SrcTrack), or an SRT file */
 export type Source =
-  | { kind: 'timeline'; data: TimelineData; track: SrcTrack }
+  | { kind: 'timeline'; data: TimelineData; track: SrcTrack; supers?: Cue[] }
   | { kind: 'srt'; name: string; cues: Cue[]; notes: string[] }
 
-export const isTextSrc = (t: SrcTrack | null | undefined): t is 'text' | `text:${number}` => typeof t === 'string'
+export const isTextSrc = (t: SrcTrack | null | undefined): t is 'text' | `text:${number}` => typeof t === 'string' && t !== 'supers'
+/** Supers made in the app: text, timing, look and animation all live here, not in Resolve */
+export const isSupersSrc = (src: Source | null | undefined): boolean => src?.kind === 'timeline' && src.track === 'supers'
 /** The video track a 'text:N' source reads, or null for every track */
 export const textTrackOf = (t: SrcTrack): number | null => (typeof t === 'string' && t.startsWith('text:') ? Number(t.slice(5)) : null)
 /** A Read from value back from a <select> */
-export const srcTrackOf = (v: string): SrcTrack => (v === 'text' || v.startsWith('text:') ? (v as SrcTrack) : Number(v))
+export const srcTrackOf = (v: string): SrcTrack => (v === 'text' || v === 'supers' || v.startsWith('text:') ? (v as SrcTrack) : Number(v))
 
 
 /** Text+ layers a source reads, from a timeline's layers */
@@ -45,19 +48,21 @@ export const layersOf = (src: Source | null) => (src?.kind === 'timeline' ? laye
 /** The Read from choices for a timeline: each subtitle track, the Text+ on each video track
  *  on its own, and every Text+ layer together when they sit on more than one track (or when
  *  that is the current choice) */
-export function srcChoices(data: TimelineData | null | undefined, current?: SrcTrack | null): { value: SrcTrack; label: string }[] {
+export function srcChoices(data: TimelineData | null | undefined, current?: SrcTrack | null, supers = 0): { value: SrcTrack; label: string }[] {
   const subs = (data?.subtitle ?? []).map((s) => ({ value: s.index as SrcTrack, label: `ST${s.index} · ${s.name} · ${s.cues.length}` }))
   const layers = usableLayers(data?.texts)
   const tracks = [...new Set(layers.map((t) => t.track))].sort((a, b) => a - b)
   const name = (i: number) => data?.video?.find((v) => v.index === i)?.name ?? ''
   const one = tracks.map((i) => ({ value: `text:${i}` as SrcTrack, label: `Text+ on V${i} · ${name(i)} · ${layers.filter((t) => t.track === i).length}` }))
   const all = tracks.length > 1 || (current === 'text' && tracks.length) ? [{ value: 'text' as SrcTrack, label: `Text+ on ${tracks.map((i) => 'V' + i).join(', ')} · ${layers.length}` }] : []
-  return [...subs, ...one, ...all]
+  const made = data?.timeline ? [{ value: 'supers' as SrcTrack, label: `Supers made here · ${supers}` }] : []
+  return [...subs, ...one, ...all, ...made]
 }
 
 /** What a timeline source is called: the subtitle track's name, or which Text+ layers.
  *  Captions made from it go on a track named after it ("MC Text+ V2"). */
 export function srcNameOf(data: TimelineData, t: SrcTrack): string {
+  if (t === 'supers') return 'Supers'
   if (!isTextSrc(t)) return data.subtitle?.find((s) => s.index === t)?.name ?? 'Subtitles'
   const only = textTrackOf(t)
   return only === null ? 'Text+ layers' : `Text+ V${only}`
@@ -118,6 +123,7 @@ export const SAFE: Record<Exclude<SafeArea, 'off'>, { name: string; rail: [numbe
 export function cuesOf(src: Source | null): Cue[] {
   if (!src) return []
   if (src.kind === 'srt') return src.cues
+  if (src.track === 'supers') return src.supers ?? []
   if (isTextSrc(src.track)) return cuesOfLayers(layersOf(src))
   const t = src.data.subtitle?.find((x) => x.index === src.track)
   return (t?.cues ?? []).map((c, i) => ({
@@ -161,3 +167,12 @@ export function timecode(ms: number, fps = 24): string {
   const p = (n: number) => String(n).padStart(2, '0')
   return `${p(Math.floor(s / 3600))}:${p(Math.floor(s / 60) % 60)}:${p(s % 60)}:${p(f % nominal)}`
 }
+
+/** A super as kept on this computer */
+export interface SavedSuper { n: number; startMs: number; endMs: number; text: string }
+
+/** Where a timeline's supers are kept on this computer */
+export const supersKey = (data: TimelineData): string =>
+  'mc.supers.' + (data.project ?? '') + '|' + (data.timeline ? data.timeline.name : '')
+
+export const superCue = (s: SavedSuper): Cue => ({ n: s.n, index: s.n, startMs: s.startMs, endMs: s.endMs, raw: s.text, text: s.text, line: 0 })
