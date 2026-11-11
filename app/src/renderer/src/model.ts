@@ -169,6 +169,7 @@ export const lookOf = (look: Look, edits: Edits, n: number): Look => {
   return {
     ...look, ...own,
     outline: { ...look.outline, ...own.outline }, shadow: { ...look.shadow, ...own.shadow }, box: { ...look.box, ...own.box },
+    gradient: { ...look.gradient, ...own.gradient }, image: { ...look.image, ...own.image }, count: { ...look.count, ...own.count },
   }
 }
 

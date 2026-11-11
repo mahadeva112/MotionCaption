@@ -3,7 +3,7 @@ import type { Cue } from './srt.ts'
 import { presetById, wordFxById } from './presets.ts'
 import {
   autoWords, centerOf, DEFAULT_HIGHLIGHT, DEFAULT_LOOK, DEFAULT_MOTION, layout, letters as lettersOf,
-  type Highlight, type Look, type Measure, type Motion, type Rgb, type WordLook,
+  type Highlight, type ImagePlace, type Look, type Measure, type Motion, type Rgb, type WordLook,
 } from './look.ts'
 
 export type { Rgb } from './look.ts'
@@ -37,6 +37,10 @@ export interface TextLook {
   outline?: { width: number; color: Rgb }
   shadow?: { blur: number; distance: number; opacity: number; color: Rgb }
   box?: { color: Rgb; opacity: number; round: number; pad: number }
+  /** Drawn by the app only (Finished clips); a Text+ caption has the first colour, no picture, the final numbers */
+  gradient?: { color: Rgb; angle: number }
+  image?: { src: string; size: number; place: ImagePlace }
+  count?: { from: number; ms: number }
 }
 
 export interface CompiledWord {
@@ -327,6 +331,17 @@ export function compileCue(cue: Cue, presetId: string, opts: Partial<CompileOpts
   const center = centerOf(look, laid.width, laid.height)
 
   const tracks = timeTracks(withMotion(preset.tracks, motion), dur)
+  // A path takes the caption's position over: from its place through each point, evenly over its time
+  if (look.path.length) {
+    const pts: (readonly [number, number])[] = [[0, 0], ...look.path]
+    const keys: TimedKey[] = pts.map(([dx, dy], i) => ({
+      ms: Math.round((dur * i) / (pts.length - 1)), v: [0.5 + dx, 0.5 + dy] as const, ease: EASE.inOut,
+    }))
+    const at = tracks.findIndex((t) => t.target === 'move' && t.input === 'Center')
+    const track: TimedTrack = { target: 'move', input: 'Center', keys }
+    if (at >= 0) tracks[at] = track
+    else tracks.push(track)
+  }
   if (look.rotation && !tracks.some((t) => t.target === 'move' && t.input === 'Angle')) {
     tracks.push({ target: 'move', input: 'Angle', keys: [{ ms: 0, v: look.rotation, ease: EASE.linear }] })
   } else if (look.rotation) {
@@ -390,6 +405,9 @@ export function compileCue(cue: Cue, presetId: string, opts: Partial<CompileOpts
       ...(look.outline.on ? { outline: { width: look.outline.width, color: look.outline.color } } : {}),
       ...(look.shadow.on ? { shadow: { blur: look.shadow.blur, distance: look.shadow.distance, opacity: look.shadow.opacity, color: look.shadow.color } } : {}),
       ...(look.box.on ? { box: { color: look.box.color, opacity: look.box.opacity, round: look.box.round, pad: look.box.pad } } : {}),
+      ...(look.gradient.on ? { gradient: { color: look.gradient.color, angle: look.gradient.angle } } : {}),
+      ...(look.image.on && look.image.src ? { image: { src: look.image.src, size: look.image.size, place: look.image.place } } : {}),
+      ...(look.count.on ? { count: { from: look.count.from, ms: look.count.ms } } : {}),
     },
     preset: preset.id,
     tracks,

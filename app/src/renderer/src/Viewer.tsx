@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react'
 import type { CompiledCue, TimedTrack } from '@core/compile'
-import { fontShare } from '@core/look'
+import { countUp, fontShare } from '@core/look'
 import { num, pt, valueAt } from '@core/sample'
 import { useClock } from './clock'
 import { cssFace } from './fonts'
@@ -59,6 +59,9 @@ interface Props {
   onSize: (size: number) => void
   /** The turn handle dragged: the caption's new rotation, degrees counter-clockwise */
   onTurn: (deg: number) => void
+  /** The caption's path, shown over the frame; with draw on, a click in the frame adds a point
+   *  (as an offset from the caption's place, frame shares, y up) */
+  path: { points: readonly (readonly [number, number])[]; draw: boolean; onAdd: (dx: number, dy: number) => void } | null
 }
 
 /** How near (in pixels) the caption's centre must come to the frame's centre lines to stick */
@@ -182,11 +185,26 @@ export function Viewer(p: Props) {
     p.onSeek(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * p.endMs)
   }
 
+  // Drawing a path: a click on the frame (not on the caption) adds the next point
+  const addPoint = (e: PointerEvent<HTMLDivElement>) => {
+    if (!p.path?.draw || !cue || (e.target as HTMLElement).closest('.vblock, .vsolo')) return
+    const r = e.currentTarget.getBoundingClientRect()
+    const [cx, cy] = cue.look.center
+    p.path.onAdd((e.clientX - r.left) / r.width - cx, 1 - (e.clientY - r.top) / r.height - cy)
+  }
+  const pathPts = p.path && cue ? [[0, 0] as const, ...p.path.points].map(([dx, dy]) => [(cue.look.center[0] + dx) * W, (1 - cue.look.center[1] - dy) * H] as const) : null
+
   const fr = (
-    <div className="vframe" ref={frame} style={{ width: W, height: H }}>
+    <div className={'vframe' + (p.path?.draw ? ' drawing' : '')} ref={frame} style={{ width: W, height: H }} onPointerDown={addPoint}>
       <div className="vbg" />
       {cue && onScreen && <Caption cue={cue} ms={ms} W={W} H={H} aspect={aspect} selWord={p.selWord} blockRef={block} onDown={down} onMove={move} onUp={up}
         handles={!p.playing && !p.loop} />}
+      {pathPts && (
+        <svg className="vpath" viewBox={`0 0 ${W} ${H}`} width={W} height={H}>
+          <polyline points={pathPts.map((q) => q.join(',')).join(' ')} />
+          {pathPts.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={i ? 4 : 3} className={i ? '' : 'home'} />)}
+        </svg>
+      )}
       {guides.v && <i className="vguide v" />}
       {guides.h && <i className="vguide h" />}
       {p.safe !== 'off' && <Safe area={p.safe} />}
@@ -256,7 +274,9 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
   const spacing = num(at(text, 'CharacterSpacing', ms), L.tracking)
   const blur = num(at(text, 'SoftnessX1', ms), 0)
   const step = cue.letters?.stepMs ?? 0
-  const chars = Array.from(graphemes.segment(cue.text), (s) => s.segment)
+  // Numbers counting up keep their width in letters, so every letter keeps its place
+  const counted = (t: string) => (L.count ? countUp(t, 1 - (1 - Math.min(1, Math.max(0, ms / L.count.ms))) ** 3, L.count.from) : t)
+  const chars = Array.from(graphemes.segment(counted(cue.text)), (s) => s.segment)
   const turn = (i: number) => (cue.letters?.order === 'rtl' ? chars.length - 1 - i : i)
 
   // Which word (and which styled word) each letter belongs to
@@ -270,10 +290,22 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
     : undefined
   const outline = L.outline ? `${Math.max(0.5, L.outline.width * fontPx * 0.5)}px ${css(L.outline.color)}` : undefined
   const base: CSSProperties = {
-    fontFamily: `'${L.font}', 'Nirmala UI', sans-serif`, fontWeight: face.weight, fontStyle: face.italic ? 'italic' : 'normal',
+    fontFamily: `'${L.font}', 'Nirmala UI', 'Segoe UI Emoji', 'Segoe UI Symbol', sans-serif`, fontWeight: face.weight, fontStyle: face.italic ? 'italic' : 'normal',
     letterSpacing: `${(spacing - 1) * 0.5}em`, lineHeight: 1.2 * L.lineSpacing,
     textShadow: shadow, WebkitTextStroke: outline, paintOrder: 'stroke fill',
   }
+  // Gradient letters: a layer around the letters whose background is cut to them, so the
+  // box stays behind. A text shadow would draw over see-through letters, so that layer
+  // casts a drop shadow instead.
+  const G = L.gradient
+  const gradLayer: CSSProperties | null = G ? {
+    backgroundImage: `linear-gradient(${G.angle}deg, ${css(L.fill)}, ${css(G.color)})`, WebkitBackgroundClip: 'text', backgroundClip: 'text',
+    color: 'transparent', textShadow: 'none',
+    filter: L.shadow
+      ? `drop-shadow(${L.shadow.distance * fontPx * 0.12}px ${L.shadow.distance * fontPx * 0.12}px ${L.shadow.blur * fontPx * 0.2}px ${css(L.shadow.color, L.shadow.opacity)})`
+      : undefined,
+  } : null
+  const img = L.image
 
   const pivot = `${L.center[0] * W}px ${(1 - L.center[1]) * H}px`
   const group: CSSProperties = {
@@ -295,7 +327,8 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
           ...(L.box ? { background: css(L.box.color, L.box.opacity), padding: `${L.box.pad * 0.25}em ${L.box.pad * 0.5}em`, borderRadius: `${L.box.round * 0.6}em` } : {}),
         }}
       >
-        {chars.map((ch, i) => {
+        {img && <img className={'vimg ' + img.place} src={img.src} alt="" draggable={false} style={{ height: img.size * fontPx }} />}
+        <span className={G ? 'vtext grad' : 'vtext'} style={gradLayer ?? undefined}>{chars.map((ch, i) => {
           if (ch === '\n') return <br key={i} />
           const w = styled.get(i)
           const own = cue.letters ? follower(lettersT, ms - turn(i) * step, W) : {}
@@ -311,7 +344,7 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
             ...(w?.box ? { background: css(w.box), WebkitTextStroke: '0' } : {}),
           }
           return <span key={i} className={'ch' + (wi !== null && wi === selWord ? ' sel' : '')} data-w={wi ?? undefined} style={st}>{ch}</span>
-        })}
+        })}</span>
         {handles && <>
           {['c1', 'c2', 'c3', 'c4'].map((c) => <span key={c} className={'vh ' + c} data-grip="size" title="Drag to make it bigger or smaller" />)}
           <span className="vh turn" data-grip="turn" title="Drag to turn it (Shift: 15° steps)" />
@@ -321,7 +354,7 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
         const s = w.solo!
         const shift = cue.letters ? w.first * step : 0
         const fx = follower(w.tracks.filter((t) => t.input !== 'Opacity1'), ms - shift, W)
-        const sc = Array.from(graphemes.segment(s.text), (x) => x.segment)
+        const sc = Array.from(graphemes.segment(counted(s.text)), (x) => x.segment)
         return (
           <div key={w.index} className={'vsolo' + (w.index === selWord ? ' sel' : '')} data-w={w.index}
             onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp}

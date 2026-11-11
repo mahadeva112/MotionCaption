@@ -118,7 +118,8 @@ export function makeJob(source: string, cues: CompiledCue[], test?: JobTest, now
     ...rest,
     cues: cues.map((c, i) => {
       const render = renders?.[i]
-      return { ...c, sig: sendSig(c, !!render), ...(render ? { render } : {}) }
+      const look = c.look.image ? { ...c.look, image: { ...c.look.image, src: '' } } : c.look
+      return { ...c, look, sig: sendSig(c, !!render), ...(render ? { render } : {}) }
     }),
     ...(test ? { test } : {}),
   }
