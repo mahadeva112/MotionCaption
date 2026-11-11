@@ -124,9 +124,12 @@ export function App() {
   }, [defaultPreset, frame, recent, stateKit])
   useEffect(() => { loadFonts().then(setFonts) }, [])
 
+  /** The timeline last read, held back at start because Resolve may have another open now */
+  const [last, setLast] = useState<TimelineData | null>(null)
+
   // The timeline the Resolve script read; again whenever it writes a new one
-  const loadTimeline = useCallback(async () => {
-    const d = await window.mc.timeline()
+  const showTimeline = useCallback((d: TimelineData | null) => {
+    setLast(null)
     setTimelineInfo(d)
     const subs = d?.subtitle ?? []
     if (!d || !d.timeline) return
@@ -148,9 +151,14 @@ export function App() {
     })
   }, [])
   useEffect(() => {
-    loadTimeline()
-    return window.mc.onTimeline(loadTimeline)
-  }, [loadTimeline])
+    // At start (Start menu, desktop) the file may be days old: open it only if it is
+    // what Resolve has now. A new read after that is always a click in Resolve.
+    window.mc.timeline().then(async (d) => {
+      if (!d || (await isCurrent(d))) showTimeline(d)
+      else setLast(d)
+    })
+    return window.mc.onTimeline(() => { window.mc.timeline().then(showTimeline) })
+  }, [showTimeline])
 
   // Is the Link window open in Resolve? Then a Send goes straight in.
   useEffect(() => {
@@ -594,7 +602,7 @@ export function App() {
       </header>
 
       {!source ? (
-        <Welcome info={timelineInfo} onSrt={openSrt} />
+        <Welcome info={timelineInfo} last={last} onLast={() => showTimeline(last)} onSrt={openSrt} />
       ) : (
         <div className={'studio2' + (aspect >= 1 ? ' wide' : '')}>
           <Viewer cue={compiled} aspect={aspect} fps={fps} safe={safe} selWord={selWord} playing={playing} loop={!!hoverPreset}
@@ -692,7 +700,18 @@ function ResetDialog({ onReset, onClose }: { onReset: () => void; onClose: () =>
   )
 }
 
-function Welcome({ info, onSrt }: { info: TimelineData | null; onSrt: () => void }) {
+/** Read just now (the app was opened from Resolve), or the Link window in Resolve is open:
+ *  it reads the open timeline again whenever another is opened, so its file is current */
+async function isCurrent(d: TimelineData): Promise<boolean> {
+  if (Math.abs(Date.now() - Date.parse(d.readAt)) < 2 * 60_000) return true
+  const l = await window.mc.linkStatus().catch(() => ({ alive: false, timeline: null }))
+  if (!l.alive) return false
+  window.mc.refreshTimeline().catch(() => {}) // the latest captions too, not only the latest timeline
+  return !!d.timeline && l.timeline === d.timeline.name
+}
+
+function Welcome({ info, last, onLast, onSrt }: { info: TimelineData | null; last: TimelineData | null; onLast: () => void; onSrt: () => void }) {
+  const lastAt = last ? new Date(last.readAt) : null
   const noSubs = info?.timeline && !info.subtitle?.length && !usableLayers(info.texts).length
   return (
     <main className="welcome">
@@ -709,6 +728,14 @@ function Welcome({ info, onSrt }: { info: TimelineData | null; onSrt: () => void
           <li>Pick an animation and a look, then <b>Send</b>. One more click on MotionCaption in Resolve places them on a video track.</li>
         </ol>
         <p className="hint2">No subtitle track? <button className="link" onClick={onSrt}>Open an .srt file instead</button></p>
+        {last?.timeline && (
+          <div className="last">
+            <span>Last time: <b>{last.timeline.name}</b>{last.project ? <> · {last.project}</> : null}
+              {lastAt && !isNaN(+lastAt) && <> · {lastAt.toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</>}
+              <br /><em>Resolve may have another timeline open now.</em></span>
+            <button className="mini" onClick={onLast}>Open it</button>
+          </div>
+        )}
       </div>
     </main>
   )

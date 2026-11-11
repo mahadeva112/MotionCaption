@@ -317,6 +317,10 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
 .welcome { flex: 1; display: grid; place-items: center; padding: 30px; }
 .card2 { width: min(620px, 100%); background: var(--r1); border: 1px solid var(--seam); border-radius: 18px; padding: 28px 30px; box-shadow: 0 24px 60px rgba(0, 0, 0, .4); }
 .card2 h1 { margin: 0 0 12px; font-size: 22px; color: #fff; letter-spacing: -.01em; }
+.card2 .last { display: flex; align-items: center; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--seam); color: var(--t2); font-size: 12px; line-height: 1.5; }
+.card2 .last b { color: var(--t); }
+.card2 .last em { color: var(--t3); font-style: normal; }
+.card2 .last .mini { margin-left: auto; flex: none; }
 
 /* Dialogs */
 .modal { position: fixed; inset: 0; background: rgba(4, 5, 8, .62); backdrop-filter: blur(4px); display: grid; place-items: center; z-index: 50; }
