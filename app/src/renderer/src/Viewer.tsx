@@ -55,7 +55,17 @@ interface Props {
   onPickWord: (i: number) => void
   /** Live drag of the caption, in frame shares (x right, y up); end commits */
   onDrag: (dx: number, dy: number, end: boolean) => void
+  /** A corner handle dragged: the caption's new size (Text+ Size) */
+  onSize: (size: number) => void
+  /** The turn handle dragged: the caption's new rotation, degrees counter-clockwise */
+  onTurn: (deg: number) => void
 }
+
+/** How near (in pixels) the caption's centre must come to the frame's centre lines to stick */
+const SNAP_PX = 6
+const SIZE_MIN = 0.02
+const SIZE_MAX = 0.2
+const TURN_MAX = 30
 
 export function Viewer(p: Props) {
   const { cue, aspect } = p
@@ -100,28 +110,67 @@ export function Viewer(p: Props) {
     if (hit !== warn) setWarn(hit)
   })
 
-  // Drag to move; a click without moving picks the word under the pointer
-  const drag = useRef<{ x: number; y: number; moved: boolean; w: number | null } | null>(null)
+  // Drag to move (its centre sticks to the frame's centre lines; Alt places it freely),
+  // a corner to resize, the round handle to turn it. A click without moving picks the word.
+  const drag = useRef<{
+    x: number; y: number; moved: boolean; w: number | null; grip: string
+    /** The block's centre on screen, its centre in the frame (shares, y up), and its size and turn at the start */
+    cx: number; cy: number; center: readonly [number, number]; d0: number; a0: number; size0: number; turn0: number
+  } | null>(null)
+  const [guides, setGuides] = useState({ v: false, h: false })
   const down = (e: PointerEvent) => {
-    const w = (e.target as HTMLElement).closest('[data-w]')?.getAttribute('data-w')
-    drag.current = { x: e.clientX, y: e.clientY, moved: false, w: w == null ? null : Number(w) }
+    if (!cue) return
+    const el = e.target as HTMLElement
+    const w = el.closest('[data-w]')?.getAttribute('data-w')
+    const grip = el.closest('[data-grip]')?.getAttribute('data-grip') ?? 'move'
+    const r = block.current?.getBoundingClientRect()
+    const cx = r ? r.left + r.width / 2 : e.clientX
+    const cy = r ? r.top + r.height / 2 : e.clientY
+    drag.current = {
+      x: e.clientX, y: e.clientY, moved: false, w: w == null || grip !== 'move' ? null : Number(w), grip,
+      cx, cy, center: cue.look.center, d0: Math.max(4, Math.hypot(e.clientX - cx, e.clientY - cy)),
+      a0: Math.atan2(e.clientY - cy, e.clientX - cx), size0: cue.look.size, turn0: cue.look.rotation,
+    }
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    e.stopPropagation()
+  }
+  /** The move so far, in frame shares, after sticking to the centre lines */
+  const shift = (e: PointerEvent, d: NonNullable<typeof drag.current>) => {
+    let sx = (e.clientX - d.x) / W
+    let sy = -(e.clientY - d.y) / H
+    const v = !e.altKey && Math.abs((d.center[0] + sx - 0.5) * W) < SNAP_PX
+    const h = !e.altKey && Math.abs((d.center[1] + sy - 0.5) * H) < SNAP_PX
+    if (v) sx = 0.5 - d.center[0]
+    if (h) sy = 0.5 - d.center[1]
+    return { sx, sy, v, h }
   }
   const move = (e: PointerEvent) => {
     const d = drag.current
     if (!d) return
-    const dx = e.clientX - d.x
-    const dy = e.clientY - d.y
-    if (!d.moved && Math.abs(dx) + Math.abs(dy) < 4) return
+    if (!d.moved && Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y) < 4) return
     d.moved = true
-    p.onDrag(dx / W, -dy / H, false)
+    if (d.grip === 'size') {
+      const f = Math.hypot(e.clientX - d.cx, e.clientY - d.cy) / d.d0
+      p.onSize(Math.round(Math.min(SIZE_MAX, Math.max(SIZE_MIN, d.size0 * f)) * 1000) / 1000)
+    } else if (d.grip === 'turn') {
+      // Screen angles grow clockwise; Resolve's rotation grows counter-clockwise
+      let deg = d.turn0 - ((Math.atan2(e.clientY - d.cy, e.clientX - d.cx) - d.a0) * 180) / Math.PI
+      deg = ((deg + 540) % 360) - 180
+      deg = e.shiftKey ? Math.round(deg / 15) * 15 : Math.abs(deg) < 1.5 ? 0 : Math.round(deg * 2) / 2
+      p.onTurn(Math.min(TURN_MAX, Math.max(-TURN_MAX, deg)))
+    } else {
+      const m = shift(e, d)
+      if (m.v !== guides.v || m.h !== guides.h) setGuides({ v: m.v, h: m.h })
+      p.onDrag(m.sx, m.sy, false)
+    }
   }
   const up = (e: PointerEvent) => {
     const d = drag.current
     drag.current = null
+    setGuides({ v: false, h: false })
     if (!d) return
-    if (d.moved) p.onDrag((e.clientX - d.x) / W, -(e.clientY - d.y) / H, true)
-    else if (d.w !== null) p.onPickWord(d.w)
+    if (d.moved && d.grip === 'move') { const m = shift(e, d); p.onDrag(m.sx, m.sy, true) }
+    else if (!d.moved && d.w !== null) p.onPickWord(d.w)
   }
 
   // Scrub bar: where the playhead is along all the captions; click or drag to move it
@@ -136,7 +185,10 @@ export function Viewer(p: Props) {
   const fr = (
     <div className="vframe" ref={frame} style={{ width: W, height: H }}>
       <div className="vbg" />
-      {cue && onScreen && <Caption cue={cue} ms={ms} W={W} H={H} aspect={aspect} selWord={p.selWord} blockRef={block} onDown={down} onMove={move} onUp={up} />}
+      {cue && onScreen && <Caption cue={cue} ms={ms} W={W} H={H} aspect={aspect} selWord={p.selWord} blockRef={block} onDown={down} onMove={move} onUp={up}
+        handles={!p.playing && !p.loop} />}
+      {guides.v && <i className="vguide v" />}
+      {guides.h && <i className="vguide h" />}
       {p.safe !== 'off' && <Safe area={p.safe} />}
       {warn && <span className="vwarn">Under the {SAFE[p.safe as 'reels'].name} buttons: viewers may not see it</span>}
     </div>
@@ -187,9 +239,11 @@ export interface CapProps {
   onDown: (e: PointerEvent) => void
   onMove: (e: PointerEvent) => void
   onUp: (e: PointerEvent) => void
+  /** Show the resize and turn handles (the preview while it stands still; never in drawn frames) */
+  handles?: boolean
 }
 
-export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMove, onUp }: CapProps) {
+export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMove, onUp, handles }: CapProps) {
   const L = cue.look
   const share = fontShare(aspect)
   const fontPx = L.size * W * share
@@ -231,7 +285,7 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
     <div className="vgroup" style={group}>
       <div
         ref={blockRef}
-        className="vblock"
+        className={'vblock' + (handles ? ' edit' : '')}
         onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp}
         style={{
           ...base,
@@ -258,6 +312,10 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
           }
           return <span key={i} className={'ch' + (wi !== null && wi === selWord ? ' sel' : '')} data-w={wi ?? undefined} style={st}>{ch}</span>
         })}
+        {handles && <>
+          {['c1', 'c2', 'c3', 'c4'].map((c) => <span key={c} className={'vh ' + c} data-grip="size" title="Drag to make it bigger or smaller" />)}
+          <span className="vh turn" data-grip="turn" title="Drag to turn it (Shift: 15° steps)" />
+        </>}
       </div>
       {cue.words.filter((w) => w.solo).map((w) => {
         const s = w.solo!
