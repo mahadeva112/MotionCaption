@@ -160,6 +160,16 @@ export const FRAMES: { label: string; aspect: number }[] = [
   { label: '9:16', aspect: 9 / 16 }, { label: '16:9', aspect: 16 / 9 }, { label: '1:1', aspect: 1 }, { label: '4:5', aspect: 4 / 5 },
 ]
 
+/** How long the timeline is in Resolve, in ms; from its clips when an older script did not say */
+export function timelineLength(d: TimelineData | null | undefined): number {
+  if (!d || !d.timeline) return 0
+  if (d.timeline.length && d.timeline.length > 0) return d.timeline.length
+  let end = 0
+  for (const v of d.video ?? []) for (const c of v.clips) end = Math.max(end, c.end)
+  for (const s of d.subtitle ?? []) for (const c of s.cues) end = Math.max(end, c.end)
+  return end
+}
+
 export function timecode(ms: number, fps = 24): string {
   const nominal = Math.round(fps)
   const f = Math.round((ms / 1000) * fps)

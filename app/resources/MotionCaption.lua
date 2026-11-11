@@ -1199,7 +1199,9 @@ local function read_timeline()
         readAt = os.date("%Y-%m-%dT%H:%M:%S"), project = project:GetName(),
         timeline = { name = tl:GetName(), fps = tostring(tl:GetSetting("timelineFrameRate")), rate = rate,
             dropFrame = tostring(tl:GetSetting("timelineDropFrameTimecode")) == "1",
-            width = tonumber(tl:GetSetting("timelineResolutionWidth")), height = tonumber(tl:GetSetting("timelineResolutionHeight")) },
+            width = tonumber(tl:GetSetting("timelineResolutionWidth")), height = tonumber(tl:GetSetting("timelineResolutionHeight")),
+            -- The whole timeline's length in ms, as Resolve shows it
+            length = (function() local e = try(function() return tl:GetEndFrame() end); return e and ms(e) or nil end)() },
         video = {}, subtitle = {}, texts = {},
     }
     local looked, t0 = 0, os.clock()

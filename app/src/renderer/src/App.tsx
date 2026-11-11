@@ -17,7 +17,7 @@ import { LibraryD } from './LibraryD'
 import { usableLayers } from '@core/layers'
 import {
   cuesOf, editsByStart, editsOf, editsOnto, FRAMES, isSupersSrc, isTextSrc, layersIn, layersOf, lookOf, norm, sentKey, sourceKey, srcNameOf,
-  superCue, supersKey, wordsIn,
+  superCue, supersKey, timelineLength, wordsIn,
   type Edits, type EditsByStart, type SafeArea, type SavedSuper, type Scope, type Source, type SrcTrack, type Target,
 } from './model'
 import { SendDialog } from './SendDialog'
@@ -401,7 +401,9 @@ export function App() {
   }
 
   // ── Playback: Space runs the playhead along the timeline, caption after caption ──
-  const endMs = cues.reduce((m, c) => Math.max(m, c.endMs), 0)
+  /** The timeline's own length in Resolve; an SRT ends with its last caption */
+  const tlLength = source?.kind === 'timeline' ? timelineLength(source.data) : 0
+  const endMs = cues.reduce((m, c) => Math.max(m, c.endMs), tlLength)
   const live = useRef({ cues, endMs, active: cue?.n ?? 0, playing })
   live.current = { cues, endMs, active: cue?.n ?? 0, playing }
   /** Picking a caption parks the playhead where it is fully on screen; Play then starts from the caption's start */
@@ -652,7 +654,7 @@ export function App() {
             onSrcTrack={switchSource}
             srcName={srcName} cues={cues} presetName={(n) => presetById(presetOf(n))?.name ?? ''} ownLook={ownLook}
             active={cue?.n ?? 0} sel={sel} onCue={pickCue} playing={playing} onSeek={seek}
-            target={target} onTarget={(t) => setTarget((x) => ({ ...x, ...t }))} fps={fps}
+            target={target} onTarget={(t) => setTarget((x) => ({ ...x, ...t }))} fps={fps} lengthMs={tlLength}
             supers={source.kind === 'timeline' ? (source.supers ?? []).length : 0} onAddSuper={supersOn ? addSuper : null}
           />
         </div>
