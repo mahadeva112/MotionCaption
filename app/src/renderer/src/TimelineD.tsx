@@ -24,6 +24,10 @@ interface Props {
   playing: boolean
   /** Move the playhead (click or drag on the ruler) */
   onSeek: (ms: number) => void
+  /** How many supers this timeline has (made in the app) */
+  supers: number
+  /** Adds a super at the playhead; set while the supers are shown */
+  onAddSuper: (() => void) | null
 }
 
 const HEAD = 200
@@ -38,7 +42,8 @@ export function TimelineD(p: Props) {
   const srcSub = subs.find((s) => s.index === p.srcTrack) ?? null
   const fromText = isTextSrc(p.srcTrack)
   const layers = fromText ? layersIn(p.data?.texts, p.srcTrack!) : []
-  const choices = srcChoices(p.data, p.srcTrack)
+  const choices = srcChoices(p.data, p.srcTrack, p.supers)
+  const supersOn = p.srcTrack === 'supers'
   // The tracks the Text+ layers sit on, e.g. "V2, V3"
   const layerTracks = [...new Set(layers.map((t) => t.track))].sort((a, b) => a - b).map((t) => 'V' + t).join(', ')
   const endMs = Math.max(10000, ...p.cues.map((c) => c.endMs))
@@ -79,13 +84,15 @@ export function TimelineD(p: Props) {
             {choices.map((c) => <option key={String(c.value)} value={String(c.value)}>{c.label}</option>)}
           </select>
         ) : <b className="ro">{p.srcName}</b>}
+        {p.onAddSuper && <button className="mini addsuper" onClick={p.onAddSuper} title="A new super at the playhead, 3 s long. Write it, time it and animate it here; Send places it in Resolve.">
+          <Icon name="plus" />Add super</button>}
         <span className="arrow">→</span>
         <span>Put on</span>
         <select className="sl" value={String(p.target.track)} onChange={(e) => p.onTarget({ track: e.target.value === 'new' ? 'new' : Number(e.target.value) })}>
           <option value="new">New track above everything</option>
           {video.map((v) => <option key={v.index} value={v.index}>V{v.index} · {v.name} (empty spots only)</option>)}
         </select>
-        {p.srcTrack !== null && (
+        {p.srcTrack !== null && !supersOn && (
           <button className={'tg' + (p.target.turnOffSource ? ' on' : '')} onClick={() => p.onTarget({ turnOffSource: !p.target.turnOffSource })}
             title={fromText ? 'Your Text+ layers are turned off in Resolve, never deleted, so the words do not show twice' : undefined}>
             <i>✓</i>{fromText ? 'Turn off the original Text+ after' : `Turn off ST${p.srcTrack} after`}
@@ -104,7 +111,9 @@ export function TimelineD(p: Props) {
           {newTrack
             ? <div className="th tgt"><b>V{video.length + 1}</b><span>Text+ captions<small>new track · {placed} clips</small></span><i className="tag t">TARGET</i></div>
             : <div className="th tgt"><b>V{p.target.track}</b><span>Text+ on {tgtTrack?.name ?? 'track'}<small>empty spots · {placed} clips</small></span><i className="tag t">TARGET</i></div>}
-          {fromText
+          {supersOn
+            ? <div className="th st src" title="Supers live in this app: add them with Add super"><b>SUP</b><span>Supers<small>made here · {p.cues.length}</small></span><i className="tag s">SOURCE</i></div>
+            : fromText
             ? <div className="th st src" title="Change it under Read from"><b>T+</b><span>Text+ on {layerTracks}<small>{layers.length} layers</small></span><i className="tag s">SOURCE</i></div>
             : srcSub
             ? <div className="th st src" title="Change it under Read from"><b>ST{srcSub.index}</b><span>{srcSub.name}<small>subtitles · {srcSub.cues.length}</small></span><i className="tag s">SOURCE</i></div>

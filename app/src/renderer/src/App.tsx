@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { compileCue, type CompileOpts } from '@core/compile'
-import { jobToLua, makeJob, sigOf } from '@core/job'
+import { jobToLua, makeJob, sendSig, type Rendered } from '@core/job'
 import { DEFAULT_HIGHLIGHT, DEFAULT_LOOK, DEFAULT_MOTION, type Highlight, type Look, type Motion, type WordLook } from '@core/look'
 import { EMPTY_PATTERN, patternList, type Pattern } from '@core/pattern'
 import { presetById } from '@core/presets'
 import { parseSrt } from '@core/srt'
 import type { Cue } from '@core/srt'
-import type { LinkStatus, TimelineData } from '../../preload'
+import type { LinkStatus, RenderProgress, TimelineData } from '../../preload'
 import { hasGlyphs, loadFonts, measure, type FontFamily } from './fonts'
 import { clock } from './clock'
 import { CaptionCard } from './CaptionCard'
@@ -15,8 +15,9 @@ import { Icon } from './Icon'
 import { LibraryD } from './LibraryD'
 import { usableLayers } from '@core/layers'
 import {
-  cuesOf, editsByStart, editsOf, editsOnto, FRAMES, isTextSrc, layersIn, layersOf, lookOf, norm, sentKey, sourceKey, srcNameOf, wordsIn,
-  type Edits, type EditsByStart, type SafeArea, type Scope, type Source, type SrcTrack, type Target,
+  cuesOf, editsByStart, editsOf, editsOnto, FRAMES, isSupersSrc, isTextSrc, layersIn, layersOf, lookOf, norm, sentKey, sourceKey, srcNameOf,
+  superCue, supersKey, wordsIn,
+  type Edits, type EditsByStart, type SafeArea, type SavedSuper, type Scope, type Source, type SrcTrack, type Target,
 } from './model'
 import { SendDialog } from './SendDialog'
 import { TimelineD } from './TimelineD'
@@ -40,6 +41,20 @@ const keptEdits = (src: Source): Edits =>
 
 /** Look keys a whole-script change takes back from captions that had their own */
 const DEFAULT_PRESET = 'fade'
+
+/** Supers keep their own look, animation and highlight, apart from the subtitles' ones.
+ *  They start near the top, bigger, coming in out of a blur. */
+const SUPER_LOOK: Look = { ...DEFAULT_LOOK, size: 0.085, anchor: 1, lines: 'auto' }
+const SUPER_PRESET = 'blurRise'
+/** A new super: this long, from the playhead */
+const SUPER_MS = 3000
+
+/** How captions go into Resolve: drawn by the app as clips (works the same in Resolve Free),
+ *  or as editable Text+ titles animated in Resolve's Fusion */
+export type Delivery = 'drawn' | 'textplus'
+
+/** A timeline's supers as kept on this computer */
+const savedSupers = (d: TimelineData) => saved(supersKey(d), { list: [] as SavedSuper[] }).list.map(superCue)
 const DEFAULT_TARGET: Target = { track: 'new', turnOffSource: true, replace: true }
 
 type StyleBase = { name: string | null; look: Partial<Look> }
@@ -62,6 +77,10 @@ export function App() {
   const [motion, setMotion] = useState<Motion>(() => saved('mc.motion', DEFAULT_MOTION))
   const [edits, setEdits] = useState<Edits>({})
   const [defaultPreset, setDefaultPreset] = useState(() => saved('mc.misc', { preset: DEFAULT_PRESET }).preset)
+  /** Whose settings the look, animation and highlight above are: '' the subtitles', '.supers' the supers' */
+  const [stateKit, setStateKit] = useState('')
+  const [delivery, setDelivery] = useState<Delivery>(() => saved('mc.delivery', { how: 'drawn' as Delivery }).how)
+  useEffect(() => store('mc.delivery', { how: delivery }), [delivery])
   const [active, setActive] = useState(1)
   const [sel, setSel] = useState<Set<number>>(new Set())
   const [scope, setScope] = useState<Scope>('all')
@@ -84,18 +103,21 @@ export function App() {
   const [patternOn, setPatternOn] = useState(() => saved('mc.pattern', { on: false }).on)
   /** Clicks in the animation library add to the pattern instead of using the animation */
   const [patternPick, setPatternPick] = useState(false)
-  useEffect(() => store('mc.pattern', { pattern, on: patternOn }), [pattern, patternOn])
+  useEffect(() => store('mc.pattern' + stateKit, { pattern, on: patternOn }), [pattern, patternOn, stateKit])
   const [recent, setRecent] = useState<string[]>(() => saved('mc.misc', { recent: [] as string[] }).recent)
   const [userStyles, setUserStyles] = useState<{ name: string; look: Partial<Look> }[]>(() => saved('mc.styles', { list: [] as { name: string; look: Partial<Look> }[] }).list)
   /** The Style last picked: the Inspector's ↺ buttons put a setting back to its value */
   const [styleBase, setStyleBase] = useState<StyleBase>(() => saved('mc.styleBase', NO_STYLE))
-  useEffect(() => store('mc.styleBase', styleBase), [styleBase])
+  useEffect(() => store('mc.styleBase' + stateKit, styleBase), [styleBase, stateKit])
   const baseLook = useMemo<Look>(() => lookOf(DEFAULT_LOOK, { 0: { words: {}, look: styleBase.look } }, 0), [styleBase])
 
-  useEffect(() => store('mc.look', look), [look])
-  useEffect(() => store('mc.highlight', highlight), [highlight])
-  useEffect(() => store('mc.motion', motion), [motion])
-  useEffect(() => store('mc.misc', { preset: defaultPreset, frame, recent }), [defaultPreset, frame, recent])
+  useEffect(() => store('mc.look' + stateKit, look), [look, stateKit])
+  useEffect(() => store('mc.highlight' + stateKit, highlight), [highlight, stateKit])
+  useEffect(() => store('mc.motion' + stateKit, motion), [motion, stateKit])
+  useEffect(() => {
+    if (stateKit) store('mc.preset' + stateKit, { preset: defaultPreset })
+    store('mc.misc', { preset: stateKit ? saved('mc.misc', { preset: DEFAULT_PRESET }).preset : defaultPreset, frame, recent })
+  }, [defaultPreset, frame, recent, stateKit])
   useEffect(() => { loadFonts().then(setFonts) }, [])
 
   // The timeline the Resolve script read; again whenever it writes a new one
@@ -103,16 +125,17 @@ export function App() {
     const d = await window.mc.timeline()
     setTimelineInfo(d)
     const subs = d?.subtitle ?? []
-    const hasText = usableLayers(d?.texts).length > 0
-    if (!d || !d.timeline || (!subs.length && !hasText)) return
+    if (!d || !d.timeline) return
     const tlName = d.timeline.name
     setSource((prev) => {
       const same = prev?.kind === 'timeline' && prev.data.timeline && prev.data.timeline.name === tlName
-      const valid = (t: SrcTrack) => (isTextSrc(t) ? layersIn(d.texts, t).length > 0 : subs.some((s) => s.index === t))
+      const valid = (t: SrcTrack) => (t === 'supers' || (isTextSrc(t) ? layersIn(d.texts, t).length > 0 : subs.some((s) => s.index === t)))
       const keep = same && valid(prev.track) ? prev.track : null
-      // Subtitles first (the usual case); a timeline with only Text+ layers opens on those
-      const track: SrcTrack = keep ?? (subs.find((s) => s.cues.length) ?? subs[0])?.index ?? 'text'
-      const next: Source = { kind: 'timeline', data: d, track }
+      // Subtitles first (the usual case); a timeline with only Text+ layers opens on those,
+      // and one with neither on the supers made here
+      const track: SrcTrack = keep ?? (subs.find((s) => s.cues.length) ?? subs[0])?.index
+        ?? (usableLayers(d.texts).length ? 'text' : 'supers')
+      const next: Source = { kind: 'timeline', data: d, track, supers: same && prev.supers ? prev.supers : savedSupers(d) }
       if (!same || keep === null) { setEdits(keptEdits(next)); setSel(new Set()); setSelWord(null); setActive(1) }
       // The same captions read again: each change stays with its caption, by start time,
       // even when captions were added or removed before it
@@ -147,6 +170,54 @@ export function App() {
   const tl = source?.kind === 'timeline' && source.data.timeline ? source.data.timeline : null
   const aspect = tl && tl.width && tl.height ? tl.width / tl.height : FRAMES.find((f) => f.label === frame)!.aspect
   const fps = tl?.rate ?? 24
+  const supersOn = isSupersSrc(source)
+  const noun = supersOn ? 'supers' : 'captions'
+  /** Drawing needs the timeline's own size and rate, so only a timeline read from Resolve is drawn */
+  const drawn = delivery === 'drawn' && !!tl
+
+  // Supers and subtitles each keep their own look, animation and highlight
+  const kit = supersOn ? '.supers' : ''
+  useEffect(() => {
+    if (kit === stateKit) return
+    const base = kit ? SUPER_LOOK : DEFAULT_LOOK
+    setLook(saved('mc.look' + kit, base))
+    setHighlight(saved('mc.highlight' + kit, DEFAULT_HIGHLIGHT))
+    setMotion(saved('mc.motion' + kit, DEFAULT_MOTION))
+    setDefaultPreset(kit ? saved('mc.preset' + kit, { preset: SUPER_PRESET }).preset : saved('mc.misc', { preset: DEFAULT_PRESET }).preset)
+    setStyleBase(saved('mc.styleBase' + kit, NO_STYLE))
+    const pt = saved('mc.pattern' + kit, { pattern: EMPTY_PATTERN, on: false })
+    setPattern({ ...EMPTY_PATTERN, ...pt.pattern }); setPatternOn(pt.on); setPatternPick(false)
+    setStateKit(kit)
+  }, [kit, stateKit])
+
+  // ── Supers: made, timed and written here; kept on this computer per timeline ──
+  function setSupers(change: (list: Cue[]) => Cue[]) {
+    setSource((prev) => {
+      if (prev?.kind !== 'timeline') return prev
+      const list = change(prev.supers ?? []).slice().sort((a, b) => a.startMs - b.startMs || a.n - b.n)
+      store(supersKey(prev.data), { list: list.map((c): SavedSuper => ({ n: c.n, startMs: c.startMs, endMs: c.endMs, text: c.text })) })
+      return { ...prev, supers: list }
+    })
+  }
+  function addSuper() {
+    if (source?.kind !== 'timeline') return
+    const list = source.supers ?? []
+    const n = Math.max(0, ...list.map((c) => c.n)) + 1
+    const at = Math.max(0, Math.round(clock.get()))
+    setSupers((l) => [...l, superCue({ n, startMs: at, endMs: at + SUPER_MS, text: 'New super' })])
+    setActive(n); setSel(new Set([n])); setScope('all'); setTab('Caption'); setPlaying(false)
+  }
+  function updateSuper(n: number, patch: Partial<SavedSuper>) {
+    setSupers((l) => l.map((c) => (c.n !== n ? c : superCue({ n, startMs: c.startMs, endMs: c.endMs, text: c.text, ...patch }))))
+  }
+  function deleteSuper(n: number) {
+    const i = cues.findIndex((c) => c.n === n)
+    const next = cues[i + 1] ?? cues[i - 1]
+    setSupers((l) => l.filter((c) => c.n !== n))
+    setEdits((e) => { const x = { ...e }; delete x[n]; return x })
+    setSel((s) => { const x = new Set(s); x.delete(n); return x })
+    if (next) setActive(next.n)
+  }
 
   const baseCues = useMemo(() => cuesOf(source), [source])
   const cues: Cue[] = useMemo(() => baseCues.map((c) => (edits[c.n]?.text !== undefined ? { ...c, text: edits[c.n]!.text! } : c)), [baseCues, edits])
@@ -193,14 +264,14 @@ export function App() {
       for (const c of cues) {
         if (c.endMs <= c.startMs || !c.text.trim()) continue
         seen.add(sentKey(c))
-        try { if (sent[sentKey(c)] !== sigOf(compileCue(c, presetOf(c.n), opts(c.n)))) n++ } catch { n++ }
+        try { if (sent[sentKey(c)] !== sendSig(compileCue(c, presetOf(c.n), opts(c.n)), drawn)) n++ } catch { n++ }
       }
       for (const k of Object.keys(sent)) if (!seen.has(k)) n++
       setChanged(n)
     }, 300)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sent, cues, opts, defaultPreset, patterned])
+  }, [sent, cues, opts, defaultPreset, patterned, drawn])
 
   // ── Scope-aware changes ──
   const targets = (): number[] => (scope === 'selected' ? [...sel] : cue ? [cue.n] : [])
@@ -272,6 +343,7 @@ export function App() {
   }
   function setText(text: string | null) {
     if (!cue) return
+    if (supersOn) { if (text !== null) updateSuper(cue.n, { text }); return }
     setEdits((e) => ({ ...e, [cue.n]: { words: {}, ...e[cue.n], text: text ?? undefined } }))
   }
 
@@ -343,9 +415,9 @@ export function App() {
   function resetAll() {
     setUndo({ look, highlight, motion, edits, preset: defaultPreset, target, safe, styleBase, pattern, patternOn })
     setPattern(EMPTY_PATTERN); setPatternOn(false); setPatternPick(false)
-    setLook(DEFAULT_LOOK); setHighlight(DEFAULT_HIGHLIGHT); setMotion(DEFAULT_MOTION); setStyleBase(NO_STYLE)
+    setLook(stateKit ? SUPER_LOOK : DEFAULT_LOOK); setHighlight(DEFAULT_HIGHLIGHT); setMotion(DEFAULT_MOTION); setStyleBase(NO_STYLE)
     // Text+ layers go back to the look they have in Resolve
-    setEdits(editsOf(source)); setDefaultPreset(DEFAULT_PRESET); setTarget(DEFAULT_TARGET); setSafe('off')
+    setEdits(editsOf(source)); setDefaultPreset(stateKit ? SUPER_PRESET : DEFAULT_PRESET); setTarget(DEFAULT_TARGET); setSafe('off')
     setSel(new Set()); setSelWord(null); setScope('all'); setEverywhere(false); setTab('Look')
     setPlaying(false); setHoverPreset(null); setResetting(false)
     const first = baseCues[0]
@@ -423,15 +495,21 @@ export function App() {
     : `V${target.track} · ${timelineInfo?.video?.find((v) => v.index === target.track)?.name ?? ''} (empty spots; the rest on a new track)`
   /** The job last handed to Send: its id and each caption's signature by its time */
   const built = useRef<{ id: string; sigs: Record<string, string> } | null>(null)
-  function buildJob() {
+  async function buildJob(onDraw?: (p: RenderProgress) => void) {
     const out = placeable.map((c) => compileCue(c, presetOf(c.n), opts(c.n)))
+    let renders: Rendered[] | undefined
+    if (drawn && tl) {
+      const off = onDraw ? window.mc.onRenderProgress(onDraw) : null
+      try { renders = await window.mc.renderCues({ width: tl.width, height: tl.height, fps: tl.rate, cues: out }) } finally { off?.() }
+    }
     const job = makeJob(srcName || 'Captions', out, undefined, new Date(), {
+      renders,
       project: source?.kind === 'timeline' ? source.data.project : undefined,
       timeline: tl?.name,
       target: {
         track: target.track, replace: target.replace,
         ...(source?.kind === 'timeline' && target.turnOffSource
-          ? (isTextSrc(source.track) ? { disableClips: fromLayers() } : { disableSubtitle: source.track })
+          ? (isTextSrc(source.track) ? { disableClips: fromLayers() } : typeof source.track === 'number' ? { disableSubtitle: source.track } : {})
           : {}),
       },
     })
@@ -445,10 +523,11 @@ export function App() {
     store('mc.sent.' + srcKey, { sigs: built.current.sigs })
   }
   const updating = sent !== null && target.replace
-  const sendLabel = !updating ? `Send ${placeable.length} captions to Resolve`
+  const one = noun.slice(0, -1)
+  const sendLabel = !updating ? `Send ${placeable.length} ${noun} to Resolve`
     : changed === null ? 'Update in Resolve'
       : changed === 0 ? 'Update · nothing changed'
-        : `Update ${changed} changed caption${changed === 1 ? '' : 's'}`
+        : `Update ${changed} changed ${changed === 1 ? one : noun}`
 
   const ownLook = (n: number) => !!(edits[n]?.look || edits[n]?.preset || Object.keys(edits[n]?.words ?? {}).length)
   const words = cue ? wordsIn(cue.text) : []
@@ -485,7 +564,9 @@ export function App() {
         <div className={'studio2' + (aspect >= 1 ? ' wide' : '')}>
           <Viewer cue={compiled} aspect={aspect} fps={fps} safe={safe} selWord={selWord} playing={playing} loop={!!hoverPreset}
             endMs={endMs} onSeek={seek}
-            label={tryingName !== null ? `Trying ${tryingName} · click to use` : cue ? `Caption ${cue.n} of ${cues.length} · ${presetById(presetOf(cue.n))?.name ?? ''}` : 'No captions'}
+            label={tryingName !== null ? `Trying ${tryingName} · click to use`
+              : cue ? `${supersOn ? 'Super' : 'Caption'} ${cues.indexOf(cue) + 1} of ${cues.length} · ${presetById(presetOf(cue.n))?.name ?? ''}`
+                : supersOn ? 'No supers yet: Add super on the timeline' : 'No captions'}
             onPlaying={setPlaying} onPrev={() => step(-1)} onNext={() => step(1)}
             onPickWord={(i) => { setSelWord(i); setTab('Words'); setPlaying(false) }} onDrag={drag} />
           <CaptionCard caption={cue} total={cues.length} words={words} selWord={selWord} styled={styledWords} fps={fps}
@@ -504,6 +585,11 @@ export function App() {
             }}
             fonts={fonts} fontUsed={compiled && compiled.look.font !== effLook.font ? compiled.look.font : null}
             caption={cue ? { n: cue.n, text: cue.text, startMs: cue.startMs, endMs: cue.endMs, edited: edits[cue.n]?.text !== undefined } : null}
+            superEdit={supersOn && cue ? {
+              onStart: (ms) => updateSuper(cue.n, { startMs: Math.max(0, Math.min(ms, cue.endMs - 40)) }),
+              onEnd: (ms) => updateSuper(cue.n, { endMs: Math.max(ms, cue.startMs + 40) }),
+              onDelete: () => deleteSuper(cue.n),
+            } : null}
             fps={fps} onText={setText}
             words={words} selWord={selWord} onSelWord={(i) => { setSelWord(i); setPlaying(false) }}
             wordLook={cue && selWord !== null ? edits[cue.n]?.words[selWord] ?? null : null}
@@ -523,6 +609,7 @@ export function App() {
             srcName={srcName} cues={cues} presetName={(n) => presetById(presetOf(n))?.name ?? ''} ownLook={ownLook}
             active={cue?.n ?? 0} sel={sel} onCue={pickCue} playing={playing} onSeek={seek}
             target={target} onTarget={(t) => setTarget((x) => ({ ...x, ...t }))} fps={fps}
+            supers={source.kind === 'timeline' ? (source.supers ?? []).length : 0} onAddSuper={supersOn ? addSuper : null}
           />
         </div>
       )}
@@ -533,7 +620,8 @@ export function App() {
           <button className="x" onClick={() => setUndo(null)} title="Close">✕</button>
         </div>
       )}
-      {sending && <SendDialog captions={placeable.length} where={where} timeline={tl?.name ?? null} linked={link.alive} build={buildJob}
+      {sending && <SendDialog captions={placeable.length} noun={noun} where={where} timeline={tl?.name ?? null} linked={link.alive} build={buildJob}
+        delivery={drawn ? 'drawn' : 'textplus'} canDraw={!!tl} onDelivery={setDelivery}
         update={updating ? { changed } : null} onDone={sentOk} onClose={() => setSending(false)} />}
     </div>
   )
