@@ -67,7 +67,9 @@ export function installDevApi() {
   const elapsed = () => (performance.now() - sentAt - 1500) / 3000
   const api: Api = {
     // ?empty in the address shows the first-run screen
-    timeline: async () => (location.search.includes('empty') ? null : DEV_TIMELINE),
+    // ?stale: read two days ago, as when the app is opened from the Start menu (with ?nolink: not opened)
+    timeline: async () => (location.search.includes('empty') ? null
+      : location.search.includes('stale') ? { ...DEV_TIMELINE, readAt: new Date(Date.now() - 2 * 864e5).toISOString() } : DEV_TIMELINE),
     // ?nolink in the address shows the app as if the Link window were closed
     linkStatus: async () => (location.search.includes('nolink') ? { alive: false, timeline: null } : { alive: true, timeline: 'Reel_Final' }),
     refreshTimeline: async () => true,
