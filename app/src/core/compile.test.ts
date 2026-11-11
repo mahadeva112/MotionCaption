@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { EASE } from './anim.ts'
-import { compileCue, fallbackStyle, fontFor, timeTracks, wordRange } from './compile.ts'
+import { compileCue, fallbackStyle, fontFor, hasOwnOut, timeTracks, withMotion, wordRange } from './compile.ts'
+import { presetById } from './presets.ts'
 import { jobToLua, luaString, makeJob, sigOf, toLua } from './job.ts'
 import { DEFAULT_LOOK } from './look.ts'
 import type { Cue } from './srt.ts'
@@ -131,5 +132,35 @@ describe('Lua job text', () => {
     expect(job.trackName).toBe('MC My talk')
     expect(job.id).toMatch(/^20261103100000-/)
     expect(jobToLua(job)).toMatch(/^-- MotionCaption job.*\nreturn \{\n  version = 1,/)
+  })
+})
+
+describe('withMotion', () => {
+  const fade = presetById('fade')!.tracks
+  const M = { speed: 1, out: 'preset', outMs: 250 } as const
+
+  it('borrows another animation’s way out', () => {
+    const t = withMotion(fade, { ...M, out: 'other', outFrom: 'zoomThrough' })
+    // Fade's own fade-in stays; Zoom Through's way out (fade and grow) replaces fade's
+    const size = t.find((x) => x.input === 'Size')!
+    expect(size.keys[0]).toMatchObject({ at: 0, v: 1 })
+    expect(size.keys.filter((k) => k.from === 'end').map((k) => k.v)).toEqual([1, 1.25])
+    const op = t.find((x) => x.input === 'Opacity1')!
+    expect(op.keys.filter((k) => (k.from ?? 'start') === 'start').map((k) => k.v)).toEqual([0, 1])
+    expect(op.keys.filter((k) => k.from === 'end').length).toBeGreaterThan(0)
+  })
+
+  it('keeps the way out when the borrowed animation has none', () => {
+    expect(withMotion(fade, { ...M, out: 'other', outFrom: 'typewriter' })).toEqual(withMotion(fade, M))
+    expect(hasOwnOut('typewriter')).toBe(false)
+    expect(hasOwnOut('zoomThrough')).toBe(true)
+  })
+
+  it('puts its own curves on the way in and the way out', () => {
+    const c = [0.1, 0.2, 0.3, 0.4] as const
+    const d = [0.5, 0.6, 0.7, 0.8] as const
+    const op = withMotion(fade, { ...M, easeIn: c, easeOut: d })[0]!
+    expect(op.keys.map((k) => k.ease)).toEqual([c, c, d, d])
+    expect(withMotion(fade, { ...M, easeIn: c })[0]!.keys.slice(2).map((k) => k.ease)).toEqual(fade[0]!.keys.slice(2).map((k) => k.ease))
   })
 })

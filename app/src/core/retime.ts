@@ -81,3 +81,38 @@ export function nudge(span: Span, frames: number, fps: number): Span {
   const s = Math.max(0, onFrame(span.startMs + frames * frameMs(fps), fps))
   return { startMs: s, endMs: s + len }
 }
+
+/**
+ * A lane for each block, 0 at the top: the first lane where it covers nothing, taking the
+ * blocks by start time. Resolve gets them the same way: each lane is its own video track.
+ */
+export function lanesOf(spans: Span[]): number[] {
+  const order = spans.map((s, i) => i).sort((a, b) => spans[a]!.startMs - spans[b]!.startMs || a - b)
+  const ends: number[] = []
+  const lane: number[] = new Array(spans.length).fill(0)
+  for (const i of order) {
+    const s = spans[i]!
+    let l = ends.findIndex((e) => e <= s.startMs)
+    if (l < 0) { l = ends.length; ends.push(0) }
+    ends[l] = s.endMs
+    lane[i] = l
+  }
+  return lane
+}
+
+/** A caption's words in two parts near `share` of its letters; each part keeps a word.
+ *  One word stays whole in both. */
+export function splitText(text: string, share: number): [string, string] {
+  const words = text.split(/\s+/).filter(Boolean)
+  if (words.length < 2) return [text, text]
+  const total = words.reduce((n, w) => n + w.length, 0)
+  let k = 1
+  let best = Infinity
+  let run = 0
+  for (let i = 1; i < words.length; i++) {
+    run += words[i - 1]!.length
+    const d = Math.abs(run / total - share)
+    if (d < best) { best = d; k = i }
+  }
+  return [words.slice(0, k).join(' '), words.slice(k).join(' ')]
+}

@@ -211,22 +211,51 @@ const scaleKeys = (keys: Key[], speed: number): Key[] => keys.map((k) => ({ ...k
 /** Keys held at one value, for an input that must not move */
 const hold = (target: Target, input: string, v: Value): Track => ({ target, input, keys: [{ at: 0, v }] })
 
-/** The preset's tracks with the Animation tab's speed and out animation applied */
+const isOut = (k: Key) => (k.from ?? 'start') === 'end'
+
+/** Tracks of a preset's way out that can go on any caption: the whole caption's, not per letter */
+const outTracks = (tracks: Track[]) =>
+  tracks.filter((t) => (t.target === 'text' || t.target === 'move') && t.keys.some((k) => isOut(k) && k.at < 0))
+
+/** Does this animation have a way out another one can borrow (Animation tab › Out › From)? */
+export const hasOwnOut = (presetId: string) => outTracks(presetById(presetId)?.tracks ?? []).length > 0
+
+/** The preset's tracks with the Animation tab's speed, way out and speed curves applied */
 export function withMotion(tracks: Track[], motion: Motion): Track[] {
   let out = tracks.map((t) => ({ ...t, keys: scaleKeys(t.keys, motion.speed) }))
-  if (motion.out === 'preset') return out
-  // Drop the preset's own way out, then add the chosen one
-  out = out.map((t) => ({ ...t, keys: t.keys.filter((k) => (k.from ?? 'start') === 'start') })).filter((t) => t.keys.length)
-  const ms = motion.outMs
-  const append = (target: Target, input: string, from: Value, to: Value) => {
-    let t = out.find((x) => x.target === target && x.input === input)
-    if (!t) { t = hold(target, input, from); out.push(t) }
-    t.keys = [...t.keys, { at: -ms, from: 'end', v: from, ease: EASE.in }, { at: 0, from: 'end', v: to }]
+  const borrowed = motion.out === 'other' && motion.outFrom ? outTracks(presetById(motion.outFrom)?.tracks ?? []) : []
+  if (motion.out !== 'preset' && !(motion.out === 'other' && !borrowed.length)) {
+    // Drop the preset's own way out, then add the chosen one
+    out = out.map((t) => ({ ...t, keys: t.keys.filter((k) => !isOut(k)) })).filter((t) => t.keys.length)
+    const ms = motion.outMs
+    const append = (target: Target, input: string, from: Value, to: Value) => {
+      let t = out.find((x) => x.target === target && x.input === input)
+      if (!t) { t = hold(target, input, from); out.push(t) }
+      t.keys = [...t.keys, { at: -ms, from: 'end', v: from, ease: EASE.in }, { at: 0, from: 'end', v: to }]
+    }
+    if (motion.out === 'other') {
+      // Another animation's way out, at this one's speed. An input the caption does not
+      // animate on its way in holds where that way out starts.
+      for (const b of borrowed) {
+        const keys = scaleKeys(b.keys.filter(isOut), motion.speed)
+        let t = out.find((x) => x.target === b.target && x.input === b.input)
+        if (!t) { t = hold(b.target, b.input, keys[0]!.v); out.push(t) }
+        t.keys = [...t.keys, ...keys]
+      }
+    } else if (motion.out !== 'none') {
+      append('text', 'Opacity1', 1, 0)
+      if (motion.out === 'slide') append('move', 'Center', [0.5, 0.5], [0.5, 0.44])
+      if (motion.out === 'zoom') append('move', 'Size', 1, 1.3)
+    }
   }
-  if (motion.out === 'none') return out
-  append('text', 'Opacity1', 1, 0)
-  if (motion.out === 'slide') append('move', 'Center', [0.5, 0.5], [0.5, 0.44])
-  if (motion.out === 'zoom') append('move', 'Size', 1, 1.3)
+  // Own speed curves: every step of the way in, every step of the way out
+  const { easeIn, easeOut } = motion
+  if (easeIn || easeOut) {
+    out = out.map((t) => ({
+      ...t,
+      keys: t.keys.map((k) => (isOut(k) ? (easeOut ? { ...k, ease: easeOut } : k) : easeIn ? { ...k, ease: easeIn } : k)),
+    }))
+  }
   return out
 }
 
