@@ -45,7 +45,8 @@ export interface JobProgress {
 export interface TimelineData {
   readAt: string
   project?: string
-  timeline: false | { name: string; fps: string; rate: number; dropFrame: boolean; width: number; height: number }
+  /** length: the whole timeline in ms (missing in reads by an older script) */
+  timeline: false | { name: string; fps: string; rate: number; dropFrame: boolean; width: number; height: number; length?: number }
   video?: { index: number; name: string; enabled: boolean; clips: { start: number; end: number; name: string }[] }[]
   subtitle?: { index: number; name: string; enabled: boolean; cues: { start: number; end: number; text: string }[] }[]
   /** Text+ layers already on the video tracks */

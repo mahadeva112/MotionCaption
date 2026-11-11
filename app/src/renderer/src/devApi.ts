@@ -31,7 +31,7 @@ const HINDI = ['हर पल एक संभावना है', 'ज़्�
 const cueTimes = LINES.map((_, i) => ({ start: 400 + i * 1900, end: 400 + i * 1900 + 1750 }))
 export const DEV_TIMELINE: TimelineData = {
   readAt: new Date().toISOString(), project: 'Reel_Project',
-  timeline: { name: 'Reel_Final', fps: '23.976', rate: 24000 / 1001, dropFrame: false, width: 1080, height: 1920 },
+  timeline: { name: 'Reel_Final', fps: '23.976', rate: 24000 / 1001, dropFrame: false, width: 1080, height: 1920, length: 42000 },
   video: [
     { index: 1, name: 'Interview', enabled: true, clips: [{ start: 0, end: 19500, name: 'Interview.mp4' }] },
     { index: 2, name: 'B-roll', enabled: true, clips: [{ start: 3800, end: 6300, name: 'city_drone.mp4' }, { start: 11000, end: 12900, name: 'hands.mp4' }] },

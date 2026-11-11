@@ -21,6 +21,8 @@ interface Props {
   target: Target
   onTarget: (t: Partial<Target>) => void
   fps: number
+  /** The timeline's length in Resolve (0 for an SRT) */
+  lengthMs: number
   playing: boolean
   /** Move the playhead (click or drag on the ruler) */
   onSeek: (ms: number) => void
@@ -46,7 +48,8 @@ export function TimelineD(p: Props) {
   const supersOn = p.srcTrack === 'supers'
   // The tracks the Text+ layers sit on, e.g. "V2, V3"
   const layerTracks = [...new Set(layers.map((t) => t.track))].sort((a, b) => a - b).map((t) => 'V' + t).join(', ')
-  const endMs = Math.max(10000, ...p.cues.map((c) => c.endMs))
+  // As long as the timeline in Resolve; an SRT gets at least 10 s
+  const endMs = Math.max(p.lengthMs || 10000, ...p.cues.map((c) => c.endMs))
   const width = (endMs / 1000) * pps + 80
   const x = (ms: number) => (ms / 1000) * pps
   const activeCue = p.cues.find((c) => c.n === p.active)
