@@ -12,7 +12,16 @@ export interface CueEdit {
   look?: Partial<Look>
   /** Word index → that word's own look */
   words: Record<number, WordLook>
+  /** Times moved or trimmed on the app's timeline, for this caption only */
+  startMs?: number
+  endMs?: number
+  /** Left out: deleted, or joined into the caption before it */
+  off?: boolean
 }
+
+/** Captions added to a source in the app (a cut or a copy) are numbered from here, apart
+ *  from the source's own (subtitle i is n = i, Text+ layer i is n = i) */
+export const EXTRA_N = 100000
 
 export type Edits = Record<number, CueEdit>
 
@@ -23,8 +32,8 @@ export type SrcTrack = number | 'text' | `text:${number}` | 'supers'
 
 /** Where captions come from: a timeline read from Resolve (see SrcTrack), or an SRT file */
 export type Source =
-  | { kind: 'timeline'; data: TimelineData; track: SrcTrack; supers?: Cue[] }
-  | { kind: 'srt'; name: string; cues: Cue[]; notes: string[] }
+  | { kind: 'timeline'; data: TimelineData; track: SrcTrack; supers?: Cue[]; extra?: Cue[] }
+  | { kind: 'srt'; name: string; cues: Cue[]; notes: string[]; extra?: Cue[] }
 
 export const isTextSrc = (t: SrcTrack | null | undefined): t is 'text' | `text:${number}` => typeof t === 'string' && t !== 'supers'
 /** Supers made in the app: text, timing, look and animation all live here, not in Resolve */
@@ -119,16 +128,38 @@ export const SAFE: Record<Exclude<SafeArea, 'off'>, { name: string; rail: [numbe
   tiktok: { name: 'TikTok', rail: [1.5, 18, 14, 42], meta: 19 },
 }
 
-/** Subtitle cues of a timeline track as captions */
+/** A source's captions as they come (subtitle cues, Text+ layers, SRT, supers), then the
+ *  ones added in the app; caption edits go on top of these */
 export function cuesOf(src: Source | null): Cue[] {
   if (!src) return []
-  if (src.kind === 'srt') return src.cues
+  if (src.kind === 'srt') return [...src.cues, ...(src.extra ?? [])]
   if (src.track === 'supers') return src.supers ?? []
-  if (isTextSrc(src.track)) return cuesOfLayers(layersOf(src))
+  if (isTextSrc(src.track)) return [...cuesOfLayers(layersOf(src)), ...(src.extra ?? [])]
   const t = src.data.subtitle?.find((x) => x.index === src.track)
-  return (t?.cues ?? []).map((c, i) => ({
+  return [...(t?.cues ?? []).map((c, i) => ({
     n: i + 1, index: i + 1, startMs: Math.round(c.start), endMs: Math.round(c.end), raw: c.text, text: c.text.replace(/\r/g, ''), line: 0,
-  }))
+  })), ...(src.extra ?? [])]
+}
+
+/** The captions with their changes: text and times as edited, the left-out ones gone, by time */
+export function editedCues(base: Cue[], edits: Edits): Cue[] {
+  return base
+    .filter((c) => !edits[c.n]?.off)
+    .map((c) => {
+      const e = edits[c.n]
+      if (!e || (e.text === undefined && e.startMs === undefined && e.endMs === undefined)) return c
+      return { ...c, text: e.text ?? c.text, startMs: e.startMs ?? c.startMs, endMs: e.endMs ?? c.endMs }
+    })
+    .sort((a, b) => a.startMs - b.startMs || a.n - b.n)
+}
+
+/** A caption's own look, animation and word looks, without its text, times or being left out:
+ *  what a copy or the second half of a cut keeps */
+export function lookPart(e: CueEdit | undefined): CueEdit | undefined {
+  if (!e) return undefined
+  const rest: CueEdit = { ...e }
+  delete rest.text; delete rest.startMs; delete rest.endMs; delete rest.off
+  return rest
 }
 
 /** The look one caption gets: the script's, with that caption's own changes on top */

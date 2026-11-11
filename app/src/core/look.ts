@@ -5,6 +5,8 @@
 // copy of the caption whose Follower shows only that word; a word with its own size is
 // drawn as its own Text+ in blank room left in the caption (see layout).
 
+import type { Bezier } from './anim.ts'
+
 export type Rgb = readonly [number, number, number]
 export type TextCase = 'as' | 'upper' | 'lower' | 'title'
 export type Align = 'left' | 'center' | 'right'
@@ -71,7 +73,9 @@ export interface Highlight {
 
 export const DEFAULT_HIGHLIGHT: Highlight = { rule: 'off', color: [1, 0.82, 0.25], scale: 1.15 }
 
-export type OutMove = 'preset' | 'none' | 'fade' | 'slide' | 'zoom'
+/** How captions leave: as their animation was made, not at all, a simple move, or the way
+ *  another animation leaves ('other', see outFrom) */
+export type OutMove = 'preset' | 'none' | 'fade' | 'slide' | 'zoom' | 'other'
 
 /** Animation tab settings on top of the chosen preset */
 export interface Motion {
@@ -79,8 +83,13 @@ export interface Motion {
   speed: number
   out: OutMove
   outMs: number
+  /** The animation whose way out captions take when out is 'other' */
+  outFrom?: string
   /** ms between letters for letter presets, or unset to keep the preset's */
   stepMs?: number
+  /** Speed curves for the way in and the way out, or unset to keep each animation's own */
+  easeIn?: Bezier
+  easeOut?: Bezier
 }
 
 export const DEFAULT_MOTION: Motion = { speed: 1, out: 'preset', outMs: 250 }

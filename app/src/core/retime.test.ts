@@ -52,3 +52,21 @@ describe('frames', () => {
     expect(nudge({ startMs: 20, endMs: 3020 }, -10, 25)).toEqual({ startMs: 0, endMs: 3000 })
   })
 })
+
+describe('lanes and text', () => {
+  it('puts overlapping blocks on lanes below, first free lane first', async () => {
+    const { lanesOf } = await import('./retime')
+    const s = (a: number, b: number) => ({ startMs: a, endMs: b })
+    expect(lanesOf([s(0, 3000), s(1000, 2000), s(2500, 4000), s(3000, 5000)])).toEqual([0, 1, 1, 0])
+    expect(lanesOf([s(5000, 6000), s(0, 1000)])).toEqual([0, 0])
+    expect(lanesOf([])).toEqual([])
+  })
+
+  it('splits the words near the cut', async () => {
+    const { splitText } = await import('./retime')
+    expect(splitText('one two three four', 0.5)).toEqual(['one two', 'three four'])
+    expect(splitText('one two three four', 0.1)).toEqual(['one', 'two three four'])
+    expect(splitText('यह   एक\nवाक्य', 0.9)).toEqual(['यह एक', 'वाक्य'])
+    expect(splitText('alone', 0.5)).toEqual(['alone', 'alone'])
+  })
+})

@@ -27,15 +27,35 @@ const OWN: Record<string, { m?: string; s: CSSProperties }> = {
   typewriter: { m: 'm-type', s: {} },
 }
 
-export function PresetTile({ preset, on, big, onPick, onHover }: { preset: Preset; on: boolean; big?: boolean; onPick: (id: string) => void; onHover?: (id: string) => void }) {
+interface TileProps {
+  preset: Preset
+  on: boolean
+  big?: boolean
+  onPick: (id: string) => void
+  onHover?: (id: string) => void
+  /** Starred: shows under Favourites */
+  fav?: boolean
+  onFav?: () => void
+  /** One of My Animations: its own name, and what it is made from */
+  label?: string
+  sub?: string
+  onRemove?: () => void
+}
+
+export function PresetTile({ preset, on, big, onPick, onHover, fav, onFav, label, sub, onRemove }: TileProps) {
   const f = FAMILY[preset.family]
   const own = OWN[preset.id]
   const style: CSSProperties = { ...f.s, ...own?.s }
   if (big && style.fontSize) style.fontSize = `calc(${style.fontSize} * 1.25)`
   return (
-    <button className={'ptile' + (on ? ' on' : '') + (big ? ' big' : '')} title={preset.desc} onClick={() => onPick(preset.id)} onMouseEnter={() => onHover?.(preset.id)}>
-      <span className="pthumb"><b className={own?.m ?? f.m} style={style}>{preset.name}{preset.id === 'typewriter' ? '_' : ''}</b></span>
-      <span className="pmeta"><em>{preset.family}</em>{preset.status === 'testing' && <i>Testing</i>}</span>
+    <button className={'ptile' + (on ? ' on' : '') + (big ? ' big' : '')} title={label ? `${label}: ${preset.name}. ${preset.desc}` : preset.desc}
+      onClick={() => onPick(preset.id)} onMouseEnter={() => onHover?.(preset.id)}>
+      <span className="pthumb"><b className={own?.m ?? f.m} style={style}>{label ?? preset.name}{!label && preset.id === 'typewriter' ? '_' : ''}</b></span>
+      <span className="pmeta"><em>{sub ?? preset.family}</em>{preset.status === 'testing' && <i>Testing</i>}</span>
+      {onFav && <span className={'pfav' + (fav ? ' on' : '')} role="button" title={fav ? 'Take out of Favourites' : 'Add to Favourites'}
+        onClick={(e) => { e.stopPropagation(); onFav() }}>{fav ? '★' : '☆'}</span>}
+      {onRemove && <span className="pfav x" role="button" title="Delete this one of My Animations"
+        onClick={(e) => { e.stopPropagation(); onRemove() }}>✕</span>}
     </button>
   )
 }

@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, type MouseEvent, type PointerEvent, type RefObject } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent, type RefObject } from 'react'
 
 import type { Cue } from '@core/srt'
 import type { TimelineData } from '../../preload'
-import { retime, type Grip, type Span } from '@core/retime'
+import { lanesOf, retime, type Grip, type Span } from '@core/retime'
 import { clock, useClock } from './clock'
 import { Icon } from './Icon'
 import { isTextSrc, layersIn, srcChoices, srcTrackOf, timecode, type SrcTrack, type Target } from './model'
@@ -31,8 +31,9 @@ interface Props {
   supers: number
   /** Adds a super at the playhead; set while the supers are shown */
   onAddSuper: (() => void) | null
-  /** Move or trim a block by dragging it or its edges (supers only); end: the drag is over */
-  onRetime: ((n: number, span: Span, end: boolean) => void) | null
+  /** Move or trim blocks by dragging them or their edges: the dragged one first, then the
+   *  other selected ones moving with it; end: the drag is over */
+  onRetime: ((list: { n: number; span: Span }[], end: boolean) => void) | null
 }
 
 /** How near (in pixels) an edge must come to the playhead or another block to stick */
@@ -40,18 +41,30 @@ const SNAP_PX = 8
 
 const HEAD = 200
 
-/** What the supers' timeline does, for the Shortcuts hint */
-const SUPER_KEYS = [
-  'Drag a super to move it; drag its edge to make it shorter or longer.',
-  'It sticks to the playhead and to other supers. Hold Alt to place it freely.',
+/** What the timeline does, for the Shortcuts hint */
+const KEYS = [
+  'Drag a caption to move it; drag its edge to make it shorter or longer.',
+  'Select a few (Ctrl+click, Shift+click) and drag one: they move together.',
+  'Edges stick to the playhead and to other captions. Hold Alt to place freely.',
+  'Captions that overlap go on rows below; in Resolve each row is its own track.',
   '',
-  'S or Ctrl+B: cut the super at the playhead',
-  'Delete: delete the selected supers',
+  'S or Ctrl+B: cut at the playhead (a subtitle\'s words are shared out)',
+  'Ctrl+J: join the selected captions, or this one and the next',
+  'Delete: delete the selected (subtitles are left out, never changed in Resolve)',
   'Ctrl+C / Ctrl+V: copy, and paste at the playhead',
   'Ctrl+D: duplicate right after',
   ', and . : move one frame (with Shift: 10 frames)',
   'Ctrl+Z / Ctrl+Y: undo / redo',
 ].join('\n')
+
+/** Heights of the two lanes and their rows: one row as before, more when captions overlap */
+function rows(count: number) {
+  if (count <= 1) return { cap: { h: 46, top: 6, row: 34, gap: 0 }, st: { h: 36, top: 4, row: 28, gap: 0 } }
+  return {
+    cap: { h: 12 + count * 26 + (count - 1) * 4, top: 6, row: 26, gap: 4 },
+    st: { h: 8 + count * 22 + (count - 1) * 3, top: 4, row: 22, gap: 3 },
+  }
+}
 
 export function TimelineD(p: Props) {
   const [pps, setPps] = useState(70) // pixels per second
@@ -94,15 +107,18 @@ export function TimelineD(p: Props) {
 
   // Drag a block to move it, or its edge to trim it; a click without moving picks it.
   // Edges stick to the playhead and to the other blocks (hold Alt to place freely).
-  const grab = useRef<{ n: number; grip: Grip; x0: number; span: Span; snaps: number[]; moved: boolean } | null>(null)
+  const grab = useRef<{ n: number; grip: Grip; x0: number; span: Span; group: Cue[]; snaps: number[]; moved: boolean } | null>(null)
   const [dragging, setDragging] = useState<number | null>(null)
   const [guide, setGuide] = useState<number | null>(null)
   const down = (c: Cue) => (e: PointerEvent<HTMLElement>) => {
     if (e.button !== 0 || !p.onRetime) return
     const grip = ((e.target as HTMLElement).closest('[data-grip]')?.getAttribute('data-grip') ?? 'move') as Grip
     e.currentTarget.setPointerCapture(e.pointerId)
-    const snaps = [0, clock.get(), ...p.cues.filter((o) => o.n !== c.n).flatMap((o) => [o.startMs, o.endMs])]
-    grab.current = { n: c.n, grip, x0: e.clientX, span: { startMs: c.startMs, endMs: c.endMs }, snaps, moved: false }
+    // A selected caption takes the other selected ones along; an edge trims only its own
+    const group = grip === 'move' && p.sel.has(c.n) && p.sel.size > 1 ? p.cues.filter((o) => p.sel.has(o.n) && o.n !== c.n) : []
+    const moving = new Set([c.n, ...group.map((o) => o.n)])
+    const snaps = [0, clock.get(), ...p.cues.filter((o) => !moving.has(o.n)).flatMap((o) => [o.startMs, o.endMs])]
+    grab.current = { n: c.n, grip, x0: e.clientX, span: { startMs: c.startMs, endMs: c.endMs }, group, snaps, moved: false }
   }
   const drag = (e: PointerEvent<HTMLElement>, end: boolean) => {
     const g = grab.current
@@ -112,7 +128,12 @@ export function TimelineD(p: Props) {
     if (!g.moved) { g.moved = true; setDragging(g.n) }
     const r = retime(g.span, g.grip, (dx / pps) * 1000, { fps: p.fps, snaps: g.snaps, snapMs: e.altKey ? 0 : (SNAP_PX / pps) * 1000 })
     setGuide(end ? null : r.snap)
-    p.onRetime(g.n, { startMs: r.startMs, endMs: r.endMs }, end)
+    // The others move as far, never before 0
+    const by = Math.max(r.startMs - g.span.startMs, -Math.min(g.span.startMs, ...g.group.map((o) => o.startMs)))
+    p.onRetime([
+      { n: g.n, span: g.group.length ? { startMs: g.span.startMs + by, endMs: g.span.endMs + by } : { startMs: r.startMs, endMs: r.endMs } },
+      ...g.group.map((o) => ({ n: o.n, span: { startMs: o.startMs + by, endMs: o.endMs + by } })),
+    ], end)
   }
   const up = (e: PointerEvent<HTMLElement>) => {
     const g = grab.current
@@ -130,6 +151,17 @@ export function TimelineD(p: Props) {
   const grips = (c: Cue) => (p.onRetime && x(c.endMs - c.startMs) >= 22
     ? <><span className="grip l" data-grip="start" title="Drag to change the start" /><span className="grip r" data-grip="end" title="Drag to change the end" /></>
     : null)
+  // Overlapping captions on rows below, as Resolve will put them on tracks
+  const lane = useMemo(() => {
+    const l = lanesOf(p.cues)
+    return new Map(p.cues.map((c, i) => [c.n, l[i]!]))
+  }, [p.cues])
+  const R = rows(Math.max(0, ...lane.values()) + 1)
+  const multi = R.cap.gap > 0
+  const place = (c: Cue, r: typeof R.cap) => ({
+    left: x(c.startMs), width: Math.max(2, x(c.endMs - c.startMs) - 1),
+    ...(multi ? { top: r.top + (lane.get(c.n) ?? 0) * (r.row + r.gap), height: r.row, bottom: 'auto' } : {}),
+  })
   const tip = (c: Cue | undefined) => (c
     ? <span className="tltip" style={{ left: x(c.startMs) }}>{timecode(c.startMs, p.fps)} · {((c.endMs - c.startMs) / 1000).toFixed(2)} s</span>
     : null)
@@ -151,7 +183,7 @@ export function TimelineD(p: Props) {
         ) : <b className="ro">{p.srcName}</b>}
         {p.onAddSuper && <button className="mini addsuper" onClick={p.onAddSuper} title="A new super at the playhead, 3 s long. Write it, time it and animate it here; Send places it in Resolve.">
           <Icon name="plus" />Add super</button>}
-        {p.onRetime && <span className="khint" title={SUPER_KEYS}>Shortcuts</span>}
+        {p.onRetime && <span className="khint" title={KEYS}>Shortcuts</span>}
         <span className="arrow">→</span>
         <span>Put on</span>
         <select className="sl" value={String(p.target.track)} onChange={(e) => p.onTarget({ track: e.target.value === 'new' ? 'new' : Number(e.target.value) })}>
@@ -175,31 +207,31 @@ export function TimelineD(p: Props) {
         <div className="heads" style={{ width: HEAD }}>
           <div className="rhead"><Tc fps={p.fps} /></div>
           {newTrack
-            ? <div className="th tgt"><b>V{video.length + 1}</b><span>Text+ captions<small>new track · {placed} clips</small></span><i className="tag t">TARGET</i></div>
-            : <div className="th tgt"><b>V{p.target.track}</b><span>Text+ on {tgtTrack?.name ?? 'track'}<small>empty spots · {placed} clips</small></span><i className="tag t">TARGET</i></div>}
+            ? <div className="th tgt" style={{ height: R.cap.h }}><b>V{video.length + 1}</b><span>Text+ captions<small>new track · {placed} clips</small></span><i className="tag t">TARGET</i></div>
+            : <div className="th tgt" style={{ height: R.cap.h }}><b>V{p.target.track}</b><span>Text+ on {tgtTrack?.name ?? 'track'}<small>empty spots · {placed} clips</small></span><i className="tag t">TARGET</i></div>}
           {supersOn
-            ? <div className="th st src" title="Supers live in this app: add them with Add super"><b>SUP</b><span>Supers<small>made here · {p.cues.length}</small></span><i className="tag s">SOURCE</i></div>
+            ? <div className="th st src" style={{ height: R.st.h }} title="Supers live in this app: add them with Add super"><b>SUP</b><span>Supers<small>made here · {p.cues.length}</small></span><i className="tag s">SOURCE</i></div>
             : fromText
-            ? <div className="th st src" title="Change it under Read from"><b>T+</b><span>Text+ on {layerTracks}<small>{layers.length} layers</small></span><i className="tag s">SOURCE</i></div>
+            ? <div className="th st src" style={{ height: R.st.h }} title="Change it under Read from"><b>T+</b><span>Text+ on {layerTracks}<small>{layers.length} layers</small></span><i className="tag s">SOURCE</i></div>
             : srcSub
-            ? <div className="th st src" title="Change it under Read from"><b>ST{srcSub.index}</b><span>{srcSub.name}<small>subtitles · {srcSub.cues.length}</small></span><i className="tag s">SOURCE</i></div>
-            : <div className="th st src"><b>SRT</b><span>{p.srcName}<small>{p.cues.length} captions</small></span><i className="tag s">SOURCE</i></div>}
+            ? <div className="th st src" style={{ height: R.st.h }} title="Change it under Read from"><b>ST{srcSub.index}</b><span>{srcSub.name}<small>subtitles · {srcSub.cues.length}</small></span><i className="tag s">SOURCE</i></div>
+            : <div className="th st src" style={{ height: R.st.h }}><b>SRT</b><span>{p.srcName}<small>{p.cues.length} captions</small></span><i className="tag s">SOURCE</i></div>}
         </div>
         <div className="lanes" ref={lanes}>
           <div style={{ width, position: 'relative' }}>
             <div className="ruler" onPointerDown={scrub} onPointerMove={scrub} title="Click or drag to move the playhead">{marks.map((s) => <span key={s} style={{ left: x(s * 1000) }}>{timecode(s * 1000, p.fps).slice(3, 8)}</span>)}</div>
-            <div className={'lane cap' + (p.onRetime ? ' edit' : '')}>
+            <div className={'lane cap' + (p.onRetime ? ' edit' : '') + (multi ? ' multi' : '')} style={{ height: R.cap.h }}>
               {tgtTrack?.clips.map((c, i) => <i key={'o' + i} className="occ" style={{ left: x(c.start), width: Math.max(2, x(c.end - c.start) - 1) }} title={`Already on V${tgtTrack.index}: ${c.name}`}>{c.name}</i>)}
               {p.cues.map((c) => (
                 <i key={c.n} className={(c.n === p.active ? 'cur ' : '') + (p.sel.has(c.n) ? 'sel ' : '') + (p.ownLook(c.n) ? 'own ' : '') + (dragging === c.n ? 'drag' : '')}
-                  style={{ left: x(c.startMs), width: Math.max(2, x(c.endMs - c.startMs) - 1) }} {...handlers(c)} title={c.text}><b>{c.text}</b><small>{p.presetName(c.n)}</small>{grips(c)}</i>
+                  style={place(c, R.cap)} {...handlers(c)} title={c.text}><b>{c.text}</b><small>{p.presetName(c.n)}</small>{grips(c)}</i>
               ))}
               {tip(p.cues.find((c) => c.n === dragging))}
             </div>
-            <div className={'lane st src' + (p.onRetime ? ' edit' : '')}>
+            <div className={'lane st src' + (p.onRetime ? ' edit' : '')} style={{ height: R.st.h }}>
               {p.cues.map((c) => (
                 <i key={c.n} className={(c.n === p.active ? 'cur ' : '') + (p.sel.has(c.n) ? 'sel ' : '') + (dragging === c.n ? 'drag' : '')}
-                  style={{ left: x(c.startMs), width: Math.max(2, x(c.endMs - c.startMs) - 1) }} {...handlers(c)} title={c.text}>{c.text}{grips(c)}</i>
+                  style={place(c, R.st)} {...handlers(c)} title={c.text}>{c.text}{grips(c)}</i>
               ))}
             </div>
             {guide !== null && <div className="snapline" style={{ left: x(guide) }} />}

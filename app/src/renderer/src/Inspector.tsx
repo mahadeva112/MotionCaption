@@ -2,9 +2,15 @@ import { useState, type CSSProperties, type ReactNode } from 'react'
 import { DEFAULT_HIGHLIGHT, DEFAULT_MOTION, type Highlight, type Look, type Motion, type Rgb, type WordLook } from '@core/look'
 import type { Pattern } from '@core/pattern'
 import type { Mood, Smart } from '@core/smart'
+import { EASE } from '@core/anim'
+import { hasOwnOut } from '@core/compile'
 import { FAMILIES, PRESETS, presetById } from '@core/presets'
+import { CurveEdit } from './Curve'
 import type { FontFamily } from './fonts'
 import { hex, rgb, SWATCHES, timecode, type SafeArea, type Scope } from './model'
+
+/** Animations with a way out that any caption can take (Out › From…) */
+const OUTS = PRESETS.filter((x) => hasOwnOut(x.id))
 
 export type Tab = 'Caption' | 'Look' | 'Position' | 'Words' | 'Animation'
 const TABS: Tab[] = ['Caption', 'Look', 'Position', 'Words', 'Animation']
@@ -37,8 +43,9 @@ interface Props {
   fontUsed: string | null
   // Caption tab
   caption: { n: number; text: string; startMs: number; endMs: number; edited: boolean } | null
-  /** A super made in the app: its timing can be changed here, and it can be deleted */
-  superEdit: { onStart: (ms: number) => void; onEnd: (ms: number) => void; onDelete: () => void } | null
+  /** The caption's times, set here or on the timeline; a super is made here, other captions keep their own times
+   *  as an edit (onReset puts those back) */
+  timeEdit: { isSuper: boolean; onStart: (ms: number) => void; onEnd: (ms: number) => void; onDelete: () => void; onReset: (() => void) | null } | null
   fps: number
   onText: (text: string | null) => void
   // Words tab
@@ -55,6 +62,8 @@ interface Props {
   // Animation tab
   preset: string
   onPreset: (id: string) => void
+  /** Keep this animation with the Animation tab's settings as one of My Animations */
+  onSaveMine: (name: string) => void
   pattern: Pattern
   onPattern: (p: Partial<Pattern>) => void
   /** The pattern runs over all captions */
@@ -132,6 +141,8 @@ function Section({ title, right, off, r, children }: { title: ReactNode; right?:
 export function Inspector(p: Props) {
   const L = p.look
   const [saving, setSaving] = useState<string | null>(null)
+  const [savingMine, setSavingMine] = useState<string | null>(null)
+  const saveMine = () => { if (savingMine?.trim()) { p.onSaveMine(savingMine.trim()); setSavingMine(null) } }
   const fam = p.fonts.find((f) => f.family === L.font)
   const styles = fam?.styles.length ? fam.styles : ['Regular', 'Bold']
 
@@ -195,25 +206,21 @@ export function Inspector(p: Props) {
           <>
             <Section title="Text" right={`caption ${p.caption.n}`}>
               <textarea className="textbox" value={p.caption.text} onChange={(e) => p.onText(e.target.value)} rows={3} />
-              {p.superEdit
+              {p.timeEdit?.isSuper
                 ? <p className="hint2">This super lives in the app. Send puts it in Resolve as a finished clip.</p>
                 : <p className="hint2">Changes this caption only. The subtitle track in Resolve is not touched.
                   {p.caption.edited && <> <button className="link" onClick={() => p.onText(null)}>Undo my changes</button></>}</p>}
             </Section>
-            {p.superEdit && (
+            {p.timeEdit && (
               <Section title="Timing" right={`${Number(p.fps.toFixed(3))} fps`}>
-                <Row label="Start (s)"><SecondsInput ms={p.caption.startMs} onChange={p.superEdit.onStart} /></Row>
-                <Row label="End (s)"><SecondsInput ms={p.caption.endMs} onChange={p.superEdit.onEnd} /></Row>
+                <Row label="Start (s)"><SecondsInput ms={p.caption.startMs} onChange={p.timeEdit.onStart} /></Row>
+                <Row label="End (s)"><SecondsInput ms={p.caption.endMs} onChange={p.timeEdit.onEnd} /></Row>
                 <Row label="Length"><span className="ro">{((p.caption.endMs - p.caption.startMs) / 1000).toFixed(2)} s · {timecode(p.caption.startMs, p.fps)}</span></Row>
-                <button className="mini danger" onClick={p.superEdit.onDelete}>Delete this super</button>
+                {!p.timeEdit.isSuper && <p className="hint2">New times are for this caption here only; the subtitle track in Resolve is not touched.
+                  {p.timeEdit.onReset && <> <button className="link" onClick={p.timeEdit.onReset}>Back to its own times</button></>}</p>}
+                <button className="mini danger" onClick={p.timeEdit.onDelete}>{p.timeEdit.isSuper ? 'Delete this super' : 'Leave this caption out'}</button>
               </Section>
             )}
-            {!p.superEdit && <Section title="Timing" right={`${Number(p.fps.toFixed(3))} fps`}>
-              <Row label="Start"><span className="ro">{timecode(p.caption.startMs, p.fps)}</span></Row>
-              <Row label="End"><span className="ro">{timecode(p.caption.endMs, p.fps)}</span></Row>
-              <Row label="Length"><span className="ro">{((p.caption.endMs - p.caption.startMs) / 1000).toFixed(2)} s</span></Row>
-              <p className="hint2">Times come from the subtitle track. Change them in Resolve, then click MotionCaption there to refresh.</p>
-            </Section>}
             <Section title="Line breaks" right={scopeLabel} r={lk('lines', 'maxWidth')}>
               <Seg label="Lines" value={L.lines} r={lk('lines')} onChange={(v) => p.onLook({ lines: v })}
                 opts={[['keep', 'As in subtitles'], ['1', 'One'], ['2', 'Up to two'], ['auto', 'As needed']]} />
@@ -361,17 +368,39 @@ export function Inspector(p: Props) {
                 <Slider label="Letter gap ms" value={p.motion.stepMs ?? presetById(p.preset)!.letters!.stepMs} r={mo('stepMs')} min={5} max={150} step={1}
                   onChange={(v) => p.onMotion({ stepMs: v })} />
               )}
+              {savingMine === null
+                ? <button className="mini" onClick={() => setSavingMine('')} title="Keeps this animation with its speed, way out and curves under a name: Animations › Mine">
+                  Save as My Animation…</button>
+                : <div className="irow wide"><span>Name</span>
+                  <input className="sl" autoFocus placeholder="e.g. Hook slam" value={savingMine} onChange={(e) => setSavingMine(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') saveMine(); if (e.key === 'Escape') setSavingMine(null) }} />
+                  <button className="mini" disabled={!savingMine.trim()} onClick={saveMine}>Save</button></div>}
             </Section>
             <SmartSection {...p} />
             <PatternSection {...p} />
-            <Section title="Out" right="all captions" r={mo('out', 'outMs')}>
-              <Seg label="Animation" value={p.motion.out} r={mo('out')} onChange={(v) => p.onMotion({ out: v })}
-                opts={[['preset', 'As designed'], ['none', 'None'], ['fade', 'Fade'], ['slide', 'Slide'], ['zoom', 'Zoom']]} />
-              {p.motion.out !== 'preset' && p.motion.out !== 'none' && (
+            <Section title="Out" right="all captions" r={mo('out', 'outMs', 'outFrom')}>
+              <Seg label="Animation" value={p.motion.out} r={mo('out')} onChange={(v) => p.onMotion({ out: v, ...(v === 'other' && !p.motion.outFrom ? { outFrom: OUTS[0]?.id } : {}) })}
+                opts={[['preset', 'As designed'], ['none', 'None'], ['fade', 'Fade'], ['slide', 'Slide'], ['zoom', 'Zoom'], ['other', 'From…']]} />
+              {p.motion.out === 'other' && (
+                <Row label="Leave like" wide r={mo('outFrom')}>
+                  <select className="sl" value={p.motion.outFrom ?? ''} onChange={(e) => p.onMotion({ outFrom: e.target.value })}
+                    title="Captions come in with their own animation and leave the way this one does">
+                    {FAMILIES.map((f) => {
+                      const list = OUTS.filter((x) => x.family === f)
+                      return list.length ? <optgroup key={f} label={f}>{list.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup> : null
+                    })}
+                  </select>
+                </Row>
+              )}
+              {p.motion.out !== 'preset' && p.motion.out !== 'none' && p.motion.out !== 'other' && (
                 <Slider label="Length ms" value={p.motion.outMs} r={mo('outMs')} min={80} max={1000} step={10} onChange={(v) => p.onMotion({ outMs: v })} />
               )}
             </Section>
-            <p className="hint2 pad">Speed and Out apply to all captions. Pick an animation for a few captions by selecting them on the timeline first.</p>
+            <Section title="Speed curves" right="all captions" r={mo('easeIn', 'easeOut')}>
+              <CurveEdit label="Coming in" value={p.motion.easeIn} typical={EASE.out} onChange={(b) => p.onMotion({ easeIn: b })} />
+              <CurveEdit label="Going out" value={p.motion.easeOut} typical={EASE.in} onChange={(b) => p.onMotion({ easeOut: b })} />
+            </Section>
+            <p className="hint2 pad">Speed, Out and the curves apply to all captions. Pick an animation for a few captions by selecting them on the timeline first.</p>
           </>
         )}
       </div>
