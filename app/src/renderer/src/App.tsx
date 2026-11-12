@@ -612,6 +612,8 @@ export function App() {
     parkedFrom.current = c.startMs
     clock.set(c.startMs + Math.min(1200, (c.endMs - c.startMs) / 2))
   }
+  /** Goes up when Home / End jump the playhead, so the timeline scrolls to it */
+  const [reveal, setReveal] = useState(0)
   function seek(ms: number) {
     parkedFrom.current = null
     clock.set(Math.min(ms, endMs))
@@ -729,8 +731,8 @@ export function App() {
       if (e.key === 'ArrowRight') { step(1); e.preventDefault() }
       else if (e.key === 'ArrowLeft') { step(-1); e.preventDefault() }
       else if (e.key === ' ') { if (!e.repeat) setPlaying((p) => !p); e.preventDefault() }
-      else if (e.key === 'Home') { seek(0); e.preventDefault() }
-      else if (e.key === 'End') { seek(endMs); e.preventDefault() }
+      else if (e.key === 'Home') { seek(0); setReveal((r) => r + 1); e.preventDefault() }
+      else if (e.key === 'End') { seek(endMs); setReveal((r) => r + 1); e.preventDefault() }
       else if (e.key === 'Escape') { setSel(new Set()); setSelWord(null); if (scope === 'selected') setScope('all') }
       else cueKey(e)
     }
@@ -900,7 +902,7 @@ export function App() {
             srcTrack={source.kind === 'timeline' ? source.track : null}
             onSrcTrack={switchSource}
             srcName={srcName} cues={cues} presetName={(n) => presetById(presetOf(n))?.name ?? ''} ownLook={ownLook}
-            active={cue?.n ?? 0} sel={sel} onCue={pickCue} playing={playing} onSeek={seek}
+            active={cue?.n ?? 0} sel={sel} onCue={pickCue} playing={playing} onSeek={seek} reveal={reveal}
             target={target} onTarget={(t) => setTarget((x) => ({ ...x, ...t }))} fps={fps} lengthMs={tlLength}
             supers={source.kind === 'timeline' ? (source.supers ?? []).length : 0} onAddSuper={supersOn ? addSuper : null}
             onRetime={retimeCues} onTemplate={supersOn ? addTemplate : null}
