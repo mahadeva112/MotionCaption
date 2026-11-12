@@ -136,14 +136,15 @@ describe('advanced presets', () => {
   const advanced = PRESETS.filter((p) => p.fx)
 
   it('are in their own families, testing, with no Text+ tracks', () => {
-    expect(advanced.length).toBeGreaterThanOrEqual(51)
+    expect(advanced.length).toBeGreaterThanOrEqual(61)
+    expect(advanced.filter((p) => p.family === 'Stroke')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Kinetic')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Light & Glow')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Mask & Wipe')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Calm')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Indic Flow')).toHaveLength(10)
     for (const p of advanced) {
-      expect(['Indic Flow', 'Calm', 'Mask & Wipe', 'Light & Glow', 'Kinetic', 'Advanced']).toContain(p.family)
+      expect(['Indic Flow', 'Calm', 'Mask & Wipe', 'Light & Glow', 'Kinetic', 'Stroke', 'Advanced']).toContain(p.family)
       expect(p.status).toBe('testing')
       expect(p.tracks).toEqual([])
     }
@@ -416,5 +417,47 @@ describe('Kinetic pieces', () => {
     const f = fxAt(fx, splitUnits('एक दो तीनचार'), 1000, 4000)
     expect(f.word![2]!.scale).toBe(1.1)
     expect(f.word![0]!.opacity).toBe(0.5)
+  })
+})
+
+describe('Stroke pieces', () => {
+  const u = splitUnits('लिखो')
+
+  it('draws the outline, then brings the fill in, then lets the outline go', () => {
+    const fx = compileFx({ stroke: { widthEm: 0.03, delayMs: 0, drawMs: 1000, fill: { mode: 'wipe', delayMs: 800, ms: 400 }, fadeOut: true } }, 'लिखो', 4000)
+    const early = fxAt(fx, u, 500, 4000)
+    expect(early.stroke!.draw).toBeCloseTo(0.5)
+    expect(early.body).toEqual({ opacity: 1, wipe: 0 })
+    const mid = fxAt(fx, u, 1000, 4000)
+    expect(mid.body!.wipe).toBeCloseTo(0.5)
+    expect(mid.stroke!.opacity).toBe(1)
+    expect(fxAt(fx, u, 3000, 4000).stroke!.opacity).toBe(0)
+  })
+
+  it('keeps an outline-only effect without fill, or with a faint one', () => {
+    const none = compileFx({ stroke: { widthEm: 0.03, delayMs: 0, drawMs: 0, fill: { mode: 'none', delayMs: 0, ms: 0 } } }, 'a', 4000)
+    expect(fxAt(none, splitUnits('a'), 2000, 4000).body).toEqual({ opacity: 0 })
+    const faint = compileFx({ stroke: { widthEm: 0.03, delayMs: 0, drawMs: 0, fill: { mode: 'none', delayMs: 0, ms: 0, opacity: 0.3 } } }, 'a', 4000)
+    expect(fxAt(faint, splitUnits('a'), 2000, 4000).body).toEqual({ opacity: 0.3 })
+  })
+
+  it('moves dashes along and shakes a sketch, the same each time', () => {
+    const fx = compileFx({ stroke: { widthEm: 0.03, delayMs: 0, drawMs: 0, dash: { sizeEm: 0.1, speed: 1 }, wobble: 0.02, fill: { mode: 'none', delayMs: 0, ms: 0 } } }, 'a', 4000)
+    const ua = splitUnits('a')
+    expect(fxAt(fx, ua, 1500, 4000).stroke!.dash).toBeCloseTo(1.5)
+    const a = fxAt(fx, ua, 1000, 4000).stroke!
+    expect(fxAt(fx, ua, 1000, 4000).stroke).toEqual(a)
+    expect(Math.abs(a.dx)).toBeLessThanOrEqual(0.02)
+  })
+
+  it('spreads rings out and fades them, and slides echoes out', () => {
+    const fx = compileFx({ rings: { count: 2, periodMs: 1000, scaleTo: 1.3, widthEm: 0.02 }, echo: { count: 3, dxEm: 0.05, dyEm: 0.05, widthEm: 0.02, inMs: 500 } }, 'a', 4000)
+    const f = fxAt(fx, splitUnits('a'), 1250, 4000)
+    expect(f.rings).toHaveLength(2)
+    for (const q of f.rings!) {
+      expect(q.scale).toBeGreaterThanOrEqual(1)
+      expect(q.scale).toBeLessThanOrEqual(1.3)
+    }
+    expect(f.echo).toBe(1)
   })
 })
