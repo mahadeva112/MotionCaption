@@ -1,4 +1,5 @@
 import { EASE, type Fixed, type Key, type Letters, type Target, type Track, type Value } from './anim.ts'
+import { compileFx, type CompiledFx } from './fx.ts'
 import type { Cue } from './srt.ts'
 import { presetById, wordFxById } from './presets.ts'
 import {
@@ -76,6 +77,8 @@ export interface CompiledCue {
   words: CompiledWord[]
   /** Every word's range in text (null: a bigger word drawn on its own). For the preview. */
   ranges: ({ first: number; last: number } | null)[]
+  /** An advanced effect, drawn by the app only (Finished clips); Text+ leaves it out */
+  fx?: CompiledFx
 }
 
 export interface CompileOpts {
@@ -415,5 +418,7 @@ export function compileCue(cue: Cue, presetId: string, opts: Partial<CompileOpts
     letters: fitLetters(lettersIn, tracks, laid.text, dur),
     words,
     ranges: laid.ranges,
+    // The Animation tab's own way out replaces the effect's
+    ...(preset.fx ? { fx: compileFx(preset.fx, laid.text, dur, { speed: motion.speed, keepOut: motion.out === 'preset', seed: cue.n }) } : {}),
   }
 }

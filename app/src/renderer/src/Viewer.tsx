@@ -4,6 +4,7 @@ import { countUp, fontShare } from '@core/look'
 import { num, pt, valueAt } from '@core/sample'
 import { useClock } from './clock'
 import { cssFace } from './fonts'
+import { FxText } from './FxText'
 import { Icon } from './Icon'
 import { css, SAFE, timecode, type SafeArea } from './model'
 
@@ -307,6 +308,25 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
   } : null
   const img = L.image
 
+  /** One letter as drawn: its letter animation, its word's colour and effect */
+  const charEl = (i: number) => {
+    const ch = chars[i]!
+    const w = styled.get(i)
+    const own = cue.letters ? follower(lettersT, ms - turn(i) * step, W) : {}
+    const shift = cue.letters && w ? w.first * step : 0
+    const fx = w ? follower(w.tracks.filter((t) => t.input !== 'Opacity1'), ms - shift, W) : {}
+    const lit = w ? num(at(w.tracks, 'Opacity1', ms), 1) > 0.5 : false
+    const wi = wordOf[i]
+    const st: CSSProperties = {
+      ...own,
+      ...(w && lit ? { color: css(w.color) } : {}),
+      ...(fx.transform ? { transform: fx.transform } : {}),
+      ...(w?.glow ? { textShadow: `0 0 .35em ${css(w.color)}, 0 0 .8em ${css(w.color)}` } : {}),
+      ...(w?.box ? { background: css(w.box), WebkitTextStroke: '0' } : {}),
+    }
+    return <span key={i} className={'ch' + (wi !== null && wi === selWord ? ' sel' : '')} data-w={wi ?? undefined} style={st}>{ch}</span>
+  }
+
   const pivot = `${L.center[0] * W}px ${(1 - L.center[1]) * H}px`
   const group: CSSProperties = {
     transformOrigin: pivot,
@@ -328,23 +348,9 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
         }}
       >
         {img && <img className={'vimg ' + img.place} src={img.src} alt="" draggable={false} style={{ height: img.size * fontPx }} />}
-        <span className={G ? 'vtext grad' : 'vtext'} style={gradLayer ?? undefined}>{chars.map((ch, i) => {
-          if (ch === '\n') return <br key={i} />
-          const w = styled.get(i)
-          const own = cue.letters ? follower(lettersT, ms - turn(i) * step, W) : {}
-          const shift = cue.letters && w ? w.first * step : 0
-          const fx = w ? follower(w.tracks.filter((t) => t.input !== 'Opacity1'), ms - shift, W) : {}
-          const lit = w ? num(at(w.tracks, 'Opacity1', ms), 1) > 0.5 : false
-          const wi = wordOf[i]
-          const st: CSSProperties = {
-            ...own,
-            ...(w && lit ? { color: css(w.color) } : {}),
-            ...(fx.transform ? { transform: fx.transform } : {}),
-            ...(w?.glow ? { textShadow: `0 0 .35em ${css(w.color)}, 0 0 .8em ${css(w.color)}` } : {}),
-            ...(w?.box ? { background: css(w.box), WebkitTextStroke: '0' } : {}),
-          }
-          return <span key={i} className={'ch' + (wi !== null && wi === selWord ? ' sel' : '')} data-w={wi ?? undefined} style={st}>{ch}</span>
-        })}</span>
+        <span className={G ? 'vtext grad' : 'vtext'} style={gradLayer ?? undefined}>{cue.fx
+          ? <FxText fx={cue.fx} text={chars.join('')} ms={ms} durMs={cue.endMs - cue.startMs} fontPx={fontPx} fill={L.fill} shadow={shadow} charEl={charEl} />
+          : chars.map((ch, i) => (ch === '\n' ? <br key={i} /> : charEl(i)))}</span>
         {handles && <>
           {['c1', 'c2', 'c3', 'c4'].map((c) => <span key={c} className={'vh ' + c} data-grip="size" title="Drag to make it bigger or smaller" />)}
           <span className="vh turn" data-grip="turn" title="Drag to turn it (Shift: 15° steps)" />
