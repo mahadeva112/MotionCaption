@@ -19,6 +19,7 @@ const FAMILY: Record<Family, { m: string; s: CSSProperties }> = {
   Stroke: { m: 'm-type', s: { fontFamily: "'Segoe UI', sans-serif", fontWeight: 900, color: 'transparent', WebkitTextStroke: '1px #fff', fontSize: '15px' } },
   Scramble: { m: 'm-type', s: { fontFamily: 'Consolas, monospace', fontWeight: 700, color: '#7dffa0', letterSpacing: '.06em' } },
   Elastic: { m: 'm-pop', s: { fontFamily: "'Arial Rounded MT Bold', 'Segoe UI', sans-serif", fontWeight: 800, color: '#9be7ff' } },
+  Trailer: { m: 'm-blur', s: { fontFamily: 'Georgia, serif', textTransform: 'uppercase', letterSpacing: '.16em', fontSize: '10.5px', color: '#f6e2c0', textShadow: '0 0 10px rgba(255,170,90,.6)' } },
   Distort: { m: 'm-drift', s: { fontFamily: 'Georgia, serif', fontStyle: 'italic', fontWeight: 700, color: '#c9b8ff', transform: 'skewX(-8deg)' } },
 }
 

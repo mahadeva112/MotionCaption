@@ -507,7 +507,9 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
 
 /* Advanced effects (FxText.tsx): line › word › letter, each able to move on its own */
 .fxm, .fxw, .fxl, .fxu, .fxc, .fxsp { display: inline-block; white-space: pre; }
-.fxw { position: relative; }
+.fxw { position: relative; isolation: isolate; }
+/* Copies that belong behind the letters (echo, cast shadow) */
+.fxs.under { z-index: -1; }
 .fxl { transform-origin: 50% 55%; }
 .fxu, .fxc { transform-origin: 50% 60%; }
 /* The light sweep: a bright copy of the text, seen only through its moving band */

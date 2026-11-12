@@ -471,4 +471,57 @@ const DISTORT: Preset[] = [
   }),
 ]
 
-export const FX_PRESETS: Preset[] = [...INDIC, ...CALM, ...MASK, ...LIGHT, ...KINETIC, ...STROKE, ...SCRAMBLE, ...ELASTIC, ...DISTORT]
+/** Cinematic trailer: big title moves, light and film, for a hook or a chapter title */
+const TRAILER: Preset[] = [
+  p('Trailer', 'blurZoomThrough', 'Blur Zoom Through', 'The title zooms in out of a blur and zooms on through it at the end.', {
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 700, ease: EASE.out, state: { opacity: 0, scale: 2.4, blur: 0.4 } },
+    out: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 450, ease: EASE.in, state: { opacity: 0, scale: 3, blur: 0.4 } },
+  }),
+  p('Trailer', 'trailerFlare', 'Flare Reveal', 'A big flare crosses first, then the title comes up out of its light.', {
+    flare: { delayMs: 0, ms: 900, sizeEm: 1.2 },
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 650, delayMs: 350, ease: EASE.out, state: { opacity: 0, blur: 0.15, scale: 1.05, glow: 0.5 } },
+    out: fadeOut(350),
+  }),
+  p('Trailer', 'dustReveal', 'Dust Reveal', 'Dust gathers and the title forms out of it.', {
+    particles: { kind: 'dust', count: 60, delayMs: 0, ms: 1000, sizeEm: 0.08, spreadEm: 3, color: [0.92, 0.9, 0.86] },
+    dissolve: { sizeEm: 0.2, soft: 0.4, inMs: 1100, outMs: 600 },
+  }),
+  p('Trailer', 'trackingGlow', 'Tracking Glow', 'Wide-spaced letters draw together while a glow fades.', {
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 1300, ease: EASE.out, state: { opacity: 0, spread: 0.35, glow: 0.5 } },
+    out: fadeOut(350),
+  }),
+  p('Trailer', 'hardCutFlash', 'Hard Cut Flash', 'The title cuts in on a white flash.', {
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 300, ease: EASE.out, state: { glow: 1.6, tint: 1, scale: 1.06 } },
+    out: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 1, ease: EASE.linear, state: { opacity: 0 } },
+    accent: [1, 1, 1],
+  }),
+  p('Trailer', 'slowPushGlow', 'Slow Push Glow', 'The title pushes in slowly the whole time, with a soft light behind it.', {
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 3200, ease: EASE.out, state: { opacity: 0, scale: 0.9 } },
+    out: fadeOut(400),
+    backlight: { delayMs: 0, ms: 1600, opacity: 0.35 },
+  }),
+  p('Trailer', 'lightLeak', 'Light Leak', 'A warm light leak drifts across the title, like film catching light.', {
+    in: fadeWhole(400),
+    out: fadeOut(350),
+    flare: { delayMs: 200, ms: 1800, sizeEm: 1.4, soft: true },
+    accent: [1, 0.5, 0.25],
+  }),
+  p('Trailer', 'epicScaleDown', 'Epic Scale Down', 'The title comes down from huge to its size, slowly, and lands with weight.', {
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 1400, ease: EASE.out, state: { opacity: 0, scale: 3, blur: 0.08 } },
+    impact: { amountEm: 0.03, ms: 300 },
+    out: fadeOut(400),
+  }),
+  p('Trailer', 'shadowDrop', 'Shadow Drop Title', 'The title drops into place and casts a long soft shadow.', {
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 700, ease: EASE.out, state: { opacity: 0, y: -0.5 } },
+    out: fadeOut(350),
+    echo: { count: 1, dxEm: 0.08, dyEm: 0.12, widthEm: 0, inMs: 900, color: [0, 0, 0], filled: { opacity: 0.6, blurEm: 0.04 } },
+  }),
+  p('Trailer', 'filmBurn', 'Film Burn Out', 'At the end the title burns away like film, glowing orange at the edges.', {
+    in: fadeWhole(350),
+    out: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 900, ease: EASE.out, state: { tint: 1, glow: 0.6 } },
+    dissolve: { sizeEm: 0.3, soft: 0.25, inMs: 0, outMs: 900 },
+    accent: [1, 0.45, 0.1],
+  }),
+]
+
+export const FX_PRESETS: Preset[] = [...INDIC, ...CALM, ...MASK, ...LIGHT, ...KINETIC, ...STROKE, ...SCRAMBLE, ...ELASTIC, ...DISTORT, ...TRAILER]
