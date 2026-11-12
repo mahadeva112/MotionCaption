@@ -514,3 +514,6 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
 .fxs { position: absolute; left: 0; top: 0; right: 0; bottom: 0; pointer-events: none; }
 .fxs * { color: inherit !important; text-shadow: none !important; -webkit-text-stroke: 0 !important; background: none !important; filter: none !important; }
 .fxsvg { position: absolute; width: 0; height: 0; overflow: hidden; }
+/* A highlighter stroke behind a word or line (marker effects), drawn from the left */
+.fxl.mk, .fxu.mk { position: relative; isolation: isolate; }
+.fxmk { position: absolute; left: -.1em; right: -.1em; top: 28%; bottom: 4%; z-index: -1; border-radius: .16em; transform-origin: 0 50%; }

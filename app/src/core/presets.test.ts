@@ -10,10 +10,10 @@ const PROVEN: Record<string, string[]> = {
 }
 
 describe('preset library', () => {
-  it('has 152 presets with unique ids and names', () => {
-    expect(PRESETS).toHaveLength(152)
-    expect(new Set(PRESETS.map((p) => p.id)).size).toBe(152)
-    expect(new Set(PRESETS.map((p) => p.name)).size).toBe(152)
+  it('has 161 presets with unique ids and names', () => {
+    expect(PRESETS).toHaveLength(161)
+    expect(new Set(PRESETS.map((p) => p.id)).size).toBe(161)
+    expect(new Set(PRESETS.map((p) => p.name)).size).toBe(161)
   })
 
   it('uses only known families, each with presets', () => {

@@ -11,6 +11,7 @@ const FAMILY: Record<Family, { m: string; s: CSSProperties }> = {
   Elegant: { m: 'm-rise', s: { fontFamily: 'Georgia, serif', fontStyle: 'italic', fontWeight: 600 } },
   Letters: { m: 'm-type', s: { fontFamily: 'Consolas, monospace', fontWeight: 700, textTransform: 'uppercase', fontSize: '11px' } },
   Continuous: { m: 'm-drift', s: { fontFamily: "'Segoe UI', sans-serif", fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.18em', fontSize: '10px' } },
+  'Indic Flow': { m: 'm-rise', s: { fontFamily: "'Nirmala UI', 'Segoe UI', sans-serif", fontWeight: 700, color: '#ffe2b0' } },
   Advanced: { m: 'm-blur', s: { fontFamily: 'Georgia, serif', fontWeight: 700, color: '#ffd27a', textShadow: '0 0 10px rgba(255,190,90,.55)' } },
 }
 

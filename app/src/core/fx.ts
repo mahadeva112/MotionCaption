@@ -98,6 +98,54 @@ export interface FxSweep {
   angle: number
   /** 0–1 */
   strength: number
+  /** 'headline': only along each line's top line (shirorekha), not over the whole letters */
+  band?: 'headline'
+}
+
+/** Each line's top line (shirorekha) drawn from left to right, then the letters hang down from it */
+export interface FxHeadline {
+  delayMs: number
+  /** ms between one line starting and the next */
+  stepMs: number
+  /** ms the top line takes to draw */
+  drawMs: number
+  /** ms the letters take to come down from it; they start when the line is 60 % drawn */
+  dropMs: number
+}
+
+/** Words lit with a fill from left to right as they are spoken (each word's share of the time
+ *  follows its letters), in `color` or the accent */
+export interface FxFill {
+  color?: Rgb
+}
+
+/** The word being spoken stays sharp; the others sit at `state` */
+export interface FxFocus {
+  state: FxState
+  /** ms a word takes to come into focus and to leave it */
+  fadeMs: number
+}
+
+/** The caption's key word (its longest) goes from rest to `state` and stays there */
+export interface FxEmphasis {
+  delayMs: number
+  ms: number
+  ease?: Bezier
+  state: FxState
+}
+
+/** A highlighter stroke drawn behind words or lines, from left to right */
+export interface FxMarker {
+  unit: 'word' | 'line'
+  /** Every unit one after another, or only the key word */
+  pick: 'all' | 'key'
+  order: FxOrder
+  delayMs: number
+  stepMs: number
+  ms: number
+  opacity: number
+  /** Left out: the accent */
+  color?: Rgb
 }
 
 /** The letters bent by noise: big at first and settling (in), or always a little (haze) */
@@ -125,7 +173,12 @@ export interface Fx {
   mask?: FxMask
   sweep?: FxSweep
   warp?: FxWarp
-  /** Colour for glow and tint; left out: warm gold */
+  headline?: FxHeadline
+  fill?: FxFill
+  focus?: FxFocus
+  emphasis?: FxEmphasis
+  marker?: FxMarker
+  /** Colour for glow, tint, fill and marker; left out: warm gold */
   accent?: Rgb
 }
 
@@ -277,11 +330,56 @@ export function compileFx(fx: Fx, text: string, durMs: number, opts: { speed?: n
     ...fx.warp, inMs: Math.min(fx.warp.inMs / speed, durMs * IN_DONE_BY),
     ...(fx.warp.outMs && opts.keepOut !== false ? { outMs: Math.min(fx.warp.outMs / speed, durMs * (1 - IN_DONE_BY)) } : { outMs: 0 }),
   }
+  // The top lines are drawn and the letters down by 75 % of the caption, like any way in
+  let headline: FxHeadline | undefined
+  if (fx.headline) {
+    const h = fx.headline
+    const len = (h.delayMs + (units.lines - 1) * h.stepMs + h.drawMs * HEAD_DROP_AT + h.dropMs) / speed
+    const g = len > durMs * IN_DONE_BY ? (durMs * IN_DONE_BY) / len : 1
+    const k = g / speed
+    headline = { delayMs: h.delayMs * k, stepMs: h.stepMs * k, drawMs: h.drawMs * k, dropMs: h.dropMs * k }
+  }
+  const marker = fx.marker && { ...fx.marker, delayMs: fx.marker.delayMs / speed, stepMs: fx.marker.stepMs / speed, ms: fx.marker.ms / speed }
+  const emphasis = fx.emphasis && { ...fx.emphasis, delayMs: fx.emphasis.delayMs / speed, ms: fx.emphasis.ms / speed }
+  const focus = fx.focus && { ...fx.focus, fadeMs: fx.focus.fadeMs / speed }
   return {
     ...(inP ? { in: inP } : {}), ...(outP ? { out: outP } : {}), ...(loop ? { loop } : {}),
     ...(mask ? { mask } : {}), ...(sweep ? { sweep } : {}), ...(warp ? { warp } : {}),
+    ...(headline ? { headline } : {}), ...(fx.fill ? { fill: fx.fill } : {}), ...(focus ? { focus } : {}),
+    ...(emphasis ? { emphasis } : {}), ...(marker ? { marker } : {}),
     accent: fx.accent ?? GOLD, seed,
   }
+}
+
+/** Share of the top line drawn when the letters start to come down from it */
+const HEAD_DROP_AT = 0.6
+
+/** The word read as the key word: the longest (the first of equals) */
+export function keyWord(u: Units): number {
+  const len = new Array<number>(u.words).fill(0)
+  for (const g of u.glyphs) if (g.word >= 0) len[g.word]!++
+  let best = 0
+  len.forEach((l, i) => { if (l > len[best]!) best = i })
+  return best
+}
+
+/**
+ * When each word is spoken: words share the time between the way in and the way out by
+ * their letters (as the Look tab's karaoke does). Returns words + 1 times, the last being
+ * when the last word ends.
+ */
+export function spokenTimes(fx: CompiledFx, u: Units, durMs: number): number[] {
+  const inLen = fx.in ? phaseLength(fx.in, countOf(u, fx.in.unit), fx.seed) : 0
+  const outLen = fx.out ? phaseLength(fx.out, countOf(u, fx.out.unit), fx.seed + 1) : 0
+  const start = Math.min(inLen, durMs * 0.3)
+  const end = Math.max(start, durMs - outLen - Math.min(200, durMs * 0.08))
+  const len = new Array<number>(u.words).fill(0)
+  for (const g of u.glyphs) if (g.word >= 0) len[g.word]!++
+  const total = len.reduce((s, x) => s + x, 0) || 1
+  const out = [start]
+  let acc = 0
+  for (const l of len) { acc += l; out.push(start + ((end - start) * acc) / total) }
+  return out
 }
 
 // ── Sampling ───────────────────────────────────────────────────────────────
@@ -332,6 +430,12 @@ export interface FxFrame {
   warp?: number
   /** Noise drift now, em */
   drift?: number
+  /** Per line: 0–1 how far its top line is drawn, and how far the letters have come down */
+  headline?: { draw: number; drop: number }[]
+  /** Per word: 0–1 how far its fill has gone */
+  fill?: number[]
+  /** Per word or line (the marker's unit): 0–1 how far its stroke is drawn */
+  marker?: number[]
 }
 
 function phaseStates(p: FxPhase, n: number, ms: number, startMs: number, out: boolean, seed: number): FxState[] {
@@ -400,6 +504,41 @@ export function fxAt(fx: CompiledFx, units: Units, ms: number, durMs: number): F
     if (w.outMs) bend = Math.max(bend, rest + (w.amountEm - rest) * ease(EASE.in, 1 - (durMs - ms) / w.outMs))
     frame.warp = bend
     if (w.drift) frame.drift = Math.sin((2 * Math.PI * ms) / 4000) * w.drift * 0.6
+  }
+  if (fx.headline) {
+    const h = fx.headline
+    frame.headline = Array.from({ length: units.lines }, (_, k) => {
+      const t = ms - h.delayMs - k * h.stepMs
+      return { draw: ease(EASE.inOut, t / h.drawMs), drop: ease(EASE.out, (t - h.drawMs * HEAD_DROP_AT) / h.dropMs) }
+    })
+  }
+  if (fx.fill || fx.focus) {
+    const at = spokenTimes(fx, units, durMs)
+    if (fx.fill) frame.fill = Array.from({ length: units.words }, (_, i) => clamp01((ms - at[i]!) / Math.max(1, at[i + 1]! - at[i]!)))
+    if (fx.focus) {
+      const F = fx.focus
+      add('word', Array.from({ length: units.words }, (_, i) => {
+        const away = Math.max(at[i]! - ms, ms - at[i + 1]!, 0)
+        return between(F.state, ease(EASE.inOut, 1 - away / Math.max(1, F.fadeMs)), false)
+      }))
+    }
+  }
+  if (fx.emphasis) {
+    const E = fx.emphasis
+    const key = keyWord(units)
+    const p = ease(E.ease ?? EASE.out, (ms - E.delayMs) / Math.max(1, E.ms))
+    add('word', Array.from({ length: units.words }, (_, i) => (i === key ? between(E.state, p, true) : {})))
+  }
+  if (fx.marker) {
+    const M = fx.marker
+    const key = keyWord(units)
+    const n = M.unit === 'line' ? units.lines : units.words
+    const d = delays(n, M.order, fx.seed)
+    frame.marker = d.map((di, i) => {
+      if (M.pick === 'key' && M.unit === 'word' && i !== key) return 0
+      const step = M.pick === 'key' ? 0 : di
+      return ease(EASE.inOut, (ms - M.delayMs - step * M.stepMs) / Math.max(1, M.ms))
+    })
   }
   return frame
 }

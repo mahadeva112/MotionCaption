@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { EASE } from './anim.ts'
 import { compileCue } from './compile.ts'
-import { compileFx, delays, fxAt, hasHeadline, phaseLength, splitUnits, unitFor, type Fx } from './fx.ts'
+import { compileFx, delays, fxAt, hasHeadline, keyWord, phaseLength, spokenTimes, splitUnits, unitFor, type Fx } from './fx.ts'
 import { sigOf } from './job.ts'
 import type { Cue } from './srt.ts'
 import { PRESETS } from './presets.ts'
@@ -135,10 +135,11 @@ describe('sampling', () => {
 describe('advanced presets', () => {
   const advanced = PRESETS.filter((p) => p.fx)
 
-  it('are in the Advanced family, testing, with no Text+ tracks', () => {
-    expect(advanced.length).toBeGreaterThanOrEqual(5)
+  it('are in their own families, testing, with no Text+ tracks', () => {
+    expect(advanced.length).toBeGreaterThanOrEqual(14)
+    expect(advanced.filter((p) => p.family === 'Indic Flow')).toHaveLength(10)
     for (const p of advanced) {
-      expect(p.family).toBe('Advanced')
+      expect(['Indic Flow', 'Advanced']).toContain(p.family)
       expect(p.status).toBe('testing')
       expect(p.tracks).toEqual([])
     }
@@ -159,5 +160,71 @@ describe('advanced presets', () => {
     expect(plain.fx).toBeUndefined()
     expect(sigOf(plain)).toBe(sigOf({ ...plain }))
     expect(sigOf(compileCue(cue('hello there'), 'wordBloom'))).not.toBe(sigOf(compileCue(cue('hello there'), 'glowPulse')))
+  })
+})
+
+const NL = String.fromCharCode(10)
+
+describe('Indic Word Flow pieces', () => {
+  const u = splitUnits('आज की सबसे महत्वपूर्ण बात')
+
+  it('picks the longest word as the key word', () => {
+    expect(keyWord(u)).toBe(3)
+    expect(keyWord(splitUnits('a bb cc'))).toBe(1)
+  })
+
+  it('shares the spoken time by letters, after the way in and before the way out', () => {
+    const fx = compileFx({ in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 300, ease: EASE.linear, state: { opacity: 0 } } }, 'ab abcd', 3000)
+    const at = spokenTimes(fx, splitUnits('ab abcd'), 3000)
+    expect(at[0]).toBe(300)
+    expect(at[2]).toBe(2800)
+    expect(at[1]).toBeCloseTo(300 + 2500 / 3)
+  })
+
+  it('fills each word in turn', () => {
+    const fx = compileFx({ fill: {} }, 'ab abcd', 3000)
+    const ux = splitUnits('ab abcd')
+    const at = spokenTimes(fx, ux, 3000)
+    const f = fxAt(fx, ux, (at[0]! + at[1]!) / 2, 3000)
+    expect(f.fill![0]).toBeCloseTo(0.5)
+    expect(f.fill![1]).toBe(0)
+    expect(fxAt(fx, ux, 3000, 3000).fill).toEqual([1, 1])
+  })
+
+  it('keeps only the spoken word in focus', () => {
+    const fx = compileFx({ focus: { state: { opacity: 0.5 }, fadeMs: 100 } }, 'ab abcd', 3000)
+    const ux = splitUnits('ab abcd')
+    const at = spokenTimes(fx, ux, 3000)
+    const f = fxAt(fx, ux, at[1]! + 500, 3000)
+    expect(f.word![1]!.opacity).toBe(1)
+    expect(f.word![0]!.opacity).toBe(0.5)
+  })
+
+  it('draws each line’s top line before its letters come down', () => {
+    const fx = compileFx({ headline: { delayMs: 0, stepMs: 400, drawMs: 600, dropMs: 500 } }, 'एक' + NL + 'दो', 4000)
+    const ux = splitUnits('एक' + NL + 'दो')
+    const early = fxAt(fx, ux, 300, 4000).headline!
+    expect(early[0]!.draw).toBeGreaterThan(0)
+    expect(early[0]!.drop).toBe(0)
+    expect(early[1]!.draw).toBe(0)
+    const done = fxAt(fx, ux, 2000, 4000).headline!
+    expect(done.every((h) => h.draw === 1 && h.drop === 1)).toBe(true)
+  })
+
+  it('squeezes the top line draw into a short caption', () => {
+    const fx = compileFx({ headline: { delayMs: 100, stepMs: 400, drawMs: 650, dropMs: 520 } }, 'एक' + NL + 'दो' + NL + 'तीन', 1000)
+    const h = fx.headline!
+    expect(h.delayMs + 2 * h.stepMs + h.drawMs * 0.6 + h.dropMs).toBeLessThanOrEqual(750 + 1e-6)
+  })
+
+  it('marks and colours only the key word', () => {
+    const fx = compileFx({
+      marker: { unit: 'word', pick: 'key', order: 'ltr', delayMs: 0, stepMs: 0, ms: 400, opacity: 1 },
+      emphasis: { delayMs: 0, ms: 400, ease: EASE.linear, state: { tint: 1 } },
+    }, 'आज की सबसे महत्वपूर्ण बात', 3000)
+    const f = fxAt(fx, u, 1000, 3000)
+    expect(f.marker).toEqual([0, 0, 0, 1, 0])
+    expect(f.word![3]!.tint).toBe(1)
+    expect(f.word![0]!.tint).toBeUndefined()
   })
 })
