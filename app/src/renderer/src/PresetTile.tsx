@@ -19,7 +19,7 @@ const FAMILY: Record<Family, { m: string; s: CSSProperties }> = {
   Stroke: { m: 'm-type', s: { fontFamily: "'Segoe UI', sans-serif", fontWeight: 900, color: 'transparent', WebkitTextStroke: '1px #fff', fontSize: '15px' } },
   Scramble: { m: 'm-type', s: { fontFamily: 'Consolas, monospace', fontWeight: 700, color: '#7dffa0', letterSpacing: '.06em' } },
   Elastic: { m: 'm-pop', s: { fontFamily: "'Arial Rounded MT Bold', 'Segoe UI', sans-serif", fontWeight: 800, color: '#9be7ff' } },
-  Advanced: { m: 'm-blur', s: { fontFamily: 'Georgia, serif', fontWeight: 700, color: '#ffd27a', textShadow: '0 0 10px rgba(255,190,90,.55)' } },
+  Distort: { m: 'm-drift', s: { fontFamily: 'Georgia, serif', fontStyle: 'italic', fontWeight: 700, color: '#c9b8ff', transform: 'skewX(-8deg)' } },
 }
 
 /** A few presets get their own type, so the best-known ones read at a glance */

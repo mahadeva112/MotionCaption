@@ -92,6 +92,8 @@ export interface FxPhase {
   alternate?: boolean
   /** Each unit takes its own share of x, y and rotate, a fixed random amount between ± the state's */
   scatter?: boolean
+  /** Units grow and turn from their top (melting down) or bottom, not their middle */
+  origin?: 'top' | 'bottom'
   /** Hindi, Marathi, Bangla and Punjabi letters hang from one top line (shirorekha). Pulled
    *  apart they read as broken, so a letter effect runs word by word on them unless this is set. */
   keepLetters?: boolean
@@ -333,6 +335,23 @@ export interface FxCursor {
   color?: Rgb
 }
 
+/** The letters as soft blobs that run together, firming up into the text (a gooey liquid) */
+export interface FxGoo {
+  /** How soft the blobs start, em */
+  blurEm: number
+  /** ms they take to firm up */
+  inMs: number
+}
+
+/** A lens passing along the line: the words under it swell */
+export interface FxLens {
+  periodMs: number
+  /** How much a word under the middle of the lens grows (0.3: 30 %) */
+  amount: number
+  /** Lens width, as a share of the line */
+  width: number
+}
+
 /** Each unit of the way in squashes as it lands and wobbles back to shape */
 export interface FxLand {
   /** 0–1: how flat it goes (0.3: 30 % shorter and wider) */
@@ -405,7 +424,7 @@ export interface FxWarp {
   sizeEm: number
   /** Most bend, em */
   amountEm: number
-  /** ms the bend takes to settle to `restEm` after the start; 0: it stays at amountEm */
+  /** ms the bend takes to settle to `restEm` after the start; 0: it holds at restEm, or at amountEm without one */
   inMs: number
   /** Bend that stays while the caption is up, em */
   restEm?: number
@@ -446,6 +465,8 @@ export interface Fx {
   scramble?: FxScramble
   cursor?: FxCursor
   land?: FxLand
+  goo?: FxGoo
+  lens?: FxLens
   flare?: FxFlare
   /** Colour for glow, tint, fill and marker; left out: warm gold */
   accent?: Rgb
@@ -637,7 +658,9 @@ export function compileFx(fx: Fx, text: string, durMs: number, opts: { speed?: n
     ...(fx.echo ? { echo: { ...fx.echo, inMs: fx.echo.inMs / speed } } : {}),
     ...(fx.scramble ? { scramble: fitScramble(fx.scramble, units, durMs, speed, seed) } : {}),
     ...(fx.cursor ? { cursor: { ...fx.cursor, blinkMs: fx.cursor.blinkMs / speed } } : {}),
-    ...(fx.land ? { land: { ...fx.land, ms: fx.land.ms / speed } } : {}), ...(flicker ? { flicker } : {}), ...(backlight ? { backlight } : {}), ...(flare ? { flare } : {}),
+    ...(fx.land ? { land: { ...fx.land, ms: fx.land.ms / speed } } : {}),
+    ...(fx.goo ? { goo: { ...fx.goo, inMs: Math.min(fx.goo.inMs / speed, durMs * IN_DONE_BY) } } : {}),
+    ...(fx.lens ? { lens: { ...fx.lens, periodMs: fx.lens.periodMs / speed } } : {}), ...(flicker ? { flicker } : {}), ...(backlight ? { backlight } : {}), ...(flare ? { flare } : {}),
     ...(particles ? { particles } : {}), ...(dissolve ? { dissolve } : {}), ...(fx.reflect ? { reflect: fx.reflect } : {}),
     accent: fx.accent ?? GOLD, seed,
   }
@@ -767,6 +790,10 @@ export interface FxFrame {
   ripple?: number
   /** Levels whose units move inside their own window */
   masked: Partial<Record<FxUnit, boolean>>
+  /** Levels whose units grow and turn from their top or bottom */
+  origin: Partial<Record<FxUnit, 'top' | 'bottom'>>
+  /** How soft the gooey blobs are now, em (0: firm text) */
+  goo?: number
   /** The bar now: how much of the text's width it covers and which side it holds to */
   bar?: { scale: number; origin: 'left' | 'right' }
   /** The box now: its width and height as shares of the full box */
@@ -830,7 +857,7 @@ const mirrored = (s: FxState): FxState => ({
 
 /** Every unit's look at ms into a caption of durMs */
 export function fxAt(fx: CompiledFx, units: Units, ms: number, durMs: number): FxFrame {
-  const frame: FxFrame = { revealFrom: {}, masked: {} }
+  const frame: FxFrame = { revealFrom: {}, masked: {}, origin: {} }
   const add = (unit: FxUnit, states: FxState[]) => {
     if (unit === 'whole') { frame.whole = combine(frame.whole ?? {}, states[0] ?? {}); return }
     const have = frame[unit]
@@ -842,6 +869,7 @@ export function fxAt(fx: CompiledFx, units: Units, ms: number, durMs: number): F
     add(fx.in.unit, phaseStates(fx.in, n, ms, 0, false, fx.seed))
     if (fx.in.revealFrom) frame.revealFrom[fx.in.unit] = fx.in.revealFrom
     if (fx.in.masked) frame.masked[fx.in.unit] = true
+    if (fx.in.origin) frame.origin[fx.in.unit] = fx.in.origin
   }
   if (fx.out) {
     const n = countOf(units, fx.out.unit)
@@ -849,6 +877,7 @@ export function fxAt(fx: CompiledFx, units: Units, ms: number, durMs: number): F
     add(fx.out.unit, phaseStates(fx.out, n, ms, start, true, fx.seed + 1))
     if (fx.out.revealFrom) frame.revealFrom[fx.out.unit] ??= fx.out.revealFrom
     if (fx.out.masked) frame.masked[fx.out.unit] = true
+    if (fx.out.origin) frame.origin[fx.out.unit] ??= fx.out.origin
   }
   if (fx.loop) {
     const L = fx.loop
@@ -888,8 +917,8 @@ export function fxAt(fx: CompiledFx, units: Units, ms: number, durMs: number): F
   if (fx.warp) {
     const w = fx.warp
     const rest = w.restEm ?? 0
-    // No settling: the bend is there the whole time (haze)
-    let bend = w.inMs > 0 ? rest + (w.amountEm - rest) * (1 - ease(EASE.inOut, ms / w.inMs)) : w.amountEm
+    // No settling: the bend is there the whole time (haze), or only at the end when a rest is given
+    let bend = w.inMs > 0 ? rest + (w.amountEm - rest) * (1 - ease(EASE.inOut, ms / w.inMs)) : w.restEm ?? w.amountEm
     if (w.outMs) bend = Math.max(bend, rest + (w.amountEm - rest) * ease(EASE.in, 1 - (durMs - ms) / w.outMs))
     frame.warp = bend
     if (w.drift) frame.drift = Math.sin((2 * Math.PI * ms) / 4000) * w.drift * 0.6
@@ -917,6 +946,20 @@ export function fxAt(fx: CompiledFx, units: Units, ms: number, durMs: number): F
     const key = keyWord(units)
     const p = easeAt(E.ease ?? EASE.out, (ms - E.delayMs) / Math.max(1, E.ms))
     add('word', Array.from({ length: units.words }, (_, i) => (i === key ? between(E.state, p, true) : E.others ? between(E.others, p, true) : {})))
+  }
+  if (fx.goo) {
+    const G = fx.goo
+    frame.goo = G.blurEm * (1 - ease(EASE.inOut, ms / Math.max(1, G.inMs)))
+  }
+  if (fx.lens) {
+    // The lens runs from off the left to off the right, then again
+    const Ln = fx.lens
+    const n = units.words
+    const c = (((ms / Ln.periodMs) % 1) + 1) % 1 * (1 + 2 * Ln.width) - Ln.width
+    add('word', Array.from({ length: n }, (_, i) => {
+      const at = (i + 0.5) / Math.max(1, n)
+      return { scale: 1 + Ln.amount * Math.exp(-(((at - c) / Ln.width) ** 2)) }
+    }))
   }
   if (fx.land && fx.in) {
     // Squashed flat on landing, then wobbling back: wider as it gets shorter

@@ -136,7 +136,8 @@ describe('advanced presets', () => {
   const advanced = PRESETS.filter((p) => p.fx)
 
   it('are in their own families, testing, with no Text+ tracks', () => {
-    expect(advanced.length).toBeGreaterThanOrEqual(81)
+    expect(advanced.length).toBe(90)
+    expect(advanced.filter((p) => p.family === 'Distort')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Elastic')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Scramble')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Stroke')).toHaveLength(10)
@@ -146,7 +147,7 @@ describe('advanced presets', () => {
     expect(advanced.filter((p) => p.family === 'Calm')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Indic Flow')).toHaveLength(10)
     for (const p of advanced) {
-      expect(['Indic Flow', 'Calm', 'Mask & Wipe', 'Light & Glow', 'Kinetic', 'Stroke', 'Scramble', 'Elastic', 'Advanced']).toContain(p.family)
+      expect(['Indic Flow', 'Calm', 'Mask & Wipe', 'Light & Glow', 'Kinetic', 'Stroke', 'Scramble', 'Elastic', 'Distort']).toContain(p.family)
       expect(p.status).toBe('testing')
       expect(p.tracks).toEqual([])
     }
@@ -567,5 +568,39 @@ describe('Elastic pieces', () => {
     expect(hit[0]!.scaleX!).toBeGreaterThan(1.2)
     expect(hit[1]!.scaleY).toBeUndefined()
     expect(fxAt(fx, u, 2000, 4000).word!.every((s) => s.scaleY === undefined)).toBe(true)
+  })
+})
+
+describe('Distort pieces', () => {
+  it('firms gooey blobs up into the text', () => {
+    const fx = compileFx({ goo: { blurEm: 0.2, inMs: 1000 } }, 'a', 4000)
+    const u = splitUnits('a')
+    expect(fxAt(fx, u, 0, 4000).goo).toBeCloseTo(0.2)
+    expect(fxAt(fx, u, 500, 4000).goo).toBeCloseTo(0.1)
+    expect(fxAt(fx, u, 2000, 4000).goo).toBe(0)
+  })
+
+  it('swells the words under the passing lens', () => {
+    const fx = compileFx({ lens: { periodMs: 1000, amount: 0.3, width: 0.2 } }, 'एक दो तीन चार', 4000)
+    const u = splitUnits('एक दो तीन चार')
+    // A third of the way: the lens is over the second word
+    const scales = fxAt(fx, u, (1000 * (0.375 + 0.2)) / 1.4, 4000).word!.map((s) => s.scale!)
+    expect(scales[1]).toBeGreaterThan(1.25)
+    expect(scales[3]).toBeLessThan(1.05)
+  })
+
+  it('grows a melting letter from its top', () => {
+    const fx = compileFx({ out: { unit: 'letter', order: 'ltr', stepMs: 0, ms: 500, ease: EASE.in, state: { scaleY: 2 }, origin: 'top' } }, 'ab', 4000)
+    expect(fxAt(fx, splitUnits('ab'), 3800, 4000).origin).toEqual({ letter: 'top' })
+  })
+
+  it('holds a warp at its rest until the way out', () => {
+    const fx = compileFx({ warp: { sizeEm: 0.4, amountEm: 0.4, inMs: 0, restEm: 0, outMs: 500 } }, 'a', 4000)
+    const u = splitUnits('a')
+    expect(fxAt(fx, u, 0, 4000).warp).toBe(0)
+    expect(fxAt(fx, u, 2000, 4000).warp).toBe(0)
+    expect(fxAt(fx, u, 4000, 4000).warp).toBeCloseTo(0.4)
+    const haze = compileFx({ warp: { sizeEm: 0.3, amountEm: 0.07, inMs: 0 } }, 'a', 4000)
+    expect(fxAt(haze, u, 2000, 4000).warp).toBeCloseTo(0.07)
   })
 })
