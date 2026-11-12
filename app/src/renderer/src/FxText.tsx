@@ -212,7 +212,7 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
             const p = f.fill?.[it.word] ?? 0
             ws = { ...ws, clipPath: `inset(-40% ${pc(1 - p)} -40% -40%)` }
           }
-          return unit('fxu' + (M?.unit === 'word' ? ' mk' : ''), `w${it.word}`, ws, f.masked.word,
+          return unit('fxu' + (M?.unit === 'word' ? ' mk' : '') + (M?.full ? ' full' : ''), `w${it.word}`, ws, f.masked.word,
             w.glyphs.map((gi) => {
               const g = units.glyphs[gi]!
               const ls = f.letter ? stateStyle(f.letter[g.letter], f.revealFrom.letter, A, fill, shadow) : undefined
@@ -222,6 +222,16 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
         }), !copy && M?.unit === 'line' ? stroke(f.marker?.[li]) : null),
     ]
   })
+
+  // One word at a time: every word in the same grid cell, centred, each shown in its turn
+  const swapTree = () => (
+    <span className="fxswap">
+      {lines.flatMap((l) => l.words).map((w) => unit('fxu' + (M?.unit === 'word' ? ' mk' : '') + (M?.full ? ' full' : ''), `w${w.word}`,
+        stateStyle(f.word?.[w.word], f.revealFrom.word, A, fill, shadow), f.masked.word,
+        w.glyphs.map((gi) => unit('fxc', gi, f.letter ? stateStyle(f.letter[units.glyphs[gi]!.letter], f.revealFrom.letter, A, fill, shadow) : undefined, f.masked.letter, charEl(gi))),
+        M?.unit === 'word' ? stroke(f.marker?.[w.word]) : null))}
+    </span>
+  )
 
   // Karaoke fill: the text again in the fill colour, each word cut to how far it is spoken
   const fillCopy = fx.fill && f.fill?.some((p) => p > 0)
@@ -324,7 +334,7 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
       {boxEl}
       <span className="fxw" style={stateStyle(f.whole, f.revealFrom.whole, A, fill, shadow)}>
         {mirror}
-        {tree(false)}
+        {f.swap ? swapTree() : tree(false)}
         {fillCopy}
         {sweep}
       </span>

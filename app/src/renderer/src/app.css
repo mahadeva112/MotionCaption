@@ -539,3 +539,8 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
 .fxglow { position: absolute; left: 50%; top: 50%; width: 125%; height: 340%; pointer-events: none; }
 .fxflare { position: absolute; top: 50%; transform: translate(-50%, -50%); pointer-events: none; }
 .fxp.twinkle { border-radius: 0; clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%); }
+/* One word at a time: all words in one cell, centred (word swap) */
+.fxswap { display: inline-grid; }
+.fxswap > .fxu { grid-area: 1 / 1; justify-self: center; }
+/* A box behind the whole word (highlight box) */
+.fxu.full > .fxmk { top: -14%; bottom: -8%; left: -.14em; right: -.14em; border-radius: .16em; }

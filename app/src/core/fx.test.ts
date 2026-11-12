@@ -136,13 +136,14 @@ describe('advanced presets', () => {
   const advanced = PRESETS.filter((p) => p.fx)
 
   it('are in their own families, testing, with no Text+ tracks', () => {
-    expect(advanced.length).toBeGreaterThanOrEqual(41)
+    expect(advanced.length).toBeGreaterThanOrEqual(51)
+    expect(advanced.filter((p) => p.family === 'Kinetic')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Light & Glow')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Mask & Wipe')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Calm')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Indic Flow')).toHaveLength(10)
     for (const p of advanced) {
-      expect(['Indic Flow', 'Calm', 'Mask & Wipe', 'Light & Glow', 'Advanced']).toContain(p.family)
+      expect(['Indic Flow', 'Calm', 'Mask & Wipe', 'Light & Glow', 'Kinetic', 'Advanced']).toContain(p.family)
       expect(p.status).toBe('testing')
       expect(p.tracks).toEqual([])
     }
@@ -362,5 +363,58 @@ describe('Light & Glow pieces', () => {
   it('keeps a base look the whole time', () => {
     const fx = compileFx({ base: { tint: 0.8 } }, 'a', 4000)
     expect(fxAt(fx, splitUnits('a'), 2000, 4000).whole!.tint).toBe(0.8)
+  })
+})
+
+describe('Kinetic pieces', () => {
+  const u = splitUnits('एक दो तीन')
+
+  it('shakes the caption as each word lands, then stops', () => {
+    const fx = compileFx({
+      in: { unit: 'word', order: 'ltr', stepMs: 200, ms: 200, ease: EASE.in, state: { scale: 2 } },
+      impact: { amountEm: 0.1, ms: 200 },
+    }, 'एक दो तीन', 4000)
+    expect(fxAt(fx, u, 100, 4000).whole).toBeUndefined()
+    const hit = fxAt(fx, u, 230, 4000).whole!
+    expect(Math.hypot(hit.x ?? 0, hit.y ?? 0)).toBeGreaterThan(0)
+    expect(fxAt(fx, u, 2000, 4000).whole).toBeUndefined()
+  })
+
+  it('brings every other unit from the other side', () => {
+    const fx = compileFx({ in: { unit: 'word', order: 'ltr', stepMs: 0, ms: 400, ease: EASE.linear, state: { x: -1, rotate: -5 }, alternate: true } }, 'एक दो तीन', 4000)
+    const f = fxAt(fx, u, 0, 4000)
+    expect(f.word!.map((s) => s.x)).toEqual([-1, 1, -1])
+    expect(f.word![1]!.rotate).toBe(5)
+  })
+
+  it('beats a pulse out from rest only', () => {
+    const fx = compileFx({ loop: { unit: 'word', periodMs: 1000, stepMs: 0, amp: { scale: 0.1 }, pulse: true } }, 'a', 4000)
+    const ua = splitUnits('a')
+    const scales = Array.from({ length: 20 }, (_, k) => fxAt(fx, ua, k * 50, 4000).word![0]!.scale!)
+    expect(Math.min(...scales)).toBeCloseTo(1)
+    expect(Math.max(...scales)).toBeCloseTo(1.1)
+  })
+
+  it('moves a highlight box from word to word as they are spoken', () => {
+    const fx = compileFx({ marker: { unit: 'word', pick: 'all', order: 'ltr', delayMs: 0, stepMs: 0, ms: 50, opacity: 1, full: true, spoken: true } }, 'एक दो तीन', 4000)
+    const at = spokenTimes(fx, u, 4000)
+    expect(fxAt(fx, u, (at[1]! + at[2]!) / 2, 4000).marker).toEqual([0, 1, 0])
+    expect(fxAt(fx, u, 4000, 4000).marker).toEqual([0, 0, 1])
+  })
+
+  it('swaps one word at a time, keeping the last', () => {
+    const fx = compileFx({ swap: { ms: 100, travelEm: 0.5 } }, 'एक दो तीन', 4000)
+    const at = spokenTimes(fx, u, 4000)
+    const mid = fxAt(fx, u, (at[1]! + at[2]!) / 2, 4000)
+    expect(mid.swap).toBe(true)
+    expect(mid.word!.map((s) => s.opacity)).toEqual([0, 1, 0])
+    expect(fxAt(fx, u, 4000, 4000).word!.map((s) => s.opacity)).toEqual([0, 0, 1])
+  })
+
+  it('sends the other words back while the key word comes forward', () => {
+    const fx = compileFx({ emphasis: { delayMs: 0, ms: 100, state: { scale: 1.1 }, others: { opacity: 0.5 } } }, 'एक दो तीनचार', 4000)
+    const f = fxAt(fx, splitUnits('एक दो तीनचार'), 1000, 4000)
+    expect(f.word![2]!.scale).toBe(1.1)
+    expect(f.word![0]!.opacity).toBe(0.5)
   })
 })
