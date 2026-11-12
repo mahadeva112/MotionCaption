@@ -185,6 +185,13 @@ export const rgb = (h: string): Rgb => {
   return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]
 }
 
+/** "#f80", "ff8800" or "#FF8800" → "#ff8800"; null when it is not a colour yet */
+export const parseHex = (t: string): string | null => {
+  let m = t.trim().replace(/^#/, '').toLowerCase()
+  if (/^[0-9a-f]{3}$/.test(m)) m = m.replace(/./g, '$&$&')
+  return /^[0-9a-f]{6}$/.test(m) ? '#' + m : null
+}
+
 export const SWATCHES: Rgb[] = [[1, 1, 1], [1, 0.82, 0.25], [1, 0.35, 0.21], [0.31, 0.82, 0.55], [0.35, 0.63, 1], [1, 0.31, 0.64], [0, 0, 0]]
 
 /** Preview frame shapes for an SRT (a timeline brings its own size) */

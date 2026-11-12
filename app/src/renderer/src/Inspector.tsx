@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { DEFAULT_HIGHLIGHT, DEFAULT_MOTION, type Highlight, type Look, type Motion, type Rgb, type WordLook } from '@core/look'
 import type { Pattern } from '@core/pattern'
 import type { Mood, Smart } from '@core/smart'
@@ -7,7 +7,7 @@ import { hasOwnOut } from '@core/compile'
 import { FAMILIES, PRESETS, presetById } from '@core/presets'
 import { CurveEdit } from './Curve'
 import type { FontFamily } from './fonts'
-import { hex, rgb, SWATCHES, timecode, type SafeArea, type Scope } from './model'
+import { hex, parseHex, rgb, SWATCHES, timecode, type SafeArea, type Scope } from './model'
 
 /** Animations with a way out that any caption can take (Out › From…) */
 const OUTS = PRESETS.filter((x) => hasOwnOut(x.id))
@@ -126,13 +126,28 @@ function Seg<T extends string>({ label, value, opts, onChange, r }: { label: str
     </Row>
   )
 }
+/** The preset swatches, a custom dot that opens the colour picker, and a hex field */
+function Swatches({ value, onChange }: { value: Rgb; onChange: (c: Rgb) => void }) {
+  const h = hex(value)
+  const preset = SWATCHES.some((c) => hex(c) === h)
+  const [txt, setTxt] = useState(h)
+  useEffect(() => setTxt(h), [h])
+  return (
+    <>
+      {SWATCHES.map((c) => <b key={hex(c)} style={{ background: hex(c) }} className={hex(c) === h ? 'on' : ''} onClick={() => onChange(c)} />)}
+      <label className={'cust' + (preset ? '' : ' on')} title="Custom colour" style={preset ? undefined : { '--c': h } as CSSProperties}>
+        <input type="color" value={h} onChange={(e) => onChange(rgb(e.target.value))} />
+      </label>
+      <input className="hex" value={txt} maxLength={7} spellCheck={false} title="Hex colour, like #ff8800"
+        onChange={(e) => { setTxt(e.target.value); const c = parseHex(e.target.value); if (c) onChange(rgb(c)) }}
+        onBlur={() => setTxt(h)} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+    </>
+  )
+}
 function Color({ label, value, onChange, r }: { label: string; value: Rgb; onChange: (c: Rgb) => void; r?: R }) {
   return (
     <Row label={label} wide r={r}>
-      <div className="colrow">
-        <input type="color" value={hex(value)} onChange={(e) => onChange(rgb(e.target.value))} />
-        {SWATCHES.map((c) => <b key={hex(c)} style={{ background: hex(c) }} className={hex(c) === hex(value) ? 'on' : ''} onClick={() => onChange(c)} />)}
-      </div>
+      <div className="colrow"><Swatches value={value} onChange={onChange} /></div>
     </Row>
   )
 }
@@ -382,9 +397,9 @@ export function Inspector(p: Props) {
                   <Row label="Box" wide r={wd('box')}>
                     <div className="colrow">
                       <Toggle on={!!w.box} onChange={(on) => p.onWordLook({ box: on ? (w.box ?? [1, 0.35, 0.21]) : undefined })}>Behind word</Toggle>
-                      {w.box && <input type="color" value={hex(w.box)} onChange={(e) => p.onWordLook({ box: rgb(e.target.value) })} />}
                     </div>
                   </Row>
+                  {w.box && <Color label="Box colour" value={w.box} onChange={(c) => p.onWordLook({ box: c })} />}
                   <div className="btnrow">
                     <Toggle on={p.everywhere} onChange={p.onEverywhere}>Same word in every caption</Toggle>
                   </div>
