@@ -51,6 +51,8 @@ export interface FxPhase {
   stepMs: number
   /** ms each unit takes */
   ms: number
+  /** ms before the first unit starts */
+  delayMs?: number
   ease: Bezier
   /** Way in: where each unit starts. Way out: where it ends. */
   state: FxState
@@ -100,6 +102,44 @@ export interface FxSweep {
   strength: number
   /** 'headline': only along each line's top line (shirorekha), not over the whole letters */
   band?: 'headline'
+  /** The light stays where the band has passed (one pass): a colour rising through the letters */
+  hold?: boolean
+}
+
+/** Small things moving with the text: gold dust gathering into it, or petals drifting past */
+export interface FxParticles {
+  kind: 'dust' | 'petal'
+  count: number
+  delayMs: number
+  /** dust: ms one grain takes to fly in; petal: ms one petal takes to cross */
+  ms: number
+  sizeEm: number
+  /** dust: how far out the grains start, em */
+  spreadEm?: number
+  /** Left out: the accent */
+  color?: Rgb
+}
+
+/** The letters coming out of (and going back into) soft noise, like mist clearing */
+export interface FxDissolve {
+  /** Noise size, em */
+  sizeEm: number
+  /** 0–1 how soft the noise's edge is */
+  soft: number
+  inMs: number
+  outMs?: number
+}
+
+/** A mirrored copy of the text under it, as on water */
+export interface FxReflect {
+  /** Opacity at the top of the reflection */
+  opacity: number
+  /** Share of the reflection's height before it fades out */
+  fade: number
+  /** Ripple: most bend, em (0: still water) */
+  waveEm: number
+  /** Ripple size, em */
+  sizeEm: number
 }
 
 /** Each line's top line (shirorekha) drawn from left to right, then the letters hang down from it */
@@ -178,6 +218,9 @@ export interface Fx {
   focus?: FxFocus
   emphasis?: FxEmphasis
   marker?: FxMarker
+  particles?: FxParticles
+  dissolve?: FxDissolve
+  reflect?: FxReflect
   /** Colour for glow, tint, fill and marker; left out: warm gold */
   accent?: Rgb
 }
@@ -289,7 +332,7 @@ export function delays(n: number, order: FxOrder, seed: number): number[] {
 /** ms from a phase's first unit starting to its last one finishing */
 export function phaseLength(p: FxPhase, n: number, seed = 0): number {
   if (n <= 0) return 0
-  return Math.max(...delays(n, p.order, seed)) * p.stepMs + p.ms
+  return (p.delayMs ?? 0) + Math.max(...delays(n, p.order, seed)) * p.stepMs + p.ms
 }
 
 /** Share of the caption that the way in and the way out may take together */
@@ -297,7 +340,7 @@ const MAX_SHARE = 0.9
 /** Share of the caption by which the last unit must have finished arriving */
 const IN_DONE_BY = 0.75
 
-const scalePhase = (p: FxPhase, f: number): FxPhase => ({ ...p, stepMs: p.stepMs * f, ms: p.ms * f })
+const scalePhase = (p: FxPhase, f: number): FxPhase => ({ ...p, stepMs: p.stepMs * f, ms: p.ms * f, ...(p.delayMs ? { delayMs: p.delayMs * f } : {}) })
 
 /**
  * Fit an effect to one caption: the units its script allows, times divided by the speed,
@@ -342,11 +385,17 @@ export function compileFx(fx: Fx, text: string, durMs: number, opts: { speed?: n
   const marker = fx.marker && { ...fx.marker, delayMs: fx.marker.delayMs / speed, stepMs: fx.marker.stepMs / speed, ms: fx.marker.ms / speed }
   const emphasis = fx.emphasis && { ...fx.emphasis, delayMs: fx.emphasis.delayMs / speed, ms: fx.emphasis.ms / speed }
   const focus = fx.focus && { ...fx.focus, fadeMs: fx.focus.fadeMs / speed }
+  const particles = fx.particles && { ...fx.particles, delayMs: fx.particles.delayMs / speed, ms: fx.particles.ms / speed }
+  const dissolve = fx.dissolve && {
+    ...fx.dissolve, inMs: Math.min(fx.dissolve.inMs / speed, durMs * IN_DONE_BY),
+    ...(fx.dissolve.outMs && opts.keepOut !== false ? { outMs: Math.min(fx.dissolve.outMs / speed, durMs * (1 - IN_DONE_BY)) } : { outMs: 0 }),
+  }
   return {
     ...(inP ? { in: inP } : {}), ...(outP ? { out: outP } : {}), ...(loop ? { loop } : {}),
     ...(mask ? { mask } : {}), ...(sweep ? { sweep } : {}), ...(warp ? { warp } : {}),
     ...(headline ? { headline } : {}), ...(fx.fill ? { fill: fx.fill } : {}), ...(focus ? { focus } : {}),
     ...(emphasis ? { emphasis } : {}), ...(marker ? { marker } : {}),
+    ...(particles ? { particles } : {}), ...(dissolve ? { dissolve } : {}), ...(fx.reflect ? { reflect: fx.reflect } : {}),
     accent: fx.accent ?? GOLD, seed,
   }
 }
@@ -436,10 +485,27 @@ export interface FxFrame {
   fill?: number[]
   /** Per word or line (the marker's unit): 0–1 how far its stroke is drawn */
   marker?: number[]
+  /** Where each grain or petal is now: left/top as shares of the text's box, then em on top */
+  particles?: Particle[]
+  /** 0–1 how much of the noise lets the letters through */
+  dissolve?: number
+  /** Ripple drift now, em */
+  ripple?: number
 }
 
-function phaseStates(p: FxPhase, n: number, ms: number, startMs: number, out: boolean, seed: number): FxState[] {
+export interface Particle {
+  left: number
+  top: number
+  dx: number
+  dy: number
+  size: number
+  rotate: number
+  opacity: number
+}
+
+function phaseStates(p: FxPhase, n: number, ms: number, from: number, out: boolean, seed: number): FxState[] {
   const d = delays(n, p.order, seed)
+  const startMs = from + (p.delayMs ?? 0)
   return d.map((k) => {
     const raw = p.ms <= 0 ? (ms >= startMs + k * p.stepMs ? 1 : 0) : (ms - startMs - k * p.stepMs) / p.ms
     return between(p.state, ease(p.ease, raw), out)
@@ -495,6 +561,8 @@ export function fxAt(fx: CompiledFx, units: Units, ms: number, durMs: number): F
     let t = ms - s.delayMs
     if (t >= 0 && s.everyMs) t %= s.everyMs
     if (t >= 0 && t <= s.ms) frame.sweep = -0.5 + 2 * ease(EASE.inOut, t / s.ms)
+    // Held: once past, the light stays everywhere
+    else if (s.hold && t > s.ms) frame.sweep = 1.5
   }
   if (fx.warp) {
     const w = fx.warp
@@ -540,5 +608,45 @@ export function fxAt(fx: CompiledFx, units: Units, ms: number, durMs: number): F
       return ease(EASE.inOut, (ms - M.delayMs - step * M.stepMs) / Math.max(1, M.ms))
     })
   }
+  if (fx.particles) frame.particles = particlesAt(fx.particles, fx.seed, ms)
+  if (fx.dissolve) {
+    const D = fx.dissolve
+    let open = D.inMs > 0 ? ease(EASE.inOut, ms / D.inMs) : 1
+    if (D.outMs) open = Math.min(open, ease(EASE.inOut, (durMs - ms) / D.outMs))
+    frame.dissolve = open
+  }
+  if (fx.reflect) frame.ripple = Math.sin((2 * Math.PI * ms) / 3000) * 0.4
   return frame
+}
+
+/** Every grain or petal at ms: the same for the same seed, so each frame is drawn alike */
+export function particlesAt(P: FxParticles, seed: number, ms: number): Particle[] {
+  const rnd = random(seed * 7919 + (P.kind === 'dust' ? 1 : 2))
+  const out: Particle[] = []
+  for (let i = 0; i < P.count; i++) {
+    const [a, b, c, d, e] = [rnd(), rnd(), rnd(), rnd(), rnd()]
+    const size = P.sizeEm * (0.55 + 0.45 * c)
+    if (P.kind === 'dust') {
+      // From a point out around the text to a point on it, landing one after another
+      const start = P.delayMs + i * ((P.ms * 0.5) / Math.max(1, P.count))
+      const p = clamp01((ms - start) / P.ms)
+      const k = ease(EASE.out, p)
+      const angle = d * 2 * Math.PI
+      const far = (P.spreadEm ?? 2) * (0.5 + 0.5 * e)
+      const op = p <= 0 ? 0 : p < 0.2 ? p / 0.2 : p < 0.8 ? 1 : (1 - p) / 0.2
+      out.push({ left: a, top: b, dx: Math.cos(angle) * far * (1 - k), dy: Math.sin(angle) * far * (1 - k), size, rotate: 0, opacity: op })
+    } else {
+      // Drifting left to right and falling a little, each on its own clock and sway
+      const period = P.ms * (0.8 + 0.4 * c)
+      const t = (((ms - P.delayMs) / period + a) % 1 + 1) % 1
+      const on = clamp01((ms - P.delayMs) / 600)
+      out.push({
+        left: -0.15 + 1.3 * t, top: b,
+        dx: 0, dy: Math.sin(t * Math.PI * 3 + d * 6) * 0.5 + (t - 0.5) * 1.4,
+        size, rotate: (e < 0.5 ? -1 : 1) * 360 * t + d * 180,
+        opacity: on * Math.min(1, Math.sin(Math.PI * t) * 2.5),
+      })
+    }
+  }
+  return out
 }

@@ -63,12 +63,59 @@ const INDIC: Preset[] = [
   }),
 ]
 
-/** Phase A's first effects, until their own families come */
-const MORE: Preset[] = [
-  p('Advanced', 'silkWipe', 'Silk Wipe', 'A soft-edged wipe opens the line from the left while it drifts into place.', {
+/** Quiet and graceful: slow moves, soft light, nothing sudden */
+const CALM: Preset[] = [
+  p('Calm', 'warmGlowRise', 'Warm Glow Rise', 'The line rises out of a warm glow that fades as it settles.', {
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 1300, ease: EASE.inOut, state: { opacity: 0, y: 0.25, glow: 0.9, tint: 0.7 } },
+    out: fadeOut(400),
+  }),
+  p('Calm', 'breathFade', 'Breath Fade', 'A slow fade in and out, the line breathing gently in between.', {
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 900, ease: EASE.inOut, state: { opacity: 0 } },
+    out: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 700, ease: EASE.inOut, state: { opacity: 0 } },
+    loop: { unit: 'whole', periodMs: 4000, stepMs: 0, amp: { scale: 0.015 } },
+  }),
+  p('Calm', 'goldenDust', 'Golden Dust', 'Grains of gold gather into the line, which glows into place.', {
+    particles: { kind: 'dust', count: 50, delayMs: 0, ms: 900, sizeEm: 0.1, spreadEm: 2.4 },
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 600, delayMs: 450, ease: EASE.out, state: { opacity: 0, blur: 0.12, glow: 0.4 } },
+    out: fadeOut(350),
+  }),
+  p('Calm', 'silkWipe', 'Silk Wipe', 'A soft-edged wipe opens the line from the left while it drifts into place.', {
     mask: { kind: 'wipe', angle: 90, soft: 0.35, inMs: 1000, outMs: 450, ease: EASE.inOut },
     in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 1000, ease: EASE.out, state: { x: -0.18 } },
   }),
+  p('Calm', 'mistReveal', 'Mist Reveal', 'The line comes through as if a mist were clearing.', {
+    dissolve: { sizeEm: 0.7, soft: 0.45, inMs: 1300, outMs: 600 },
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 1300, ease: EASE.out, state: { blur: 0.12, y: 0.05 } },
+  }),
+  p('Calm', 'sunriseGradient', 'Sunrise Gradient', 'Gold rises through the letters from the bottom, like first light.', {
+    in: fadeWhole(350),
+    out: fadeOut(350),
+    sweep: { delayMs: 200, ms: 1400, width: 0.5, angle: 0, strength: 0.9, hold: true },
+    accent: [1, 0.72, 0.32],
+  }),
+  p('Calm', 'calmFloat', 'Calm Float', 'Words float gently up and down, one after another.', {
+    in: fadeWhole(600),
+    out: fadeOut(500),
+    loop: { unit: 'word', periodMs: 3600, stepMs: 300, amp: { y: 0.05 } },
+  }),
+  p('Calm', 'waterReflection', 'Water Reflection', 'The line is mirrored under itself, as on still water with a slow ripple.', {
+    in: fadeWhole(500),
+    out: fadeOut(400),
+    reflect: { opacity: 0.35, fade: 0.75, waveEm: 0.06, sizeEm: 0.5 },
+  }),
+  p('Calm', 'centerBloom', 'Center Bloom', 'The line opens softly from its centre out to both sides.', {
+    mask: { kind: 'split', soft: 0.4, inMs: 1000, outMs: 400, ease: EASE.inOut },
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 1000, ease: EASE.out, state: { scale: 0.96, blur: 0.08 } },
+  }),
+  p('Calm', 'petalDrift', 'Petal Drift', 'Petals drift past while the line fades in.', {
+    particles: { kind: 'petal', count: 12, delayMs: 0, ms: 5000, sizeEm: 0.32, color: [1, 0.72, 0.78] },
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 900, ease: EASE.out, state: { opacity: 0, y: 0.1 } },
+    out: fadeOut(400),
+  }),
+]
+
+/** Phase A's first effects, until their own families come */
+const MORE: Preset[] = [
   p('Advanced', 'lightSweep', 'Light Sweep', 'A band of light passes over the letters every few seconds.', {
     in: fadeWhole(300),
     out: fadeOut(250),
@@ -86,4 +133,4 @@ const MORE: Preset[] = [
   }),
 ]
 
-export const FX_PRESETS: Preset[] = [...INDIC, ...MORE]
+export const FX_PRESETS: Preset[] = [...INDIC, ...CALM, ...MORE]
