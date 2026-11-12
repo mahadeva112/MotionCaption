@@ -810,8 +810,8 @@ export function App() {
         <i className="logo" />
         <b>MotionCaption <em>Studio</em></b>
         {source?.kind === 'timeline' && tl && (
-          <span className="link"><i className="dot" />Linked <b>{tl.name}</b><i className="sep" />{tl.width}×{tl.height}<i className="sep" />{tl.fps} fps
-            {readAt && <><i className="sep" />read {readAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</>}</span>
+          <span className="link" title={`Linked to this Resolve timeline · ${tl.width}×${tl.height} · ${tl.fps} fps`
+            + (readAt ? ` · read ${readAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '')}><i className="dot" /><b>{tl.name}</b></span>
         )}
         {!source && (
           <span className="link">{link.alive
