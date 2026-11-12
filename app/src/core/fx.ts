@@ -60,6 +60,8 @@ export interface FxPhase {
   /** Each unit moves inside its own window, cut at the bottom of its line: it rises out of
    *  (or sinks into) an edge instead of floating over the text below */
   masked?: boolean
+  /** Every other unit comes from the mirrored side (x, rotate and skew turned around) */
+  alternate?: boolean
   /** Hindi, Marathi, Bangla and Punjabi letters hang from one top line (shirorekha). Pulled
    *  apart they read as broken, so a letter effect runs word by word on them unless this is set. */
   keepLetters?: boolean
@@ -74,6 +76,8 @@ export interface FxLoop {
   /** Swing amounts; scale is ± around 1 */
   amp: Pick<FxState, 'x' | 'y' | 'rotate' | 'scale' | 'glow' | 'tint' | 'blur'>
   keepLetters?: boolean
+  /** Short beats out from rest instead of an even swing to both sides */
+  pulse?: boolean
 }
 
 /** The whole caption shown through a moving mask */
@@ -246,6 +250,8 @@ export interface FxEmphasis {
   ms: number
   ease?: Bezier
   state: FxState
+  /** Where the other words go meanwhile */
+  others?: FxState
 }
 
 /** A highlighter stroke drawn behind words or lines, from left to right */
@@ -262,6 +268,26 @@ export interface FxMarker {
   color?: Rgb
   /** A thin underline under each line instead of a highlighter stroke (line unit) */
   thin?: boolean
+  /** A box behind the whole word, instead of a highlighter stroke */
+  full?: boolean
+  /** On each word only while it is spoken (words), moving from word to word */
+  spoken?: boolean
+}
+
+/** The whole caption shaken as each unit of the way in lands */
+export interface FxImpact {
+  /** Most shake, em */
+  amountEm: number
+  /** ms a shake takes to die out */
+  ms: number
+}
+
+/** One word at a time in the same place, each in turn as it is spoken: in from below, out above */
+export interface FxSwap {
+  /** ms a word takes to come in or go out */
+  ms: number
+  /** How far it travels, em */
+  travelEm: number
 }
 
 /** The letters bent by noise: big at first and settling (in), or always a little (haze) */
@@ -303,6 +329,8 @@ export interface Fx {
   backlight?: FxBacklight
   /** A look the whole caption keeps the whole time, e.g. a gold tint */
   base?: FxState
+  impact?: FxImpact
+  swap?: FxSwap
   flare?: FxFlare
   /** Colour for glow, tint, fill and marker; left out: warm gold */
   accent?: Rgb
@@ -484,7 +512,8 @@ export function compileFx(fx: Fx, text: string, durMs: number, opts: { speed?: n
     ...(headline ? { headline } : {}), ...(fx.fill ? { fill: fx.fill } : {}), ...(focus ? { focus } : {}),
     ...(emphasis ? { emphasis } : {}), ...(marker ? { marker } : {}),
     ...(bar ? { bar } : {}), ...(box ? { box } : {}),
-    ...(fx.base ? { base: fx.base } : {}), ...(flicker ? { flicker } : {}), ...(backlight ? { backlight } : {}), ...(flare ? { flare } : {}),
+    ...(fx.base ? { base: fx.base } : {}), ...(fx.impact ? { impact: { ...fx.impact, ms: fx.impact.ms / speed } } : {}),
+    ...(fx.swap ? { swap: { ...fx.swap, ms: fx.swap.ms / speed } } : {}), ...(flicker ? { flicker } : {}), ...(backlight ? { backlight } : {}), ...(flare ? { flare } : {}),
     ...(particles ? { particles } : {}), ...(dissolve ? { dissolve } : {}), ...(fx.reflect ? { reflect: fx.reflect } : {}),
     accent: fx.accent ?? GOLD, seed,
   }
@@ -587,6 +616,8 @@ export interface FxFrame {
   bar?: { scale: number; origin: 'left' | 'right' }
   /** The box now: its width and height as shares of the full box */
   box?: { sx: number; sy: number }
+  /** One word at a time, all in one place (swap) */
+  swap?: boolean
   /** The light behind: 0–1 how far it has grown, and its opacity now */
   backlight?: { grow: number; opacity: number }
   /** The flare now: where it is across the text (−0.2…1.2) and how bright */
@@ -606,11 +637,17 @@ export interface Particle {
 function phaseStates(p: FxPhase, n: number, ms: number, from: number, out: boolean, seed: number): FxState[] {
   const d = delays(n, p.order, seed)
   const startMs = from + (p.delayMs ?? 0)
-  return d.map((k) => {
+  return d.map((k, i) => {
+    const state = p.alternate && i % 2 ? mirrored(p.state) : p.state
     const raw = p.ms <= 0 ? (ms >= startMs + k * p.stepMs ? 1 : 0) : (ms - startMs - k * p.stepMs) / p.ms
-    return between(p.state, ease(p.ease, raw), out)
+    return between(state, ease(p.ease, raw), out)
   })
 }
+
+/** The same state from the other side */
+const mirrored = (s: FxState): FxState => ({
+  ...s, ...(s.x !== undefined ? { x: -s.x } : {}), ...(s.rotate !== undefined ? { rotate: -s.rotate } : {}), ...(s.skewX !== undefined ? { skewX: -s.skewX } : {}),
+})
 
 /** Every unit's look at ms into a caption of durMs */
 export function fxAt(fx: CompiledFx, units: Units, ms: number, durMs: number): FxFrame {
@@ -639,7 +676,9 @@ export function fxAt(fx: CompiledFx, units: Units, ms: number, durMs: number): F
     const n = countOf(units, L.unit)
     const d = delays(n, 'ltr', fx.seed)
     add(L.unit, d.map((k) => {
-      const w = Math.sin((2 * Math.PI * (ms - k * L.stepMs)) / L.periodMs)
+      const sw = Math.sin((2 * Math.PI * (ms - k * L.stepMs)) / L.periodMs)
+      // A pulse beats out from rest and back, quick at its peak
+      const w = L.pulse ? Math.max(0, sw) ** 4 : sw
       const s: FxState = {}
       if (L.amp.x) s.x = L.amp.x * w
       if (L.amp.y) s.y = L.amp.y * w
@@ -698,9 +737,46 @@ export function fxAt(fx: CompiledFx, units: Units, ms: number, durMs: number): F
     const E = fx.emphasis
     const key = keyWord(units)
     const p = ease(E.ease ?? EASE.out, (ms - E.delayMs) / Math.max(1, E.ms))
-    add('word', Array.from({ length: units.words }, (_, i) => (i === key ? between(E.state, p, true) : {})))
+    add('word', Array.from({ length: units.words }, (_, i) => (i === key ? between(E.state, p, true) : E.others ? between(E.others, p, true) : {})))
   }
-  if (fx.marker) {
+  if (fx.impact && fx.in) {
+    // Every landing of the way in shakes the whole caption, dying out
+    const I = fx.impact
+    const n = countOf(units, fx.in.unit)
+    const landings = delays(n, fx.in.order, fx.seed).map((k) => (fx.in!.delayMs ?? 0) + k * fx.in!.stepMs + fx.in!.ms)
+    let x = 0
+    let y = 0
+    landings.forEach((at, k) => {
+      const t = ms - at
+      if (t < 0 || t >= I.ms) return
+      const left = 1 - t / I.ms
+      x += I.amountEm * left * Math.sin(t * 0.09 + k * 1.7)
+      y += I.amountEm * left * Math.cos(t * 0.13 + k * 2.3)
+    })
+    if (x || y) add('whole', [{ x, y }])
+  }
+  if (fx.swap) {
+    // One word at a time: in from below as it is spoken, out above as the next comes
+    const S = fx.swap
+    const at = spokenTimes(fx, units, durMs)
+    frame.swap = true
+    add('word', Array.from({ length: units.words }, (_, i) => {
+      const inP = ease(EASE.out, (ms - at[i]!) / Math.max(1, S.ms))
+      const last = i === units.words - 1
+      const outP = last ? 0 : ease(EASE.in, (ms - at[i + 1]!) / Math.max(1, S.ms))
+      return { opacity: inP * (1 - outP), y: S.travelEm * (1 - inP) - S.travelEm * outP }
+    }))
+  }
+  if (fx.marker?.spoken && fx.marker.unit === 'word') {
+    // Moves from word to word as each is spoken; the last stays
+    const M = fx.marker
+    const at = spokenTimes(fx, units, durMs)
+    frame.marker = Array.from({ length: units.words }, (_, i) => {
+      const on = ease(EASE.out, (ms - at[i]!) / Math.max(1, M.ms))
+      const off = i === units.words - 1 ? 0 : ease(EASE.in, (ms - at[i + 1]!) / Math.max(1, M.ms))
+      return on * (1 - off)
+    })
+  } else if (fx.marker) {
     const M = fx.marker
     const key = keyWord(units)
     const n = M.unit === 'line' ? units.lines : units.words

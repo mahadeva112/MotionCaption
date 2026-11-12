@@ -213,6 +213,55 @@ const LIGHT: Preset[] = [
   }),
 ]
 
+/** Kinetic typography: words that hit, grow, stack and swap, made for short punchy lines */
+const KINETIC: Preset[] = [
+  p('Kinetic', 'wordSlam', 'Word Slam', 'Words slam in one after another, each landing with a small shake.', {
+    in: { unit: 'word', order: 'ltr', stepMs: 170, ms: 260, ease: EASE.in, state: { opacity: 0, scale: 2.2 } },
+    impact: { amountEm: 0.05, ms: 220 },
+    out: fadeOut(250),
+  }),
+  p('Kinetic', 'wordScale', 'Word by Word Scale', 'Each word grows from small into place with a little overshoot.', {
+    in: { unit: 'word', order: 'ltr', stepMs: 160, ms: 380, ease: EASE.back, state: { opacity: 0, scale: 0.4 } },
+    out: { unit: 'word', order: 'ltr', stepMs: 60, ms: 220, ease: EASE.in, state: { opacity: 0, scale: 0.6 } },
+  }),
+  p('Kinetic', 'stomp', 'Stomp', 'The whole line drops in heavily and the frame shakes as it lands.', {
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 280, ease: EASE.in, state: { opacity: 0, scale: 1.6, y: -0.6 } },
+    impact: { amountEm: 0.08, ms: 320 },
+    out: fadeOut(250),
+  }),
+  p('Kinetic', 'emphasisZoom', 'Emphasis Zoom', 'The key word (the longest) zooms forward and lights up while the rest steps back.', {
+    in: fadeWhole(250),
+    out: fadeOut(250),
+    emphasis: { delayMs: 350, ms: 420, ease: EASE.back, state: { scale: 1.08, tint: 0.7, y: -0.05 }, others: { opacity: 0.55, scale: 0.97 } },
+  }),
+  p('Kinetic', 'stackBuild', 'Stack Build', 'Words pop up from below one after another, building the line.', {
+    in: { unit: 'word', order: 'ltr', stepMs: 200, ms: 450, ease: EASE.back, state: { opacity: 0, y: 1.2 } },
+    out: fadeOut(250),
+  }),
+  p('Kinetic', 'pingPong', 'Ping-pong Words', 'Words fly in from the left and the right in turn.', {
+    in: { unit: 'word', order: 'ltr', stepMs: 150, ms: 420, ease: EASE.out, state: { opacity: 0, x: -1.4, rotate: -8 }, alternate: true },
+    out: fadeOut(250),
+  }),
+  p('Kinetic', 'beatBump', 'Beat Bump', 'Each word gives a small bump in turn, like a beat.', {
+    in: fadeWhole(250),
+    out: fadeOut(250),
+    loop: { unit: 'word', periodMs: 700, stepMs: 175, amp: { scale: 0.09, y: -0.04 }, pulse: true },
+  }),
+  p('Kinetic', 'highlightBox', 'Highlight Box', 'A coloured box jumps from word to word as each is spoken.', {
+    in: fadeWhole(250),
+    out: fadeOut(250),
+    marker: { unit: 'word', pick: 'all', order: 'ltr', delayMs: 0, stepMs: 0, ms: 140, opacity: 1, full: true, spoken: true, color: [0.93, 0.33, 0.2] },
+  }),
+  p('Kinetic', 'wordSwap', 'Word Swap', 'One word at a time in the same place: each rises in as it is spoken and the last stays.', {
+    swap: { ms: 180, travelEm: 0.5 },
+  }),
+  p('Kinetic', 'punchIn', 'Camera Punch-in', 'The line punches in from close up, and the frame shakes as it lands.', {
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 340, ease: EASE.out, state: { opacity: 0, scale: 1.45, blur: 0.06 } },
+    impact: { amountEm: 0.05, ms: 260 },
+    out: fadeOut(250),
+  }),
+]
+
 /** Phase A's first effects, until their own families come */
 const MORE: Preset[] = [
   p('Advanced', 'waveWarp', 'Wave Warp', 'The line comes in bent like a wave and settles straight.', {
@@ -222,4 +271,4 @@ const MORE: Preset[] = [
   }),
 ]
 
-export const FX_PRESETS: Preset[] = [...INDIC, ...CALM, ...MASK, ...LIGHT, ...MORE]
+export const FX_PRESETS: Preset[] = [...INDIC, ...CALM, ...MASK, ...LIGHT, ...KINETIC, ...MORE]
