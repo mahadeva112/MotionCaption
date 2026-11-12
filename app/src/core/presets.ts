@@ -7,7 +7,7 @@ import { FX_PRESETS } from './presetsFx.ts'
 // Status is honest: 'verified' only after the look was checked in Resolve output.
 export type PresetStatus = 'verified' | 'testing'
 
-export const FAMILIES = ['Cinematic', 'Social', 'Elegant', 'Basic', 'Letters', 'Continuous', 'Advanced'] as const
+export const FAMILIES = ['Cinematic', 'Social', 'Elegant', 'Basic', 'Letters', 'Continuous', 'Indic Flow', 'Advanced'] as const
 export type Family = (typeof FAMILIES)[number]
 
 export interface Preset {
