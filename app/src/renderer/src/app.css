@@ -521,7 +521,17 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
 .fxr { position: absolute; left: 0; right: 0; top: 100%; transform: scaleY(-1); pointer-events: none; }
 .fxr * { text-shadow: none !important; filter: none !important; }
 /* Gold dust and petals */
-.fxm { position: relative; }
+.fxm { position: relative; isolation: isolate; }
 .fxpl { position: absolute; pointer-events: none; }
 .fxp { position: absolute; pointer-events: none; border-radius: 50%; }
 .fxp.petal { border-radius: 80% 0 80% 0; }
+/* A unit moving inside its own window, cut at its line's bottom (masked phases) */
+.fxk { clip-path: inset(-70% -30% -12% -30%); }
+.fxi { display: inline-block; white-space: pre; transform-origin: 50% 60%; }
+/* A thin underline for line markers */
+.fxl.thin > .fxmk { top: auto; bottom: -.16em; height: .07em; border-radius: .04em; }
+/* Bar, box and the wipe's bright edge */
+.fxpl.back { z-index: -1; }
+.fxbox { position: absolute; left: -.35em; right: -.35em; top: -.2em; bottom: -.2em; box-sizing: border-box; border-radius: .08em; }
+.fxbar { position: absolute; pointer-events: none; }
+.fxedge { position: absolute; pointer-events: none; transform: translateX(-50%); border-radius: 1em; }

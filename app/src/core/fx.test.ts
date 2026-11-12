@@ -136,11 +136,12 @@ describe('advanced presets', () => {
   const advanced = PRESETS.filter((p) => p.fx)
 
   it('are in their own families, testing, with no Text+ tracks', () => {
-    expect(advanced.length).toBeGreaterThanOrEqual(23)
+    expect(advanced.length).toBeGreaterThanOrEqual(33)
+    expect(advanced.filter((p) => p.family === 'Mask & Wipe')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Calm')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Indic Flow')).toHaveLength(10)
     for (const p of advanced) {
-      expect(['Indic Flow', 'Calm', 'Advanced']).toContain(p.family)
+      expect(['Indic Flow', 'Calm', 'Mask & Wipe', 'Advanced']).toContain(p.family)
       expect(p.status).toBe('testing')
       expect(p.tracks).toEqual([])
     }
@@ -277,5 +278,36 @@ describe('Calm pieces', () => {
     const ua = splitUnits('a')
     expect(fxAt(fx, ua, 500, 4000).sweep).toBeCloseTo(0.5)
     expect(fxAt(fx, ua, 3000, 4000).sweep).toBe(1.5)
+  })
+})
+
+describe('Mask & Wipe pieces', () => {
+  const u = splitUnits('ढक्कन खोलो')
+
+  it('grows a bar over the text, then shrinks it away toward the far side', () => {
+    const fx = compileFx({ bar: { delayMs: 0, ms: 1000, from: 'left' } }, 'ढक्कन खोलो', 4000)
+    expect(fxAt(fx, u, 0, 4000).bar).toBeUndefined()
+    const grow = fxAt(fx, u, 250, 4000).bar!
+    expect(grow.origin).toBe('left')
+    expect(grow.scale).toBeCloseTo(0.5)
+    const leave = fxAt(fx, u, 750, 4000).bar!
+    expect(leave.origin).toBe('right')
+    expect(leave.scale).toBeCloseTo(0.5)
+    expect(fxAt(fx, u, 1200, 4000).bar).toBeUndefined()
+  })
+
+  it('opens a box: wide first, then tall', () => {
+    const fx = compileFx({ box: { delayMs: 0, ms: 1000, widthEm: 0.05 } }, 'ढक्कन खोलो', 4000)
+    const early = fxAt(fx, u, 300, 4000).box!
+    expect(early.sx).toBeGreaterThan(0.5)
+    expect(early.sy).toBeCloseTo(0.04)
+    expect(fxAt(fx, u, 2000, 4000).box).toEqual({ sx: 1, sy: 1 })
+  })
+
+  it('marks masked levels, on the unit the script allows', () => {
+    const fx = compileFx({ in: { unit: 'letter', order: 'ltr', stepMs: 30, ms: 400, ease: EASE.out, state: { y: 1 }, masked: true } }, 'ढक्कन खोलो', 4000)
+    const f = fxAt(fx, u, 100, 4000)
+    expect(f.masked).toEqual({ word: true })
+    expect(f.word).toHaveLength(2)
   })
 })
