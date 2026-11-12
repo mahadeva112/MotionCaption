@@ -37,10 +37,13 @@ export interface FxState {
   tint?: number
   /** 0–1 share of the unit shown, cut from the phase's revealFrom side (rest 1) */
   reveal?: number
+  /** Whole caption only: em each letter sits away from the middle, as letter spacing would
+   *  (rest 0). Moves the letters, not the layout, so the line keeps its place. */
+  spread?: number
 }
 
 export const REST: Required<FxState> = {
-  opacity: 1, x: 0, y: 0, scale: 1, scaleX: 1, scaleY: 1, rotate: 0, skewX: 0, blur: 0, glow: 0, tint: 0, reveal: 1,
+  opacity: 1, x: 0, y: 0, scale: 1, scaleX: 1, scaleY: 1, rotate: 0, skewX: 0, blur: 0, glow: 0, tint: 0, reveal: 1, spread: 0,
 }
 
 /**
@@ -212,6 +215,8 @@ export interface FxFlare {
   sizeEm: number
   /** Left out: the accent */
   color?: Rgb
+  /** A big soft glow of colour (a light leak) instead of a sharp flare */
+  soft?: boolean
 }
 
 /** Small things moving with the text: gold dust gathering into it, or petals drifting past */
@@ -408,6 +413,8 @@ export interface FxEcho {
   /** ms the copies take to slide out to their places */
   inMs: number
   color?: Rgb
+  /** Solid, soft copies (a cast shadow) instead of outlines */
+  filled?: { opacity: number; blurEm: number }
 }
 
 /** One word at a time in the same place, each in turn as it is spoken: in from below, out above */
@@ -1084,6 +1091,13 @@ export function fxAt(fx: CompiledFx, units: Units, ms: number, durMs: number): F
     let last = -1
     d.forEach((k, i) => { if (ms >= (P.delayMs ?? 0) + k * P.stepMs) last = Math.max(last, i) })
     frame.cursor = { letter: last, on: Math.floor(ms / fx.cursor.blinkMs) % 2 === 0 }
+  }
+  // Letter spacing set on the whole caption moves each letter out from the middle
+  const sp = frame.whole?.spread
+  if (sp) {
+    const mid = (units.letters - 1) / 2
+    add('letter', Array.from({ length: units.letters }, (_, i) => ({ x: sp * (i - mid) })))
+    delete frame.whole!.spread
   }
   if (fx.particles) frame.particles = particlesAt(fx.particles, fx.seed, ms)
   if (fx.dissolve) {

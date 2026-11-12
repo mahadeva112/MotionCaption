@@ -287,10 +287,15 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
   const echoEls = fx.echo && f.echo !== undefined && f.echo > NEAR
     ? Array.from({ length: fx.echo.count }, (_, k) => {
       const i = fx.echo!.count - k
-      return outline(`e${i}`, fx.echo!.widthEm, fx.echo!.color ?? A, {
-        opacity: 0.7 * (1 - (i - 1) / fx.echo!.count) * f.echo!,
-        transform: `translate(${(i * fx.echo!.dxEm * f.echo!).toFixed(4)}em, ${(i * fx.echo!.dyEm * f.echo!).toFixed(4)}em)`,
-      })
+      const E = fx.echo!
+      const move = `translate(${(i * E.dxEm * f.echo!).toFixed(4)}em, ${(i * E.dyEm * f.echo!).toFixed(4)}em)`
+      // A cast shadow: a solid, soft copy in the shadow colour
+      if (E.filled) {
+        return <span key={`e${i}`} className="fxs under" aria-hidden style={{
+          color: css(E.color ?? [0, 0, 0]), opacity: E.filled.opacity * f.echo!, transform: move, filter: `blur(${E.filled.blurEm}em)`,
+        }}>{tree('outline')}</span>
+      }
+      return outline(`e${i}`, E.widthEm, E.color ?? A, { opacity: 0.7 * (1 - (i - 1) / E.count) * f.echo!, transform: move, zIndex: -1 })
     })
     : null
   // The letters' own fill, held back while the outline draws
@@ -385,7 +390,13 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
       }} />
     </span>
   ) : null
-  const flareEl = fx.flare && f.flare ? (
+  const flareEl = fx.flare && f.flare ? fx.flare.soft ? (
+    // A light leak: a big soft glow of colour drifting across
+    <span className="fxpl" style={{ inset: `${PAD}em` }}>
+      <span className="fxflare" style={{ left: pc(f.flare.at), opacity: f.flare.opacity * 0.75, width: `${fx.flare.sizeEm * 5}em`, height: `${fx.flare.sizeEm * 3}em`,
+        background: `radial-gradient(ellipse closest-side, ${css(fx.flare.color ?? A, 0.85)} 0%, ${css(fx.flare.color ?? A, 0.35)} 45%, transparent 100%)` }} />
+    </span>
+  ) : (
     <span className="fxpl" style={{ inset: `${PAD}em` }}>
       <span className="fxflare" style={{ left: pc(f.flare.at), opacity: f.flare.opacity, width: `${fx.flare.sizeEm * 8}em`, height: `${fx.flare.sizeEm}em`,
         background: `radial-gradient(ellipse closest-side, #fff 0%, ${css(fx.flare.color ?? A, 0.9)} 12%, ${css(fx.flare.color ?? A, 0.25)} 40%, transparent 100%)` }} />

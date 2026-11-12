@@ -136,7 +136,8 @@ describe('advanced presets', () => {
   const advanced = PRESETS.filter((p) => p.fx)
 
   it('are in their own families, testing, with no Text+ tracks', () => {
-    expect(advanced.length).toBe(90)
+    expect(advanced.length).toBe(100)
+    expect(advanced.filter((p) => p.family === 'Trailer')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Distort')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Elastic')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Scramble')).toHaveLength(10)
@@ -147,7 +148,7 @@ describe('advanced presets', () => {
     expect(advanced.filter((p) => p.family === 'Calm')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Indic Flow')).toHaveLength(10)
     for (const p of advanced) {
-      expect(['Indic Flow', 'Calm', 'Mask & Wipe', 'Light & Glow', 'Kinetic', 'Stroke', 'Scramble', 'Elastic', 'Distort']).toContain(p.family)
+      expect(['Indic Flow', 'Calm', 'Mask & Wipe', 'Light & Glow', 'Kinetic', 'Stroke', 'Scramble', 'Elastic', 'Distort', 'Trailer']).toContain(p.family)
       expect(p.status).toBe('testing')
       expect(p.tracks).toEqual([])
     }
@@ -602,5 +603,17 @@ describe('Distort pieces', () => {
     expect(fxAt(fx, u, 4000, 4000).warp).toBeCloseTo(0.4)
     const haze = compileFx({ warp: { sizeEm: 0.3, amountEm: 0.07, inMs: 0 } }, 'a', 4000)
     expect(fxAt(haze, u, 2000, 4000).warp).toBeCloseTo(0.07)
+  })
+})
+
+describe('Trailer pieces', () => {
+  it('spreads letters out from the middle as tracking would, and draws them together', () => {
+    const fx = compileFx({ in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 1000, ease: EASE.linear, state: { spread: 0.4 } } }, 'abcde', 4000)
+    const u = splitUnits('abcde')
+    const f = fxAt(fx, u, 0, 4000)
+    expect(f.letter!.map((s) => s.x)).toEqual([-0.8, -0.4, 0, 0.4, 0.8])
+    expect(f.whole!.spread).toBeUndefined()
+    const done = fxAt(fx, u, 2000, 4000)
+    expect(done.letter).toBeUndefined()
   })
 })
