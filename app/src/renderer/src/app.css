@@ -517,3 +517,11 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
 /* A highlighter stroke behind a word or line (marker effects), drawn from the left */
 .fxl.mk, .fxu.mk { position: relative; isolation: isolate; }
 .fxmk { position: absolute; left: -.1em; right: -.1em; top: 28%; bottom: 4%; z-index: -1; border-radius: .16em; transform-origin: 0 50%; }
+/* Water reflection: the text mirrored under itself */
+.fxr { position: absolute; left: 0; right: 0; top: 100%; transform: scaleY(-1); pointer-events: none; }
+.fxr * { text-shadow: none !important; filter: none !important; }
+/* Gold dust and petals */
+.fxm { position: relative; }
+.fxpl { position: absolute; pointer-events: none; }
+.fxp { position: absolute; pointer-events: none; border-radius: 50%; }
+.fxp.petal { border-radius: 80% 0 80% 0; }

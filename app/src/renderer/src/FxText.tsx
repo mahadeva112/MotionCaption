@@ -155,7 +155,7 @@ function group(u: Units): Line[] {
   return lines
 }
 
-type Copy = false | 'sweep' | 'fill'
+type Copy = false | 'sweep' | 'fill' | 'mirror'
 
 export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow, charEl }: Props) {
   const id = 'fxw' + useId().replace(/[^a-zA-Z0-9]/g, '')
@@ -215,7 +215,11 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
   if (fx.sweep && f.sweep !== undefined) {
     const c = f.sweep
     const w = fx.sweep.width / 2
-    const moving = `linear-gradient(${fx.sweep.angle}deg, transparent ${pc(c - w)}, rgba(0,0,0,${fx.sweep.strength}) ${pc(c)}, transparent ${pc(c + w)})`
+    const lit = `rgba(0,0,0,${fx.sweep.strength})`
+    // Held: lit all the way behind the band, as a colour rising through the letters
+    const moving = fx.sweep.hold
+      ? `linear-gradient(${fx.sweep.angle}deg, ${lit} ${pc(c - w)}, transparent ${pc(c + w)})`
+      : `linear-gradient(${fx.sweep.angle}deg, transparent ${pc(c - w)}, ${lit} ${pc(c)}, transparent ${pc(c + w)})`
     const st: CSSProperties = { color: css(A), maskImage: moving }
     if (fx.sweep.band === 'headline' && band) {
       const [a, b] = band
@@ -228,36 +232,88 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
     sweep = <span className="fxs" aria-hidden style={st}>{tree('sweep')}</span>
   }
 
+  // Water: the text mirrored under itself, fading, with its own ripple
+  let mirror: ReactNode = null
+  if (fx.reflect) {
+    const R = fx.reflect
+    const fade = `linear-gradient(0deg, rgba(0,0,0,${R.opacity}) 0%, transparent ${pc(R.fade)})`
+    const ripple = R.waveEm * fontPx > 0.05
+    mirror = <span className="fxr" aria-hidden style={{ maskImage: fade, ...(ripple ? { filter: `url(#${id}r)` } : {}) }}>{tree('mirror')}</span>
+  }
+
+  // Gold dust and petals, placed over the text's box
+  const A2 = css(fx.particles?.color ?? A)
+  const bits = f.particles?.filter((q) => q.opacity > NEAR).map((q, i) => (
+    <span key={i} className={'fxp ' + fx.particles!.kind} style={{
+      left: pc(q.left), top: pc(q.top), width: `${q.size.toFixed(3)}em`, height: `${(q.size * (fx.particles!.kind === 'petal' ? 0.62 : 1)).toFixed(3)}em`,
+      opacity: q.opacity, background: A2, ...(fx.particles!.kind === 'dust' ? { boxShadow: `0 0 ${(q.size * 2).toFixed(3)}em ${A2}` } : {}),
+      transform: `translate(-50%, -50%) translate(${q.dx.toFixed(3)}em, ${q.dy.toFixed(3)}em) rotate(${q.rotate.toFixed(1)}deg)`,
+    }} />
+  ))
+
   const mask = fx.mask && f.mask !== undefined ? maskImage(fx.mask, f.mask) : undefined
   const bend = (f.warp ?? 0) * fontPx
-  const warp = fx.warp && bend > 0.05
+  const warp = !!fx.warp && bend > 0.05
+  const dissolve = fx.dissolve && f.dissolve !== undefined && f.dissolve < 1 - NEAR ? f.dissolve : undefined
   const outer: CSSProperties = {
     padding: `${PAD}em`, margin: `-${PAD}em`,
     ...(mask ? { maskImage: mask } : {}),
-    ...(warp ? { filter: `url(#${id})` } : {}),
+    ...(warp || dissolve !== undefined ? { filter: `url(#${id})` } : {}),
   }
-  const size = (fx.warp?.sizeEm ?? 1) * fontPx
 
   return (
     <span className="fxm" style={outer}>
       <span className="fxw" style={stateStyle(f.whole, f.revealFrom.whole, A, fill, shadow)}>
+        {mirror}
         {tree(false)}
         {fillCopy}
         {sweep}
       </span>
-      {warp && (
+      {bits?.length ? (
+        // Its own layer over the text: the text's way in must not hide the dust that builds it,
+        // but its way out takes the particles with it
+        <span className="fxpl" style={{ inset: `${PAD}em`, ...(ms > durMs / 2 && (f.whole?.opacity ?? 1) < 1 ? { opacity: f.whole!.opacity } : {}) }}>{bits}</span>
+      ) : null}
+      {(warp || dissolve !== undefined || mirror) && (
         <svg className="fxsvg" width="0" height="0" aria-hidden>
-          <filter id={id} x="-25%" y="-50%" width="150%" height="200%" colorInterpolationFilters="sRGB">
-            <feTurbulence type="fractalNoise" seed={fx.seed % 1000}
-              baseFrequency={fx.warp!.wave ? `${(0.12 / size).toFixed(5)} ${(1 / size).toFixed(5)}` : `${(1 / size).toFixed(5)}`} numOctaves={2} result="n" />
-            {/* Solid noise; a wave bends sideways only (green held at the middle: no up or down) */}
-            <feColorMatrix in="n" type="matrix" result="c"
-              values={fx.warp!.wave ? '1 0 0 0 0  0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0 1' : '1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0 1'} />
-            <feOffset in="c" dx={((f.drift ?? 0) * fontPx).toFixed(2)} dy="0" result="m" />
-            <feDisplacementMap in="SourceGraphic" in2="m" scale={bend.toFixed(2)} xChannelSelector="R" yChannelSelector="G" />
-          </filter>
+          {(warp || dissolve !== undefined) && (
+            <filter id={id} x="-25%" y="-50%" width="150%" height="200%" colorInterpolationFilters="sRGB">
+              {warp && bendNodes(fx.warp!.sizeEm * fontPx, !!fx.warp!.wave, fx.seed, (f.drift ?? 0) * fontPx, bend, 'SourceGraphic', 'bent')}
+              {dissolve !== undefined && <>
+                <feTurbulence type="fractalNoise" seed={(fx.seed + 17) % 1000} baseFrequency={(1 / (fx.dissolve!.sizeEm * fontPx)).toFixed(5)} numOctaves={3} result="dn" />
+                {/* Alpha from the noise: shown where it is below the threshold, with a soft edge */}
+                <feColorMatrix in="dn" type="matrix" result="da" values={dissolveMatrix(dissolve, fx.dissolve!.soft)} />
+                <feComposite in={warp ? 'bent' : 'SourceGraphic'} in2="da" operator="in" />
+              </>}
+            </filter>
+          )}
+          {mirror && (
+            <filter id={`${id}r`} x="-10%" y="-20%" width="120%" height="140%" colorInterpolationFilters="sRGB">
+              {bendNodes(fx.reflect!.sizeEm * fontPx, true, fx.seed + 5, (f.ripple ?? 0) * fontPx, fx.reflect!.waveEm * fontPx, 'SourceGraphic', 'rip')}
+            </filter>
+          )}
         </svg>
       )}
     </span>
   )
+}
+
+/** Noise that bends what comes in: broad horizontal waves (wave) or bends in every direction */
+function bendNodes(size: number, wave: boolean, seed: number, drift: number, scale: number, input: string, result: string) {
+  return <>
+    <feTurbulence type="fractalNoise" seed={seed % 1000}
+      baseFrequency={wave ? `${(0.12 / size).toFixed(5)} ${(1 / size).toFixed(5)}` : `${(1 / size).toFixed(5)}`} numOctaves={2} result={`${result}n`} />
+    {/* Solid noise; a wave bends sideways only (green held at the middle: no up or down) */}
+    <feColorMatrix in={`${result}n`} type="matrix" result={`${result}c`}
+      values={wave ? '1 0 0 0 0  0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0 1' : '1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0 1'} />
+    <feOffset in={`${result}c`} dx={drift.toFixed(2)} dy="0" result={`${result}m`} />
+    <feDisplacementMap in={input} in2={`${result}m`} scale={scale.toFixed(2)} xChannelSelector="R" yChannelSelector="G" result={result} />
+  </>
+}
+
+/** Alpha = clamp((t − noise) / soft): nothing shows at open 0, everything at open 1 */
+function dissolveMatrix(open: number, soft: number): string {
+  const s = Math.max(0.02, soft)
+  const t = open * (1 + s)
+  return `0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  ${(-1 / s).toFixed(4)} 0 0 0 ${(t / s).toFixed(4)}`
 }

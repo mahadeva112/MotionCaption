@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { EASE } from './anim.ts'
 import { compileCue } from './compile.ts'
-import { compileFx, delays, fxAt, hasHeadline, keyWord, phaseLength, spokenTimes, splitUnits, unitFor, type Fx } from './fx.ts'
+import { compileFx, delays, fxAt, hasHeadline, keyWord, particlesAt, phaseLength, spokenTimes, splitUnits, unitFor, type Fx } from './fx.ts'
 import { sigOf } from './job.ts'
 import type { Cue } from './srt.ts'
 import { PRESETS } from './presets.ts'
@@ -136,10 +136,11 @@ describe('advanced presets', () => {
   const advanced = PRESETS.filter((p) => p.fx)
 
   it('are in their own families, testing, with no Text+ tracks', () => {
-    expect(advanced.length).toBeGreaterThanOrEqual(14)
+    expect(advanced.length).toBeGreaterThanOrEqual(23)
+    expect(advanced.filter((p) => p.family === 'Calm')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Indic Flow')).toHaveLength(10)
     for (const p of advanced) {
-      expect(['Indic Flow', 'Advanced']).toContain(p.family)
+      expect(['Indic Flow', 'Calm', 'Advanced']).toContain(p.family)
       expect(p.status).toBe('testing')
       expect(p.tracks).toEqual([])
     }
@@ -226,5 +227,55 @@ describe('Indic Word Flow pieces', () => {
     expect(f.marker).toEqual([0, 0, 0, 1, 0])
     expect(f.word![3]!.tint).toBe(1)
     expect(f.word![0]!.tint).toBeUndefined()
+  })
+})
+
+describe('Calm pieces', () => {
+  const u = splitUnits('शांत मन')
+
+  it('starts a phase after its delay', () => {
+    const fx = compileFx({ in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 400, delayMs: 400, ease: EASE.linear, state: { opacity: 0 } } }, 'शांत मन', 4000)
+    expect(fxAt(fx, u, 300, 4000).whole!.opacity).toBe(0)
+    expect(fxAt(fx, u, 600, 4000).whole!.opacity).toBeCloseTo(0.5)
+    expect(phaseLength(fx.in!, 1)).toBe(800)
+  })
+
+  it('lands every grain of dust on the text, the same each time', () => {
+    const P = { kind: 'dust' as const, count: 12, delayMs: 0, ms: 800, sizeEm: 0.1, spreadEm: 2 }
+    expect(particlesAt(P, 4, 300)).toEqual(particlesAt(P, 4, 300))
+    const early = particlesAt(P, 4, 100)
+    expect(early.some((q) => Math.hypot(q.dx, q.dy) > 0.5)).toBe(true)
+    for (const q of particlesAt(P, 4, 5000)) {
+      expect(Math.hypot(q.dx, q.dy)).toBeCloseTo(0)
+      expect(q.opacity).toBe(0)
+      expect(q.left).toBeGreaterThanOrEqual(0)
+      expect(q.left).toBeLessThanOrEqual(1)
+    }
+  })
+
+  it('keeps petals drifting across, faded at the edges', () => {
+    const P = { kind: 'petal' as const, count: 6, delayMs: 0, ms: 4000, sizeEm: 0.2 }
+    for (const ms of [800, 2000, 7000]) for (const q of particlesAt(P, 2, ms)) {
+      expect(q.left).toBeGreaterThanOrEqual(-0.15)
+      expect(q.left).toBeLessThanOrEqual(1.15)
+      expect(q.opacity).toBeGreaterThanOrEqual(0)
+      expect(q.opacity).toBeLessThanOrEqual(1)
+    }
+    expect(particlesAt(P, 2, 0).every((q) => q.opacity === 0)).toBe(true)
+  })
+
+  it('clears a dissolve in and closes it out', () => {
+    const fx = compileFx({ dissolve: { sizeEm: 1, soft: 0.4, inMs: 1000, outMs: 500 } }, 'a', 4000)
+    const ua = splitUnits('a')
+    expect(fxAt(fx, ua, 0, 4000).dissolve).toBe(0)
+    expect(fxAt(fx, ua, 2000, 4000).dissolve).toBe(1)
+    expect(fxAt(fx, ua, 4000, 4000).dissolve).toBe(0)
+  })
+
+  it('holds a sweep once it has passed', () => {
+    const fx = compileFx({ sweep: { delayMs: 0, ms: 1000, width: 0.4, angle: 0, strength: 1, hold: true } }, 'a', 4000)
+    const ua = splitUnits('a')
+    expect(fxAt(fx, ua, 500, 4000).sweep).toBeCloseTo(0.5)
+    expect(fxAt(fx, ua, 3000, 4000).sweep).toBe(1.5)
   })
 })
