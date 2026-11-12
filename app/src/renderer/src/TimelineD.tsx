@@ -7,6 +7,7 @@ import { clock, useClock } from './clock'
 import { Icon } from './Icon'
 import { TEMPLATES } from './templates'
 import { isTextSrc, layersIn, srcChoices, srcTrackOf, timecode, type SrcTrack, type Target } from './model'
+import { Dropdown } from './Dropdown'
 
 interface Props {
   data: TimelineData | null
@@ -251,26 +252,26 @@ export function TimelineD(p: Props) {
         <b className="ttl">Timeline</b>
         <span>Read from</span>
         {choices.length > 0 ? (
-          <select className="sl" value={String(p.srcTrack ?? '')} onChange={(e) => p.onSrcTrack(srcTrackOf(e.target.value))}
+          <Dropdown className="sl" value={String(p.srcTrack ?? '')} onChange={(v) => p.onSrcTrack(srcTrackOf(v))}
             title="A super or title on its own track: pick that track's Text+ here, animate it and send it. It gets its own MC track and leaves other captions alone.">
             {choices.map((c) => <option key={String(c.value)} value={String(c.value)}>{c.label}</option>)}
-          </select>
+          </Dropdown>
         ) : <b className="ro">{p.srcName}</b>}
         {p.onAddSuper && <button className="mini addsuper" onClick={p.onAddSuper} title="A new super at the playhead, 3 s long. Write it, time it and animate it here; Send places it in Resolve.">
           <Icon name="plus" />Add super</button>}
         {p.onTemplate && (
-          <select className="sl tmpl" value="" onChange={(e) => { if (e.target.value) p.onTemplate!(e.target.value) }} title="A ready-made super at the playhead; change anything after">
+          <Dropdown className="sl tmpl" value="" onChange={(v) => { if (v) p.onTemplate!(v) }} title="A ready-made super at the playhead; change anything after">
             <option value="">Template…</option>
             {TEMPLATES.map((t) => <option key={t.id} value={t.id} title={t.desc}>{t.name}</option>)}
-          </select>
+          </Dropdown>
         )}
         {p.onRetime && <span className="khint" title={KEYS}>Shortcuts</span>}
         <span className="arrow">→</span>
         <span>Put on</span>
-        <select className="sl" value={String(p.target.track)} onChange={(e) => p.onTarget({ track: e.target.value === 'new' ? 'new' : Number(e.target.value) })}>
+        <Dropdown className="sl" value={String(p.target.track)} onChange={(v) => p.onTarget({ track: v === 'new' ? 'new' : Number(v) })}>
           <option value="new">New track above everything</option>
           {video.map((v) => <option key={v.index} value={v.index}>V{v.index} · {v.name} (empty spots only)</option>)}
-        </select>
+        </Dropdown>
         {p.srcTrack !== null && !supersOn && (
           <button className={'tg' + (p.target.turnOffSource ? ' on' : '')} onClick={() => p.onTarget({ turnOffSource: !p.target.turnOffSource })}
             title={fromText ? 'Your Text+ layers are turned off in Resolve, never deleted, so the words do not show twice' : undefined}>
