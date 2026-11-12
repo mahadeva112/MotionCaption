@@ -10,7 +10,7 @@ import { parseSrt } from '@core/srt'
 import type { Cue } from '@core/srt'
 import type { LinkStatus, RenderProgress, TimelineData } from '../../preload'
 import { hasGlyphs, loadFonts, measure, type FontFamily } from './fonts'
-import { clock } from './clock'
+import { clock, media } from './clock'
 import { CaptionCard } from './CaptionCard'
 import { BUILT_IN_STYLES, Inspector, type Tab } from './Inspector'
 import { Icon } from './Icon'
@@ -23,6 +23,7 @@ import {
 } from './model'
 import { SendDialog } from './SendDialog'
 import { TimelineD } from './TimelineD'
+import { useTimelineVideo } from './TimelineVideo'
 import { TEMPLATES } from './templates'
 import { Viewer } from './Viewer'
 
@@ -630,7 +631,8 @@ export function App() {
     let last = performance.now()
     let raf = 0
     const tick = (now: number) => {
-      const t = clock.get() + (now - last)
+      // The timeline video, while it plays, sets the time; otherwise the wall clock does
+      const t = media.now() ?? clock.get() + (now - last)
       last = now
       if (t >= live.current.endMs) { clock.set(live.current.endMs); setPlaying(false); return }
       clock.set(t)
@@ -752,6 +754,11 @@ export function App() {
     const ns = [...placeable.map((c) => c.n), ...baseCues.filter((c) => edits[c.n]?.off).map((c) => c.n)]
     return ns.flatMap((n) => { const t = layers[n - 1]; return t ? [{ track: t.track, at: t.at }] : [] })
   }
+  /** The timeline's picture and sound under the preview, without the Text+ layers these captions come from */
+  const tlVideo = useTimelineVideo({
+    project: source?.kind === 'timeline' ? source.data.project : undefined, timeline: tl?.name ?? null, linked: link.alive,
+    hideClips: () => (source?.kind === 'timeline' && isTextSrc(source.track) ? layersOf(source).map((t) => ({ track: t.track, at: t.at })) : []),
+  })
   const where = target.track === 'new' ? 'a new track above everything'
     : `V${target.track} · ${timelineInfo?.video?.find((v) => v.index === target.track)?.name ?? ''} (empty spots; the rest on a new track)`
   /** The job last handed to Send: its id and each caption's signature by its time */
@@ -830,7 +837,7 @@ export function App() {
       ) : (
         <div className={'studio2' + (aspect >= 1 ? ' wide' : '')}>
           <Viewer cue={compiled} aspect={aspect} fps={fps} safe={safe} selWord={selWord} playing={playing} loop={!!hoverPreset}
-            endMs={endMs} onSeek={seek}
+            endMs={endMs} onSeek={seek} video={tlVideo.shown} videoTools={tlVideo.tools}
             label={tryingName !== null ? `Trying ${tryingName} · click to use`
               : cue ? `${supersOn ? 'Super' : 'Caption'} ${cues.indexOf(cue) + 1} of ${cues.length} · ${presetById(presetOf(cue.n))?.name ?? ''}`
                 : supersOn ? 'No supers yet: Add super on the timeline' : 'No captions'}

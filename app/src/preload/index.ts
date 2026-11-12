@@ -31,12 +31,20 @@ export interface JobResult {
   tracks?: string[]
   fps?: number
   finishedAt?: string
+  /** A timeline video job: the file Resolve rendered */
+  preview?: { file: string; width: number; height: number; timeline: string; project: string }
+}
+
+/** A timeline video ready to play: its address for the page, and when it was made */
+export interface PreviewVideo {
+  url: string
+  at: string
 }
 
 /** Written by the Resolve script while it works (progress.json) */
 export interface JobProgress {
   jobId: string
-  phase: 'starting' | 'placing' | 'animating'
+  phase: 'starting' | 'placing' | 'animating' | 'rendering'
   done: number
   total: number
 }
@@ -109,6 +117,12 @@ const api = {
   /** Draws captions as PNG frames with transparency, for Resolve to place as plain clips */
   renderCues: (req: { width: number; height: number; fps: number; cues: CompiledCue[]; mov?: boolean }): Promise<Rendered[]> =>
     ipcRenderer.invoke('render:cues', req),
+  /** Folder the bridge renders timeline videos into */
+  previewDir: (): Promise<string> => ipcRenderer.invoke('preview:dir'),
+  /** The latest timeline video for a timeline ("project/timeline"), or null */
+  previewGet: (key: string): Promise<PreviewVideo | null> => ipcRenderer.invoke('preview:get', key),
+  /** Keeps a just-rendered timeline video as that timeline's latest */
+  previewKeep: (key: string, file: string): Promise<PreviewVideo | null> => ipcRenderer.invoke('preview:keep', key, file),
   onRenderProgress: (cb: (p: RenderProgress) => void): (() => void) => {
     const f = (_e: unknown, p: RenderProgress) => cb(p)
     ipcRenderer.on('render:progress', f)

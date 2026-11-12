@@ -21,3 +21,11 @@ export const clock = {
 }
 
 export const useClock = () => useSyncExternalStore(clock.sub, clock.get)
+
+// While the timeline video plays, its time leads the playhead, so picture, sound and
+// captions stay together. null: nothing playing (paused, ended, none), the playhead runs on its own.
+let mediaNow: (() => number | null) | null = null
+export const media = {
+  set(f: (() => number | null) | null) { mediaNow = f },
+  now: (): number | null => (mediaNow ? mediaNow() : null),
+}

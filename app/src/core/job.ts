@@ -46,6 +46,26 @@ export interface Job {
   target?: JobTarget
   cues: SentCue[]
   test?: JobTest
+  /** Instead of placing captions: render the timeline as a small video for the app's preview */
+  preview?: JobPreview
+}
+
+/** A timeline video for the preview: picture and sound, without what the app draws itself */
+export interface JobPreview {
+  /** Folder for the file, ending in a backslash */
+  dir: string
+  /** File name without .mp4 */
+  name: string
+  /** Longest side in pixels; the timeline's shape is kept */
+  maxSide: number
+  /** Text+ layers the captions come from, left out of the video (by track and first frame) */
+  hideClips: { track: number; at: number }[]
+}
+
+/** A job that only renders the timeline video (no captions are placed) */
+export function makePreviewJob(preview: Omit<JobPreview, 'name'>, extra: { project?: string; timeline?: string } = {}, now = new Date()): Job {
+  const job = makeJob('Timeline video', [], undefined, now, extra)
+  return { ...job, preview: { ...preview, name: 'timeline_' + job.id } }
 }
 
 /**
