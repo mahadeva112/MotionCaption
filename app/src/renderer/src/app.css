@@ -548,3 +548,12 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
 .fxo, .fxo * { color: transparent !important; -webkit-text-stroke: var(--sw) var(--sc) !important; }
 .fxo { transform-origin: 50% 55%; }
 .fxb { display: inline-block; white-space: pre; }
+/* Scramble: a random letter drawn over the real one, which keeps its width; and the cursor */
+.scr { position: relative; display: inline-block; }
+.scr-h { visibility: hidden; }
+.scr-c { position: absolute; left: 50%; top: 0; transform: translateX(-50%); white-space: pre; }
+.fxc.cur { position: relative; }
+.fxcur { position: absolute; top: 12%; bottom: 8%; right: -.12em; }
+.fxcur.before { right: auto; left: -.12em; }
+/* Redaction: a bar over the words that pulls away to the right */
+.mk.cover > .fxmk { z-index: 1; transform-origin: 100% 50%; }
