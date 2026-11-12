@@ -140,6 +140,40 @@ export function headlineBand(text: string, font: FxFont, lineEm: number): readon
   return band
 }
 
+const inks = new Map<string, { top: number; bottom: number }>()
+
+/**
+ * How far this caption's letters reach above the top and below the bottom of their line, in
+ * em: vowel signs (ि ी ँ above, ु ू ृ below) often do, by up to a third of a letter. Asked of
+ * the font with the caption's own text, so boxes, bars and underlines keep clear of them.
+ */
+export function inkExtent(text: string, font: FxFont, lineEm: number): { top: number; bottom: number } {
+  const spec = `${font.italic ? 'italic ' : ''}${font.weight} 100px '${font.family}', 'Nirmala UI', sans-serif`
+  const key = `${spec}|${lineEm}|${text}`
+  const have = inks.get(key)
+  if (have) return have
+  if (ctx === undefined) ctx = typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d')
+  // No canvas: room for the deepest signs of the common Indian fonts
+  if (!ctx) return { top: 0.25, bottom: 0.35 }
+  ctx.font = spec
+  const ref = ctx.measureText('क')
+  const asc = ref.fontBoundingBoxAscent
+  const desc = ref.fontBoundingBoxDescent
+  const base = (lineEm * 100 - (asc + desc)) / 2 + asc
+  let up = 0
+  let down = 0
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue
+    const m = ctx.measureText(line)
+    up = Math.max(up, m.actualBoundingBoxAscent - base)
+    down = Math.max(down, m.actualBoundingBoxDescent - (lineEm * 100 - base))
+  }
+  const ink = { top: Math.max(0, up) / 100, bottom: Math.max(0, down) / 100 }
+  // Measured before the font loaded, the numbers are the fallback's: ask again next frame
+  if (document.fonts.check(spec, text)) inks.set(key, ink)
+  return ink
+}
+
 /** A line's mask while its top line draws and its letters come down. Layers, top first:
  *  the letters coming down (added) over the drawn part of the top line (wipe ∩ band). */
 function headlineMask(draw: number, drop: number, band: readonly [number, number], lineEm: number): CSSProperties | undefined {
@@ -181,7 +215,8 @@ type Copy = false | 'sweep' | 'fill' | 'mirror' | 'outline'
 
 /** One unit: moving on its own, or (masked) moving inside a still window cut at its line's bottom */
 function unit(cls: string, key: string | number, st: CSSProperties | undefined, masked: boolean | undefined, children: ReactNode, pre?: ReactNode) {
-  return masked
+  // The window is there only while the unit moves: at rest nothing is cut
+  return masked && st && Object.keys(st).length
     ? <span key={key} className={cls + ' fxk'}>{pre}<span className="fxi" style={st}>{children}</span></span>
     : <span key={key} className={cls} style={st}>{pre}{children}</span>
 }
@@ -362,8 +397,10 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
   const warp = !!fx.warp && bend > 0.05
   const dissolve = fx.dissolve && f.dissolve !== undefined && f.dissolve < 1 - NEAR ? f.dissolve : undefined
   const goo = fx.goo && (f.goo ?? 0) * fontPx > 0.2 ? f.goo! * fontPx : undefined
+  const ink = inkExtent(text, font, lineEm)
   const outer: CSSProperties = {
     padding: `${PAD}em`, margin: `-${PAD}em`,
+    ['--it' as string]: `${ink.top.toFixed(3)}em`, ['--ib' as string]: `${ink.bottom.toFixed(3)}em`,
     ...(mask ?? {}),
     ...(warp || dissolve !== undefined || goo !== undefined ? { filter: `url(#${id})` } : {}),
   }
@@ -405,7 +442,7 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
     </span>
   ) : null
   const barEl = fx.bar && f.bar ? (
-    <span className="fxbar" style={{ inset: `${PAD - 0.16}em ${PAD - 0.08}em`, background: css(fx.bar.color ?? A), transform: `scaleX(${f.bar.scale.toFixed(4)})`, transformOrigin: `${f.bar.origin} center` }} />
+    <span className="fxbar" style={{ inset: `calc(${PAD - 0.06}em - var(--it)) ${PAD - 0.08}em calc(${PAD - 0.06}em - var(--ib))`, background: css(fx.bar.color ?? A), transform: `scaleX(${f.bar.scale.toFixed(4)})`, transformOrigin: `${f.bar.origin} center` }} />
   ) : null
 
   return (

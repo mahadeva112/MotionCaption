@@ -528,13 +528,13 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
 .fxp { position: absolute; pointer-events: none; border-radius: 50%; }
 .fxp.petal { border-radius: 80% 0 80% 0; }
 /* A unit moving inside its own window, cut at its line's bottom (masked phases) */
-.fxk { clip-path: inset(-70% -30% -12% -30%); }
+.fxk { clip-path: inset(calc(-0.3em - var(--it, .3em)) -30% calc(-0.05em - var(--ib, .35em)) -30%); }
 .fxi { display: inline-block; white-space: pre; transform-origin: 50% 60%; }
 /* A thin underline for line markers */
-.fxl.thin > .fxmk { top: auto; bottom: -.16em; height: .07em; border-radius: .04em; }
+.fxl.thin > .fxmk { top: auto; bottom: calc(-0.1em - var(--ib, .35em)); height: .07em; border-radius: .04em; }
 /* Bar, box and the wipe's bright edge */
 .fxpl.back { z-index: -1; }
-.fxbox { position: absolute; left: -.35em; right: -.35em; top: -.2em; bottom: -.2em; box-sizing: border-box; border-radius: .08em; }
+.fxbox { position: absolute; left: -.35em; right: -.35em; top: calc(-0.12em - var(--it, .25em)); bottom: calc(-0.12em - var(--ib, .35em)); box-sizing: border-box; border-radius: .08em; }
 .fxbar { position: absolute; pointer-events: none; }
 .fxedge { position: absolute; pointer-events: none; transform: translateX(-50%); border-radius: 1em; }
 /* Light behind the text, lens flare and twinkling stars */
@@ -545,7 +545,7 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
 .fxswap { display: inline-grid; }
 .fxswap > .fxu { grid-area: 1 / 1; justify-self: center; }
 /* A box behind the whole word (highlight box) */
-.fxu.full > .fxmk { top: -14%; bottom: -8%; left: -.14em; right: -.14em; border-radius: .16em; }
+.fxu.full > .fxmk { top: calc(-0.05em - var(--it, .25em)); bottom: calc(-0.05em - var(--ib, .35em)); left: -.14em; right: -.14em; border-radius: .16em; }
 /* Outline copies (stroke effects): no fill, only a stroke in their own colour and width */
 .fxo, .fxo * { color: transparent !important; -webkit-text-stroke: var(--sw) var(--sc) !important; }
 .fxo { transform-origin: 50% 55%; }
