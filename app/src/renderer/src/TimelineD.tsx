@@ -28,6 +28,8 @@ interface Props {
   playing: boolean
   /** Move the playhead (click or drag on the ruler) */
   onSeek: (ms: number) => void
+  /** Goes up when the playhead jumps (Home / End): scroll so it shows */
+  reveal: number
   /** How many supers this timeline has (made in the app) */
   supers: number
   /** Adds a super at the playhead; set while the supers are shown */
@@ -59,6 +61,7 @@ const KEYS = [
   ', and . : move one frame (with Shift: 10 frames)',
   'Ctrl+Z / Ctrl+Y: undo / redo',
   '',
+  'Home / End: playhead to the start / end',
   'Shift+Z: fit the whole timeline in view, and back',
   'Alt+mouse wheel: zoom in / out where the mouse is',
   'Ctrl+mouse wheel: scroll the timeline left / right',
@@ -147,6 +150,16 @@ export function TimelineD(p: Props) {
     el.addEventListener('wheel', on, { passive: false })
     return () => el.removeEventListener('wheel', on)
   }, [])
+
+  // Home / End: scroll so the playhead shows, as Resolve does
+  useEffect(() => {
+    const el = lanes.current
+    if (!el || !p.reveal) return
+    const left = x(clock.get())
+    if (left > el.scrollLeft + el.clientWidth - 40) el.scrollLeft = left - el.clientWidth + 60
+    else if (left < el.scrollLeft) el.scrollLeft = Math.max(0, left - 30)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p.reveal])
 
   // Keep the caption in view when it changes
   useEffect(() => {
