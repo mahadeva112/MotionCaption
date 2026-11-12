@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { EASE } from './anim.ts'
 import { compileCue } from './compile.ts'
-import { compileFx, delays, fxAt, hasHeadline, keyWord, particlesAt, phaseLength, scrambleChar, spokenTimes, splitUnits, unitFor, type Fx } from './fx.ts'
+import { compileFx, delays, easeAt, fxAt, hasHeadline, keyWord, particlesAt, phaseLength, scrambleChar, spokenTimes, splitUnits, unitFor, type Fx } from './fx.ts'
 import { sigOf } from './job.ts'
 import type { Cue } from './srt.ts'
 import { PRESETS } from './presets.ts'
@@ -136,7 +136,8 @@ describe('advanced presets', () => {
   const advanced = PRESETS.filter((p) => p.fx)
 
   it('are in their own families, testing, with no Text+ tracks', () => {
-    expect(advanced.length).toBeGreaterThanOrEqual(71)
+    expect(advanced.length).toBeGreaterThanOrEqual(81)
+    expect(advanced.filter((p) => p.family === 'Elastic')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Scramble')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Stroke')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Kinetic')).toHaveLength(10)
@@ -145,7 +146,7 @@ describe('advanced presets', () => {
     expect(advanced.filter((p) => p.family === 'Calm')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Indic Flow')).toHaveLength(10)
     for (const p of advanced) {
-      expect(['Indic Flow', 'Calm', 'Mask & Wipe', 'Light & Glow', 'Kinetic', 'Stroke', 'Scramble', 'Advanced']).toContain(p.family)
+      expect(['Indic Flow', 'Calm', 'Mask & Wipe', 'Light & Glow', 'Kinetic', 'Stroke', 'Scramble', 'Elastic', 'Advanced']).toContain(p.family)
       expect(p.status).toBe('testing')
       expect(p.tracks).toEqual([])
     }
@@ -529,5 +530,42 @@ describe('Scramble pieces', () => {
     for (const x of xs) expect(Math.abs(x)).toBeLessThanOrEqual(1)
     expect(fxAt(fx, u, 0, 4000).marker).toEqual([1])
     expect(fxAt(fx, u, 1000, 4000).marker).toEqual([0])
+  })
+})
+
+describe('Elastic pieces', () => {
+  it('runs springy moves from 0 to 1, going past 1 on the way', () => {
+    for (const e of ['bounce', 'spring', 'elastic', 'jelly'] as const) {
+      expect(easeAt(e, 0)).toBe(0)
+      expect(easeAt(e, 1)).toBe(1)
+      expect(Math.abs(easeAt(e, 0.999) - 1)).toBeLessThan(0.02)
+    }
+    const peak = (e: 'spring' | 'elastic' | 'jelly') => Math.max(...Array.from({ length: 100 }, (_, i) => easeAt(e, i / 100)))
+    expect(peak('spring')).toBeGreaterThan(1.05)
+    expect(peak('elastic')).toBeGreaterThan(1.05)
+    expect(peak('jelly')).toBeGreaterThan(1.05)
+    // A bounce never goes past the ground
+    expect(Math.max(...Array.from({ length: 100 }, (_, i) => easeAt('bounce', i / 100)))).toBeLessThanOrEqual(1)
+  })
+
+  it('fades straight in under a springy move, without flicker', () => {
+    const fx = compileFx({ in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 1000, ease: 'elastic', state: { opacity: 0, x: -2 } } }, 'a', 4000)
+    const u = splitUnits('a')
+    const ops = Array.from({ length: 21 }, (_, i) => fxAt(fx, u, i * 50, 4000).whole!.opacity!)
+    for (let i = 1; i < ops.length; i++) expect(ops[i]!).toBeGreaterThanOrEqual(ops[i - 1]!)
+    expect(ops[ops.length - 1]).toBe(1)
+  })
+
+  it('squashes each unit as it lands and lets it wobble back', () => {
+    const fx = compileFx({
+      in: { unit: 'word', order: 'ltr', stepMs: 300, ms: 200, ease: EASE.in, state: { y: -1 } },
+      land: { squash: 0.3, ms: 400 },
+    }, 'एक दो', 4000)
+    const u = splitUnits('एक दो')
+    const hit = fxAt(fx, u, 201, 4000).word!
+    expect(hit[0]!.scaleY!).toBeCloseTo(0.7, 1)
+    expect(hit[0]!.scaleX!).toBeGreaterThan(1.2)
+    expect(hit[1]!.scaleY).toBeUndefined()
+    expect(fxAt(fx, u, 2000, 4000).word!.every((s) => s.scaleY === undefined)).toBe(true)
   })
 })

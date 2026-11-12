@@ -370,6 +370,54 @@ const SCRAMBLE: Preset[] = [
   }),
 ]
 
+/** Elastic and bounce: springy moves that overshoot, bounce and wobble into place */
+const ELASTIC: Preset[] = [
+  p('Elastic', 'jellyPop', 'Jelly Pop', 'The line pops in like jelly and wobbles as it settles.', {
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 900, ease: 'jelly', state: { opacity: 0, scale: 0.3 } },
+    land: { squash: 0.12, ms: 500 },
+    out: fadeOut(250),
+  }),
+  p('Elastic', 'springLetters', 'Spring Letters', 'Letters spring up into place one after another (words, in Hindi and Bangla).', {
+    in: { unit: 'letter', order: 'ltr', stepMs: 50, ms: 800, ease: 'spring', state: { opacity: 0, y: 1.1, scale: 0.6 } },
+    out: fadeOut(250),
+  }),
+  p('Elastic', 'waveRipple', 'Wave Ripple', 'A wave keeps running through the letters (words, in Hindi and Bangla).', {
+    in: fadeWhole(300),
+    out: fadeOut(300),
+    loop: { unit: 'letter', periodMs: 1200, stepMs: 90, amp: { y: 0.1 } },
+  }),
+  p('Elastic', 'rubberStretch', 'Rubber Stretch', 'The line comes in stretched wide and snaps back to shape like rubber.', {
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 1000, ease: 'elastic', state: { opacity: 0, scaleX: 2.2, scaleY: 0.45 } },
+    out: fadeOut(250),
+  }),
+  p('Elastic', 'bounceDrop', 'Bounce Drop', 'Words drop from above and bounce on landing, one after another.', {
+    in: { unit: 'word', order: 'ltr', stepMs: 130, ms: 900, ease: 'bounce', state: { opacity: 0, y: -2.2 } },
+    out: fadeOut(250),
+  }),
+  p('Elastic', 'squashLand', 'Squash Land', 'Words drop in, squash flat as they land and spring back to shape.', {
+    in: { unit: 'word', order: 'ltr', stepMs: 140, ms: 380, ease: EASE.in, state: { opacity: 0, y: -1.8 } },
+    land: { squash: 0.35, ms: 520 },
+    out: fadeOut(250),
+  }),
+  p('Elastic', 'wobbleSettle', 'Wobble Settle', 'The line swings in at an angle and wobbles until it sits straight.', {
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 1200, ease: 'elastic', state: { opacity: 0, rotate: 14, scale: 0.9 } },
+    out: fadeOut(250),
+  }),
+  p('Elastic', 'floatBob', 'Float Bob', 'The line bobs gently up and down, as if floating.', {
+    in: fadeWhole(400),
+    out: fadeOut(350),
+    loop: { unit: 'whole', periodMs: 2600, stepMs: 0, amp: { y: 0.08, rotate: 1.2 } },
+  }),
+  p('Elastic', 'elasticSlide', 'Elastic Slide', 'The line slides in from the left, runs past and springs back.', {
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 1100, ease: 'elastic', state: { opacity: 0, x: -2.5 } },
+    out: fadeOut(250),
+  }),
+  p('Elastic', 'popBurst', 'Pop Burst', 'At the end the words burst outward and vanish.', {
+    in: fadeWhole(250),
+    out: { unit: 'word', order: 'center', stepMs: 30, ms: 380, ease: EASE.out, state: { opacity: 0, scale: 1.7, x: 0.8, y: 0.8, rotate: 30 }, scatter: true },
+  }),
+]
+
 /** Phase A's first effects, until their own families come */
 const MORE: Preset[] = [
   p('Advanced', 'waveWarp', 'Wave Warp', 'The line comes in bent like a wave and settles straight.', {
@@ -379,4 +427,4 @@ const MORE: Preset[] = [
   }),
 ]
 
-export const FX_PRESETS: Preset[] = [...INDIC, ...CALM, ...MASK, ...LIGHT, ...KINETIC, ...STROKE, ...SCRAMBLE, ...MORE]
+export const FX_PRESETS: Preset[] = [...INDIC, ...CALM, ...MASK, ...LIGHT, ...KINETIC, ...STROKE, ...SCRAMBLE, ...ELASTIC, ...MORE]
