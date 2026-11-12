@@ -16,6 +16,7 @@ const FAMILY: Record<Family, { m: string; s: CSSProperties }> = {
   'Mask & Wipe': { m: 'm-rise', s: { fontFamily: "'Segoe UI', sans-serif", fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em', fontSize: '11px', color: '#bfe3ff' } },
   'Light & Glow': { m: 'm-blur', s: { fontFamily: "'Segoe UI', sans-serif", fontWeight: 800, color: '#fff3d6', textShadow: '0 0 8px rgba(255,200,120,.9), 0 0 18px rgba(255,140,60,.5)' } },
   Kinetic: { m: 'm-slam', s: { fontFamily: "'Arial Black', sans-serif", textTransform: 'uppercase', color: '#ffd23f', transform: 'rotate(-2deg)' } },
+  Stroke: { m: 'm-type', s: { fontFamily: "'Segoe UI', sans-serif", fontWeight: 900, color: 'transparent', WebkitTextStroke: '1px #fff', fontSize: '15px' } },
   Advanced: { m: 'm-blur', s: { fontFamily: 'Georgia, serif', fontWeight: 700, color: '#ffd27a', textShadow: '0 0 10px rgba(255,190,90,.55)' } },
 }
 

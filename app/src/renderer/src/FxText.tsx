@@ -174,7 +174,7 @@ function group(u: Units): Line[] {
   return lines
 }
 
-type Copy = false | 'sweep' | 'fill' | 'mirror'
+type Copy = false | 'sweep' | 'fill' | 'mirror' | 'outline'
 
 /** One unit: moving on its own, or (masked) moving inside a still window cut at its line's bottom */
 function unit(cls: string, key: string | number, st: CSSProperties | undefined, masked: boolean | undefined, children: ReactNode, pre?: ReactNode) {
@@ -232,6 +232,56 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
         M?.unit === 'word' ? stroke(f.marker?.[w.word]) : null))}
     </span>
   )
+
+  // Outlines: copies of the text with no fill, only a stroke in their colour
+  const outline = (key: string, width: number, color: Rgb, style: CSSProperties) => (
+    <span key={key} className="fxs fxo" aria-hidden style={{ ['--sw' as string]: `${width}em`, ['--sc' as string]: css(color), ...style }}>{tree('outline')}</span>
+  )
+  let strokeEl: ReactNode = null
+  if (fx.stroke && f.stroke && f.stroke.draw > NEAR && f.stroke.opacity > NEAR) {
+    const S = fx.stroke
+    const st = f.stroke
+    const layers: string[] = []
+    const extra: CSSProperties = {}
+    if (st.draw < 1 - NEAR) {
+      const e = st.draw * 1.06
+      layers.push(`linear-gradient(90deg, #000 ${pc(e - 0.06)}, transparent ${pc(e)})`)
+    }
+    if (S.dash) {
+      const a = S.dash.sizeEm
+      layers.push(`repeating-linear-gradient(60deg, #000 0 ${a}em, transparent ${a}em ${2 * a}em)`)
+      Object.assign(extra, {
+        maskPosition: layers.length > 1 ? `0 0, ${st.dash.toFixed(3)}em 0` : `${st.dash.toFixed(3)}em 0`,
+        ...(layers.length > 1 ? { maskComposite: 'intersect, add' } : {}),
+      })
+    }
+    const sc = S.color ?? A
+    strokeEl = outline('stroke', S.widthEm, sc, {
+      ...(layers.length ? { maskImage: layers.join(', ') } : {}), ...extra,
+      opacity: st.opacity,
+      ...(S.glow ? { filter: `drop-shadow(0 0 ${S.glow}em ${css(sc)})` } : {}),
+      ...(st.dx || st.dy || st.turn ? { transform: `translate(${st.dx.toFixed(4)}em, ${st.dy.toFixed(4)}em) rotate(${st.turn.toFixed(3)}deg)` } : {}),
+    })
+  }
+  const ringEls = fx.rings && f.rings
+    ? f.rings.filter((q) => q.opacity > NEAR).map((q, k) => outline(`r${k}`, fx.rings!.widthEm, fx.rings!.color ?? A, { opacity: q.opacity, transform: `scale(${q.scale.toFixed(4)})` }))
+    : null
+  const echoEls = fx.echo && f.echo !== undefined && f.echo > NEAR
+    ? Array.from({ length: fx.echo.count }, (_, k) => {
+      const i = fx.echo!.count - k
+      return outline(`e${i}`, fx.echo!.widthEm, fx.echo!.color ?? A, {
+        opacity: 0.7 * (1 - (i - 1) / fx.echo!.count) * f.echo!,
+        transform: `translate(${(i * fx.echo!.dxEm * f.echo!).toFixed(4)}em, ${(i * fx.echo!.dyEm * f.echo!).toFixed(4)}em)`,
+      })
+    })
+    : null
+  // The letters' own fill, held back while the outline draws
+  const B = f.body
+  const bodyStyle: CSSProperties | undefined = B ? {
+    ...(B.opacity < 1 - NEAR ? { opacity: Math.max(0, B.opacity) } : {}),
+    ...(B.wipe !== undefined && B.wipe < 1 - NEAR ? { maskImage: `linear-gradient(90deg, #000 ${pc(B.wipe * 1.15 - 0.15)}, transparent ${pc(B.wipe * 1.15)})` } : {}),
+    ...(B.rise !== undefined && B.rise < 1 - NEAR ? { maskImage: `linear-gradient(0deg, #000 ${pc(B.rise * 1.1 - 0.1)}, transparent ${pc(B.rise * 1.1)})` } : {}),
+  } : undefined
 
   // Karaoke fill: the text again in the fill colour, each word cut to how far it is spoken
   const fillCopy = fx.fill && f.fill?.some((p) => p > 0)
@@ -334,9 +384,12 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
       {boxEl}
       <span className="fxw" style={stateStyle(f.whole, f.revealFrom.whole, A, fill, shadow)}>
         {mirror}
-        {f.swap ? swapTree() : tree(false)}
+        {echoEls}
+        {B ? <span className="fxb" style={bodyStyle}>{f.swap ? swapTree() : tree(false)}</span> : f.swap ? swapTree() : tree(false)}
         {fillCopy}
         {sweep}
+        {strokeEl}
+        {ringEls}
       </span>
       {bits?.length ? (
         // Its own layer over the text: the text's way in must not hide the dust that builds it,

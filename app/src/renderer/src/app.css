@@ -544,3 +544,7 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
 .fxswap > .fxu { grid-area: 1 / 1; justify-self: center; }
 /* A box behind the whole word (highlight box) */
 .fxu.full > .fxmk { top: -14%; bottom: -8%; left: -.14em; right: -.14em; border-radius: .16em; }
+/* Outline copies (stroke effects): no fill, only a stroke in their own colour and width */
+.fxo, .fxo * { color: transparent !important; -webkit-text-stroke: var(--sw) var(--sc) !important; }
+.fxo { transform-origin: 50% 55%; }
+.fxb { display: inline-block; white-space: pre; }

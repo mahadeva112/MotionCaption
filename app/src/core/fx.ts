@@ -282,6 +282,48 @@ export interface FxImpact {
   ms: number
 }
 
+/** The letters' outline, drawn by itself, and how their fill comes in after it */
+export interface FxStroke {
+  widthEm: number
+  /** Left out: the accent */
+  color?: Rgb
+  delayMs: number
+  /** ms the outline takes to draw itself from left to right; 0: there at once */
+  drawMs: number
+  /** Glow around the outline, em */
+  glow?: number
+  /** How the letters' own fill comes in: fade, wipe (left to right), rise (from the bottom),
+   *  none (outline only) */
+  fill: { mode: 'fade' | 'wipe' | 'rise' | 'none'; delayMs: number; ms: number; opacity?: number }
+  /** The outline fades out once the fill is in */
+  fadeOut?: boolean
+  /** Dashes running along the outline: dash length em, and em per second */
+  dash?: { sizeEm: number; speed: number }
+  /** A hand-drawn shake, em */
+  wobble?: number
+}
+
+/** Outlines of the text spreading out from it and fading, again and again */
+export interface FxRings {
+  count: number
+  periodMs: number
+  /** How big a ring gets before it is gone */
+  scaleTo: number
+  widthEm: number
+  color?: Rgb
+}
+
+/** Outline copies trailing behind the text, each a step further away */
+export interface FxEcho {
+  count: number
+  dxEm: number
+  dyEm: number
+  widthEm: number
+  /** ms the copies take to slide out to their places */
+  inMs: number
+  color?: Rgb
+}
+
 /** One word at a time in the same place, each in turn as it is spoken: in from below, out above */
 export interface FxSwap {
   /** ms a word takes to come in or go out */
@@ -331,6 +373,9 @@ export interface Fx {
   base?: FxState
   impact?: FxImpact
   swap?: FxSwap
+  stroke?: FxStroke
+  rings?: FxRings
+  echo?: FxEcho
   flare?: FxFlare
   /** Colour for glow, tint, fill and marker; left out: warm gold */
   accent?: Rgb
@@ -513,7 +558,13 @@ export function compileFx(fx: Fx, text: string, durMs: number, opts: { speed?: n
     ...(emphasis ? { emphasis } : {}), ...(marker ? { marker } : {}),
     ...(bar ? { bar } : {}), ...(box ? { box } : {}),
     ...(fx.base ? { base: fx.base } : {}), ...(fx.impact ? { impact: { ...fx.impact, ms: fx.impact.ms / speed } } : {}),
-    ...(fx.swap ? { swap: { ...fx.swap, ms: fx.swap.ms / speed } } : {}), ...(flicker ? { flicker } : {}), ...(backlight ? { backlight } : {}), ...(flare ? { flare } : {}),
+    ...(fx.swap ? { swap: { ...fx.swap, ms: fx.swap.ms / speed } } : {}),
+    ...(fx.stroke ? { stroke: {
+      ...fx.stroke, delayMs: fx.stroke.delayMs / speed, drawMs: fx.stroke.drawMs / speed,
+      fill: { ...fx.stroke.fill, delayMs: fx.stroke.fill.delayMs / speed, ms: fx.stroke.fill.ms / speed },
+    } } : {}),
+    ...(fx.rings ? { rings: { ...fx.rings, periodMs: fx.rings.periodMs / speed } } : {}),
+    ...(fx.echo ? { echo: { ...fx.echo, inMs: fx.echo.inMs / speed } } : {}), ...(flicker ? { flicker } : {}), ...(backlight ? { backlight } : {}), ...(flare ? { flare } : {}),
     ...(particles ? { particles } : {}), ...(dissolve ? { dissolve } : {}), ...(fx.reflect ? { reflect: fx.reflect } : {}),
     accent: fx.accent ?? GOLD, seed,
   }
@@ -618,6 +669,14 @@ export interface FxFrame {
   box?: { sx: number; sy: number }
   /** One word at a time, all in one place (swap) */
   swap?: boolean
+  /** The outline now: how far drawn, its opacity, the dashes' shift (em) and its shake (em) */
+  stroke?: { draw: number; opacity: number; dash: number; dx: number; dy: number; turn: number }
+  /** The letters' own fill now (with an outline effect): opacity, and how far a wipe or rise has gone */
+  body?: { opacity: number; wipe?: number; rise?: number }
+  /** Each ring now: its scale and opacity */
+  rings?: { scale: number; opacity: number }[]
+  /** How far the echo copies have slid out, 0–1 */
+  echo?: number
   /** The light behind: 0–1 how far it has grown, and its opacity now */
   backlight?: { grow: number; opacity: number }
   /** The flare now: where it is across the text (−0.2…1.2) and how bright */
@@ -787,6 +846,37 @@ export function fxAt(fx: CompiledFx, units: Units, ms: number, durMs: number): F
       return ease(EASE.inOut, (ms - M.delayMs - step * M.stepMs) / Math.max(1, M.ms))
     })
   }
+  if (fx.stroke) {
+    const S = fx.stroke
+    const draw = S.drawMs > 0 ? ease(EASE.inOut, (ms - S.delayMs) / S.drawMs) : ms >= S.delayMs ? 1 : 0
+    const F = S.fill
+    const fp = F.mode === 'none' ? 0 : F.ms > 0 ? ease(EASE.inOut, (ms - S.delayMs - F.delayMs) / F.ms) : ms >= S.delayMs + F.delayMs ? 1 : 0
+    const gone = S.fadeOut && F.mode !== 'none' ? ease(EASE.inOut, (ms - S.delayMs - F.delayMs - F.ms) / 350) : 0
+    let dx = 0
+    let dy = 0
+    let turn = 0
+    if (S.wobble) {
+      // A new hand-drawn shake every 90 ms, the same each time
+      const rnd = random(fx.seed * 31 + Math.floor(ms / 90))
+      dx = (rnd() - 0.5) * 2 * S.wobble
+      dy = (rnd() - 0.5) * 2 * S.wobble
+      turn = (rnd() - 0.5) * 1.2
+    }
+    frame.stroke = { draw, opacity: 1 - gone, dash: S.dash ? (ms / 1000) * S.dash.speed : 0, dx, dy, turn }
+    const most = F.opacity ?? 1
+    frame.body = F.mode === 'none' ? { opacity: F.opacity ?? 0 }
+      : F.mode === 'fade' ? { opacity: most * fp }
+      : F.mode === 'wipe' ? { opacity: most, wipe: fp }
+      : { opacity: most, rise: fp }
+  }
+  if (fx.rings) {
+    const R = fx.rings
+    frame.rings = Array.from({ length: R.count }, (_, k) => {
+      const t = (((ms / R.periodMs + k / R.count) % 1) + 1) % 1
+      return { scale: 1 + (R.scaleTo - 1) * ease(EASE.out, t), opacity: (1 - t) * Math.min(1, ms / 400) }
+    })
+  }
+  if (fx.echo) frame.echo = ease(EASE.out, ms / Math.max(1, fx.echo.inMs))
   if (fx.particles) frame.particles = particlesAt(fx.particles, fx.seed, ms)
   if (fx.dissolve) {
     const D = fx.dissolve

@@ -262,6 +262,59 @@ const KINETIC: Preset[] = [
   }),
 ]
 
+/** Strokes and drawing: outlines that draw themselves, fills that follow, hand-drawn lines */
+const WHITE: [number, number, number] = [1, 1, 1]
+const STROKE: Preset[] = [
+  p('Stroke', 'outlineDraw', 'Outline Draw', 'The letters’ outline draws itself from left to right, then the fill fades in.', {
+    stroke: { widthEm: 0.025, color: WHITE, delayMs: 0, drawMs: 900, fill: { mode: 'fade', delayMs: 800, ms: 400 } },
+    out: fadeOut(300),
+  }),
+  p('Stroke', 'strokeThenFill', 'Stroke then Fill', 'The outline draws first, then the colour wipes in behind it and the outline goes.', {
+    stroke: { widthEm: 0.03, delayMs: 0, drawMs: 800, fill: { mode: 'wipe', delayMs: 600, ms: 600 }, fadeOut: true },
+    out: fadeOut(300),
+  }),
+  p('Stroke', 'handwrite', 'Handwrite Reveal', 'The line appears as if written by hand, a letter at a time (a word at a time in Hindi and Bangla).', {
+    in: { unit: 'letter', order: 'ltr', stepMs: 70, ms: 180, ease: EASE.linear, state: { reveal: 0 }, revealFrom: 'left' },
+    out: fadeOut(300),
+  }),
+  p('Stroke', 'doubleStrokePulse', 'Double Stroke Pulse', 'Outlines of the line keep spreading out from it and fading.', {
+    in: fadeWhole(300),
+    out: fadeOut(300),
+    rings: { count: 2, periodMs: 1600, scaleTo: 1.25, widthEm: 0.02 },
+  }),
+  p('Stroke', 'outlineGlow', 'Outline Only Glow', 'Only the letters’ glowing outline shows, like a sign.', {
+    in: fadeWhole(400),
+    out: fadeOut(300),
+    stroke: { widthEm: 0.03, delayMs: 0, drawMs: 0, glow: 0.12, fill: { mode: 'none', delayMs: 0, ms: 0 } },
+    accent: [0.45, 0.85, 1],
+  }),
+  p('Stroke', 'dashTrace', 'Dash Trace', 'A dashed outline runs around the letters while the fill shows softly.', {
+    in: fadeWhole(400),
+    out: fadeOut(300),
+    stroke: { widthEm: 0.03, delayMs: 0, drawMs: 700, dash: { sizeEm: 0.12, speed: 0.6 }, fill: { mode: 'none', delayMs: 0, ms: 0, opacity: 0.35 } },
+  }),
+  p('Stroke', 'inkFill', 'Ink Fill', 'The outline is there first, then ink fills the letters from the bottom up.', {
+    stroke: { widthEm: 0.025, color: WHITE, delayMs: 0, drawMs: 0, fill: { mode: 'rise', delayMs: 250, ms: 900 }, fadeOut: true },
+    in: fadeWhole(250),
+    out: fadeOut(300),
+  }),
+  p('Stroke', 'sketchWobble', 'Sketch Wobble', 'A hand-drawn outline shakes over a soft fill, like a sketch.', {
+    in: fadeWhole(400),
+    out: fadeOut(300),
+    stroke: { widthEm: 0.03, color: WHITE, delayMs: 0, drawMs: 0, wobble: 0.025, fill: { mode: 'none', delayMs: 0, ms: 0, opacity: 0.3 } },
+  }),
+  p('Stroke', 'strokeEcho', 'Stroke Echo', 'Outline copies slide out behind the line, one step further each.', {
+    in: fadeWhole(300),
+    out: fadeOut(300),
+    echo: { count: 3, dxEm: 0.08, dyEm: 0.07, widthEm: 0.02, inMs: 700 },
+  }),
+  p('Stroke', 'underlineDraw', 'Underline Draw', 'The line fades in and an underline draws itself under it.', {
+    in: fadeWhole(300),
+    out: fadeOut(300),
+    marker: { unit: 'line', pick: 'all', order: 'ltr', delayMs: 300, stepMs: 250, ms: 650, opacity: 1, thin: true },
+  }),
+]
+
 /** Phase A's first effects, until their own families come */
 const MORE: Preset[] = [
   p('Advanced', 'waveWarp', 'Wave Warp', 'The line comes in bent like a wave and settles straight.', {
@@ -271,4 +324,4 @@ const MORE: Preset[] = [
   }),
 ]
 
-export const FX_PRESETS: Preset[] = [...INDIC, ...CALM, ...MASK, ...LIGHT, ...KINETIC, ...MORE]
+export const FX_PRESETS: Preset[] = [...INDIC, ...CALM, ...MASK, ...LIGHT, ...KINETIC, ...STROKE, ...MORE]
