@@ -63,6 +63,10 @@ export function installDevApi() {
   if (window.mc || !import.meta.env.DEV) return
   let sentId: string | null = null
   let sentAt = 0
+  let sentPreview = false
+  // A test can set window.mcDevVideo to a video address first; "Timeline video" then shows it
+  const devVideo = () => (window as unknown as { mcDevVideo?: string }).mcDevVideo
+  let video: { url: string; at: string } | null = null
   // Pretend Resolve starts 1.5 s after sending and takes 3 s for 40 captions
   const elapsed = () => (performance.now() - sentAt - 1500) / 3000
   const api: Api = {
@@ -85,15 +89,20 @@ export function installDevApi() {
     sendJob: async (lua) => {
       sentId = /id = "([^"]+)"/.exec(lua)?.[1] ?? null
       sentAt = performance.now()
+      sentPreview = lua.includes('preview = {')
       console.log(lua)
       return 'job.lua'
     },
-    jobResult: async (jobId) => (jobId === sentId && elapsed() >= 1
-      ? { jobId, ok: true, placed: 40, failed: 0, errors: [], timeline: 'Timeline 1', tracks: ['V2 MC Sample talk'], fps: 24 }
-      : null),
+    jobResult: async (jobId) => (jobId !== sentId || elapsed() < 1 ? null
+      : sentPreview
+        ? devVideo()
+          ? { jobId, ok: true, placed: 0, failed: 0, errors: [], preview: { file: 'C:\\dev\\preview\\timeline.mp4', width: 540, height: 960, timeline: 'Reel_Final', project: 'Reel_Project' } }
+          : { jobId, ok: false, placed: 0, failed: 0, errors: ['Resolve could not set MP4 H.264 for the render.'] }
+        : { jobId, ok: true, placed: 40, failed: 0, errors: [], timeline: 'Timeline 1', tracks: ['V2 MC Sample talk'], fps: 24 }),
     jobProgress: async (jobId) => {
       const t = elapsed()
       if (jobId !== sentId || t < 0) return null
+      if (sentPreview) return { jobId, phase: 'rendering', done: Math.floor(Math.min(1, t) * 100), total: 100 }
       return t < 0.1 ? { jobId, phase: 'placing', done: 0, total: 40 } : { jobId, phase: 'animating', done: Math.floor(Math.min(1, t) * 40), total: 40 }
     },
     // Pretends to draw: 1 s for all the frames, reported as it goes
@@ -104,6 +113,13 @@ export function installDevApi() {
         renderListeners.forEach((f) => f({ done: Math.round((total * i) / 10), total, note: 'drawing' }))
       }
       return req.cues.map((c, i) => ({ dir: `C:\\dev\\renders\\${i}`, frames: Math.round(((c.endMs - c.startMs) * req.fps) / 1000) + 1, width: req.width, height: req.height }))
+    },
+    previewDir: async () => 'C:\\dev\\preview\\',
+    previewGet: async () => video,
+    previewKeep: async () => {
+      const url = devVideo()
+      video = url ? { url, at: new Date().toISOString() } : null
+      return video
     },
     onRenderProgress: (cb) => { renderListeners.add(cb); return () => { renderListeners.delete(cb) } },
   }

@@ -1302,6 +1302,125 @@ local function redraw(project, mp, tl)
         temp and (gone and ", then deleted it" or (", but could not delete “" .. tostring(otherName) .. "”")) or ""))
 end
 
+-- ── Timeline video for the app's preview ───────────────────────────────────
+-- A small MP4 of the whole timeline, picture and sound, that the app plays under its own
+-- captions so they can be checked against the video. The captions the app draws itself are
+-- left out (MotionCaption's "MC …" tracks and the Text+ layers the captions come from), so
+-- they do not show twice. Everything turned off for the render is turned back on, and the
+-- Deliver page gets its own settings back.
+local function wait(s)
+    if not try(function() bmd.wait(s); return true end) then
+        local t = os.clock() + s
+        while os.clock() < t do end
+    end
+end
+
+local function even(n) return math.max(2, math.floor(n / 2 + 0.5) * 2) end
+
+local function render_preview(job, project, tl)
+    local P = job.preview
+    if try(function() return project:IsRenderingInProgress() end) then
+        fail("Resolve is rendering something else. Let it finish, then try again.")
+        return
+    end
+    local w = tonumber(tl:GetSetting("timelineResolutionWidth")) or 1920
+    local h = tonumber(tl:GetSetting("timelineResolutionHeight")) or 1080
+    local scale = math.min(1, (tonumber(P.maxSide) or 960) / math.max(w, h))
+    local pw, ph = even(w * scale), even(h * scale)
+
+    -- What the Deliver page had, to put back afterwards
+    local KEEP = "MotionCaption keep"
+    try(function() project:DeleteRenderPreset(KEEP) end)
+    local kept = try(function() return project:SaveAsNewRenderPreset(KEEP) end)
+    local fc = try(function() return project:GetCurrentRenderFormatAndCodec() end)
+    local mode = try(function() return project:GetCurrentRenderMode() end)
+    local page = try(function() return rv:GetCurrentPage() end)
+    log("      Before: page " .. tostring(page) .. ", render queue " .. #(try(function() return project:GetRenderJobList() end) or {}))
+
+    -- Turn off what the app draws itself
+    local tracksOff, clipsOff = {}, {}
+    for i = 1, (tl:GetTrackCount("video") or 0) do
+        local name = try(function() return tl:GetTrackName("video", i) end) or ""
+        if name:sub(1, 3) == "MC " and try(function() return tl:GetIsTrackEnabled("video", i) end) ~= false then
+            if try(function() return tl:SetTrackEnable("video", i, false) end) then tracksOff[#tracksOff + 1] = i end
+        end
+    end
+    local byTrack = {}
+    for _, c in ipairs(P.hideClips or {}) do
+        if not byTrack[c.track] then
+            byTrack[c.track] = {}
+            for _, it in ipairs(objects(try(function() return tl:GetItemListInTrack("video", c.track) end))) do
+                local st = try(function() return it:GetStart() end)
+                if st then byTrack[c.track][st] = it end
+            end
+        end
+        local it = byTrack[c.track][c.at]
+        if it and try(function() return it:GetClipEnabled() end) ~= false and try(function() return it:SetClipEnabled(false) end) then
+            clipsOff[#clipsOff + 1] = it
+        end
+    end
+    log("OK    Left out of the video: " .. #tracksOff .. " MC tracks, " .. #clipsOff .. " Text+ layers")
+
+    local file = P.dir .. P.name .. ".mp4"
+    os.remove(file)
+    local id
+    local ok, err = pcall(function()
+        try(function() project:SetCurrentRenderMode(1) end) -- one file for the whole timeline
+        if not project:SetCurrentRenderFormatAndCodec("mp4", "H264") then error("Resolve could not set MP4 H.264 for the render.", 0) end
+        if not project:SetRenderSettings({
+            SelectAllFrames = true, TargetDir = P.dir, CustomName = P.name,
+            ExportVideo = true, ExportAudio = true, FormatWidth = pw, FormatHeight = ph,
+        }) then error("Resolve did not take the render settings.", 0) end
+        -- Settings older versions may not know, one by one so none stops the others
+        try(function() project:SetRenderSettings({ VideoQuality = "Medium" }) end)
+        try(function() project:SetRenderSettings({ NetworkOptimization = true }) end)
+        try(function() project:SetRenderSettings({ ExportSubtitle = false }) end)
+        id = project:AddRenderJob()
+        if not id or id == "" then error("Resolve could not add the render job.", 0) end
+        if not project:StartRendering(id) then error("Resolve did not start the render.", 0) end
+        local t0 = os.time()
+        wait(0.3)
+        -- Resolve reports 0 % the whole time while this script waits, so the app shows the seconds instead
+        while try(function() return project:IsRenderingInProgress() end) do
+            local s = try(function() return project:GetRenderJobStatus(id) end) or {}
+            progress(job.id, "rendering", tonumber(s.CompletionPercentage) or 0, 100)
+            wait(0.5)
+        end
+        local s = try(function() return project:GetRenderJobStatus(id) end) or {}
+        log(string.format("OK    Render %s in %d s: %s", tostring(s.JobStatus), os.time() - t0, file))
+        if s.JobStatus and s.JobStatus ~= "Complete" then
+            error("The render stopped: " .. tostring(s.JobStatus) .. (s.Error and (" · " .. tostring(s.Error)) or ""), 0)
+        end
+    end)
+
+    -- Put everything back, whatever happened
+    if id then try(function() project:DeleteRenderJob(id) end) end
+    for _, it in ipairs(clipsOff) do try(function() it:SetClipEnabled(true) end) end
+    for _, i in ipairs(tracksOff) do try(function() tl:SetTrackEnable("video", i, true) end) end
+    if kept then
+        try(function() project:LoadRenderPreset(KEEP) end)
+        try(function() project:DeleteRenderPreset(KEEP) end)
+    end
+    if type(fc) == "table" and fc.format then try(function() project:SetCurrentRenderFormatAndCodec(fc.format, fc.codec) end) end
+    if mode then try(function() project:SetCurrentRenderMode(mode) end) end
+    if page then try(function() rv:OpenPage(page) end) end
+    local fc2 = try(function() return project:GetCurrentRenderFormatAndCodec() end) or {}
+    local presetLeft = false
+    for _, n in pairs(try(function() return project:GetRenderPresetList() end) or {}) do if n == KEEP then presetLeft = true end end
+    log(string.format("      Deliver page: %s/%s → %s/%s, mode %s → %s, page %s → %s, render queue %d, saved settings %s%s",
+        tostring(type(fc) == "table" and fc.format), tostring(type(fc) == "table" and fc.codec), tostring(fc2.format), tostring(fc2.codec),
+        tostring(mode), tostring(try(function() return project:GetCurrentRenderMode() end)),
+        tostring(page), tostring(try(function() return rv:GetCurrentPage() end)),
+        #(try(function() return project:GetRenderJobList() end) or {}), kept and "loaded back" or "not saved", presetLeft and " (preset left behind!)" or ""))
+
+    if not ok then fail(tostring(err)); return end
+    if not is_file(file) then fail("The render finished but its file is not there: " .. file); return end
+    result.preview = { file = file, width = pw, height = ph, timeline = tl:GetName(), project = project:GetName() }
+    result.timeline = tl:GetName()
+    result.ok = true
+    try(open_app) -- back to the app, where the video is waiting
+end
+
 local function main()
     if not rv then fail("This scripting host has no Resolve object."); return end
     local job, jerr = load_job()
@@ -1319,9 +1438,16 @@ local function main()
     -- new test timeline each time, and when it failed the click opened the log, never the app.
     -- A real Send that failed still runs again, so a second click can finish it.
     local prev = read_file(RESULT)
-    if prev and prev:find('"jobId":' .. json(job.id), 1, true) and (prev:find('"ok":true', 1, true) or job.test) then
+    if prev and prev:find('"jobId":' .. json(job.id), 1, true) and (prev:find('"ok":true', 1, true) or job.test or job.preview) then
         log(job.test and "This test already ran (its result is in result.json). Opening MotionCaption."
+            or job.preview and "This timeline video was already made. Opening MotionCaption."
             or "These captions are already in Resolve. Opening MotionCaption.")
+        idle = true
+        return
+    end
+    -- A timeline video asked for a while ago is not made on a later click
+    if job.preview and job_age(job) > 300 then
+        log("The timeline video the app asked for is old. Opening MotionCaption.")
         idle = true
         return
     end
@@ -1419,6 +1545,7 @@ local function main()
         tl = want
         log("OK    Switched to the timeline “" .. job.timeline .. "” the captions were made for")
     end
+    if job.preview then render_preview(job, project, tl); return end
     local sum = place(job, tl, project, mp)
     -- Only Text+ captions can show a stale first drawing; drawn ones are plain clips
     if sum.placed > (sum.drawn or 0) then try(function() redraw(project, mp, tl) end) end

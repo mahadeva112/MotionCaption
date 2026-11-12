@@ -1,8 +1,9 @@
-import { app, BrowserWindow, dialog, ipcMain, session } from 'electron'
-import { watch } from 'node:fs'
+import { app, BrowserWindow, dialog, ipcMain, protocol, session } from 'electron'
+import { createReadStream, watch } from 'node:fs'
 import { execFile } from 'node:child_process'
-import { copyFile, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { basename, dirname, join } from 'node:path'
+import { Readable } from 'node:stream'
 import { closeStage, renderCues, type RenderRequest } from './render.ts'
 
 // Where Resolve looks for Workspace → Scripts entries, and where the bridge reads jobs.
@@ -23,6 +24,39 @@ const LINK = join(MC_DIR, 'link.json')
 const REFRESH = join(MC_DIR, 'refresh.txt')
 /** Captions the app drew as PNG frames, one folder each (main/render.ts) */
 const RENDERS = join(MC_DIR, 'renders')
+/** Timeline videos Resolve rendered for the preview, and which is the latest for each timeline */
+const PREVIEWS = join(MC_DIR, 'preview')
+const PREVIEW_INDEX = join(PREVIEWS, 'latest.json')
+
+// The preview plays timeline videos from mcvideo://file/<name>, only from PREVIEWS. Seeking
+// needs byte ranges, so the handler answers them itself.
+protocol.registerSchemesAsPrivileged([{ scheme: 'mcvideo', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } }])
+
+async function serveVideo(req: Request): Promise<Response> {
+  const name = decodeURIComponent(new URL(req.url).pathname.replace(/^\/+/, ''))
+  if (!/^[\w.-]+\.mp4$/.test(name)) return new Response(null, { status: 404 })
+  const path = join(PREVIEWS, name)
+  let size: number
+  try { size = (await stat(path)).size } catch { return new Response(null, { status: 404 }) }
+  const head = { 'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes' }
+  const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.get('range') ?? '')
+  if (!m || (!m[1] && !m[2])) {
+    return new Response(Readable.toWeb(createReadStream(path)) as ReadableStream, { headers: { ...head, 'Content-Length': String(size) } })
+  }
+  // "bytes=500-" from 500 on, "bytes=-500" the last 500
+  const start = m[1] ? Number(m[1]) : Math.max(0, size - Number(m[2]))
+  const end = m[1] && m[2] ? Math.min(Number(m[2]), size - 1) : size - 1
+  if (start >= size || start > end) return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${size}` } })
+  return new Response(Readable.toWeb(createReadStream(path, { start, end })) as ReadableStream, {
+    status: 206, headers: { ...head, 'Content-Length': String(end - start + 1), 'Content-Range': `bytes ${start}-${end}/${size}` },
+  })
+}
+
+type PreviewIndex = Record<string, { file: string; at: string }>
+const readIndex = async (): Promise<PreviewIndex> => {
+  try { return JSON.parse(await readFile(PREVIEW_INDEX, 'utf8')) as PreviewIndex } catch { return {} }
+}
+const videoOf = (e: { file: string; at: string }) => ({ url: 'mcvideo://file/' + encodeURIComponent(basename(e.file)), at: e.at })
 
 const resource = (name: string) =>
   app.isPackaged ? join(process.resourcesPath, name) : join(__dirname, '..', '..', 'resources', name)
@@ -202,6 +236,31 @@ ipcMain.handle('job:progress', async (_e, jobId: string) => {
   }
 })
 
+/** Where the bridge renders timeline videos (with the backslash Resolve's TargetDir wants) */
+ipcMain.handle('preview:dir', async () => {
+  await mkdir(PREVIEWS, { recursive: true })
+  return PREVIEWS + '\\'
+})
+
+/** The latest timeline video for this timeline (project/timeline), or null */
+ipcMain.handle('preview:get', async (_e, key: string) => {
+  const e = (await readIndex())[key]
+  return e && (await exists(e.file)) ? videoOf(e) : null
+})
+
+/** Keeps a new timeline video as this timeline's latest, and removes the videos no timeline uses any more */
+ipcMain.handle('preview:keep', async (_e, key: string, file: string) => {
+  if (dirname(file).toLowerCase() !== PREVIEWS.toLowerCase() || !(await exists(file))) return null
+  const index = await readIndex()
+  index[key] = { file, at: new Date().toISOString() }
+  await writeFile(PREVIEW_INDEX, JSON.stringify(index, null, 1), 'utf8')
+  const used = new Set(Object.values(index).map((e) => basename(e.file).toLowerCase()))
+  for (const f of await readdir(PREVIEWS)) {
+    if (f.toLowerCase().endsWith('.mp4') && !used.has(f.toLowerCase())) await rm(join(PREVIEWS, f), { force: true }).catch(() => {})
+  }
+  return videoOf(index[key])
+})
+
 // Clicking MotionCaption in Resolve opens the app when there is nothing to place. If it
 // is already open, bring that window forward instead of starting a second copy.
 // Same id as the installer's Start menu shortcut, so the taskbar groups the window
@@ -232,6 +291,7 @@ app.whenReady().then(() => {
   const fonts = (p: string) => p === 'local-fonts' || p === 'fonts'
   session.defaultSession.setPermissionCheckHandler((_wc, p) => fonts(p as string))
   session.defaultSession.setPermissionRequestHandler((_wc, p, cb) => cb(fonts(p as string)))
+  protocol.handle('mcvideo', serveVideo)
   createWindow()
   // Tell the Resolve script where this app is (the install folder can change on update).
   // Resolve's Lua opens files by the Windows ANSI code page, so a path with other letters

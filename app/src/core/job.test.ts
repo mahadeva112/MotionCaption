@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { compileCue } from './compile.ts'
-import { jobToLua, makeJob, renderKey, sendSig, sigOf } from './job.ts'
+import { jobToLua, makeJob, makePreviewJob, renderKey, sendSig, sigOf } from './job.ts'
 import type { Cue } from './srt.ts'
 
 const cue = (text: string, startMs = 1000, endMs = 3000): Cue => ({ n: 1, index: 1, startMs, endMs, raw: text, text, line: 0 })
@@ -29,5 +29,19 @@ describe('drawn captions in a job', () => {
     expect(renderKey(c, 1080, 1920, 30)).not.toBe(renderKey(c, 1080, 1920, 25))
     const longer = compileCue(cue('ये बात कोई नहीं बताएगा', 1000, 3500), 'letterRise', { aspect: 9 / 16 })
     expect(renderKey(longer, 1080, 1920, 25)).not.toBe(renderKey(c, 1080, 1920, 25))
+  })
+})
+
+describe('timeline video job', () => {
+  it('asks the bridge for a render, with no captions to place', () => {
+    const job = makePreviewJob({ dir: 'C:\\MC\\preview\\', maxSide: 960, hideClips: [{ track: 2, at: 86400 }] },
+      { project: 'P', timeline: 'Timeline 1' }, new Date(0))
+    expect(job.cues).toEqual([])
+    expect(job.preview!.name).toBe('timeline_' + job.id)
+    const lua = jobToLua(job)
+    expect(lua).toContain('preview = {')
+    expect(lua).toContain('dir = "C:\\\\MC\\\\preview\\\\"')
+    expect(lua).toContain('hideClips = {')
+    expect(lua).toContain('timeline = "Timeline 1"')
   })
 })

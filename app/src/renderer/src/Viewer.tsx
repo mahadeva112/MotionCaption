@@ -1,8 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
 import type { CompiledCue, TimedTrack } from '@core/compile'
 import { countUp, fontShare } from '@core/look'
 import { num, pt, valueAt } from '@core/sample'
-import { useClock } from './clock'
+import { clock, media, useClock } from './clock'
 import { cssFace } from './fonts'
 import { Icon } from './Icon'
 import { css, SAFE, timecode, type SafeArea } from './model'
@@ -62,6 +62,10 @@ interface Props {
   /** The caption's path, shown over the frame; with draw on, a click in the frame adds a point
    *  (as an offset from the caption's place, frame shares, y up) */
   path: { points: readonly (readonly [number, number])[]; draw: boolean; onAdd: (dx: number, dy: number) => void } | null
+  /** The timeline's own picture and sound under the captions (TimelineVideo.tsx), or null */
+  video?: { url: string; muted: boolean } | null
+  /** Buttons for the timeline video, in the header */
+  videoTools?: ReactNode
 }
 
 /** How near (in pixels) the caption's centre must come to the frame's centre lines to stick */
@@ -101,6 +105,34 @@ export function Viewer(p: Props) {
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
+
+  // The timeline video: while playing it leads the playhead (and plays its sound); standing
+  // still it shows the playhead's frame. Trying an animation on hover keeps it still.
+  const vid = useRef<HTMLVideoElement>(null)
+  const url = p.video?.url
+  const rolling = p.playing && !p.loop
+  useEffect(() => {
+    const el = vid.current
+    if (!el || !url) return
+    if (!rolling) { el.pause(); return }
+    // Next frame: by then Play has moved the playhead to where it starts (App's effect runs after this one).
+    // While it seeks or loads, the video holds the playhead still, so sound and captions start together.
+    const raf = requestAnimationFrame(() => {
+      el.currentTime = clock.get() / 1000
+      el.play().catch(() => {})
+      media.set(() => (el.paused || el.ended ? null : el.currentTime * 1000))
+    })
+    return () => { cancelAnimationFrame(raf); media.set(null); el.pause() }
+  }, [rolling, url])
+  // The playhead moved by hand (a click on a caption, the scrub bar): the video goes there too.
+  // While playing, the video sets the time itself, so only a real jump counts.
+  useEffect(() => {
+    const el = vid.current
+    if (!el || !url) return
+    const past = Number.isFinite(el.duration) && t / 1000 >= el.duration
+    if (Math.abs(el.currentTime * 1000 - t) > (rolling ? 300 : 20) && !(rolling && past)) el.currentTime = t / 1000
+  }, [t, rolling, url])
+  useEffect(() => { if (vid.current) vid.current.muted = !!p.video?.muted }, [p.video?.muted, url])
 
   // Safe area: warn when the caption sits under the app's buttons or text
   useLayoutEffect(() => {
@@ -196,7 +228,7 @@ export function Viewer(p: Props) {
 
   const fr = (
     <div className={'vframe' + (p.path?.draw ? ' drawing' : '')} ref={frame} style={{ width: W, height: H }} onPointerDown={addPoint}>
-      <div className="vbg" />
+      {url ? <video ref={vid} className="vvid" src={url} preload="auto" playsInline disablePictureInPicture /> : <div className="vbg" />}
       {cue && onScreen && <Caption cue={cue} ms={ms} W={W} H={H} aspect={aspect} selWord={p.selWord} blockRef={block} onDown={down} onMove={move} onUp={up}
         handles={!p.playing && !p.loop} />}
       {pathPts && (
@@ -214,7 +246,7 @@ export function Viewer(p: Props) {
 
   return (
     <div className={'viewer' + (p.loop ? ' trying' : '')}>
-      <div className="phead"><b>Preview</b><span className="vlabel">{p.label}</span></div>
+      <div className="phead"><b>Preview</b>{p.videoTools}<span className="vlabel">{p.label}</span></div>
       <div className="vstage" ref={wrap}>{fr}</div>
       <div className="transport">
         <div className="scrub" onPointerDown={scrub} onPointerMove={scrub} title="Click or drag to move the playhead">
