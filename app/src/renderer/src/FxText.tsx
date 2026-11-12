@@ -73,10 +73,29 @@ function stateStyle(s: FxState | undefined, from: RevealFrom | undefined, accent
 
 const pc = (v: number) => `${(v * 100).toFixed(2)}%`
 
-/** The mask as a CSS mask image at this openness */
-function maskImage(m: FxMask, open: number): string | undefined {
+/** The mask at this openness, as CSS */
+function maskStyle(m: FxMask, open: number): CSSProperties | undefined {
   if (open >= 1 - NEAR) return undefined
   const s = Math.max(0.001, m.soft)
+  if (m.kind === 'blinds') {
+    // Each strip open from its top down to `open`
+    const o = open * (1 + s)
+    return { maskImage: `linear-gradient(180deg, #000 ${pc(o - s)}, transparent ${pc(o)})`, maskSize: `100% ${(m.bandEm ?? 0.3).toFixed(3)}em`, maskRepeat: 'repeat' }
+  }
+  const img = maskImage(m, open, s)
+  return img ? { maskImage: img } : undefined
+}
+
+/** Where the wipe's edge is, as shares across the padded box (two for split) */
+function edgesAt(m: FxMask, open: number): number[] {
+  const s = Math.max(0.001, m.soft)
+  const e = open * (1 + s) - s / 2
+  if (m.kind === 'split') return [0.5 - e / 2, 0.5 + e / 2]
+  if (m.kind === 'wipe' && (m.angle ?? 90) === 90) return [e]
+  return []
+}
+
+function maskImage(m: FxMask, open: number, s: number): string | undefined {
   const edge = open * (1 + s)
   if (m.kind === 'iris') return `radial-gradient(ellipse farthest-corner at 50% 50%, #000 ${pc(edge - s)}, transparent ${pc(edge)})`
   if (m.kind === 'split') {
@@ -157,6 +176,13 @@ function group(u: Units): Line[] {
 
 type Copy = false | 'sweep' | 'fill' | 'mirror'
 
+/** One unit: moving on its own, or (masked) moving inside a still window cut at its line's bottom */
+function unit(cls: string, key: string | number, st: CSSProperties | undefined, masked: boolean | undefined, children: ReactNode, pre?: ReactNode) {
+  return masked
+    ? <span key={key} className={cls + ' fxk'}>{pre}<span className="fxi" style={st}>{children}</span></span>
+    : <span key={key} className={cls} style={st}>{pre}{children}</span>
+}
+
 export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow, charEl }: Props) {
   const id = 'fxw' + useId().replace(/[^a-zA-Z0-9]/g, '')
   const units = splitUnits(text)
@@ -177,9 +203,7 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
     const lineStyle = { ...stateStyle(f.line?.[li], f.revealFrom.line, A, fill, shadow), ...(hl ? { ...hl, padding: `${PAD}em`, margin: `-${PAD}em` } : {}) }
     return [
       li > 0 ? <br key={`b${li}`} /> : null,
-      <span key={`l${li}`} className={'fxl' + (M?.unit === 'line' ? ' mk' : '')} style={lineStyle}>
-        {!copy && M?.unit === 'line' && stroke(f.marker?.[li])}
-        {line.items.map((it) => {
+      unit('fxl' + (M?.unit === 'line' ? ' mk' : '') + (M?.thin ? ' thin' : ''), `l${li}`, lineStyle, f.masked.line && !hl, line.items.map((it) => {
           if (typeof it === 'number') return <span key={`s${it}`} className="fxsp">{copy ? units.glyphs[it]!.ch : charEl(it)}</span>
           const w = words.get(it.word)!
           let ws = stateStyle(f.word?.[it.word], f.revealFrom.word, A, fill, shadow)
@@ -188,19 +212,14 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
             const p = f.fill?.[it.word] ?? 0
             ws = { ...ws, clipPath: `inset(-40% ${pc(1 - p)} -40% -40%)` }
           }
-          return (
-            <span key={`w${it.word}`} className={'fxu' + (M?.unit === 'word' ? ' mk' : '')} style={ws}>
-              {!copy && M?.unit === 'word' && stroke(f.marker?.[it.word])}
-              {w.glyphs.map((gi) => {
-                const g = units.glyphs[gi]!
-                const ls = f.letter ? stateStyle(f.letter[g.letter], f.revealFrom.letter, A, fill, shadow) : undefined
-                const inner = copy ? g.ch : charEl(gi)
-                return ls ? <span key={gi} className="fxc" style={ls}>{inner}</span> : <span key={gi} className="fxc">{inner}</span>
-              })}
-            </span>
-          )
-        })}
-      </span>,
+          return unit('fxu' + (M?.unit === 'word' ? ' mk' : ''), `w${it.word}`, ws, f.masked.word,
+            w.glyphs.map((gi) => {
+              const g = units.glyphs[gi]!
+              const ls = f.letter ? stateStyle(f.letter[g.letter], f.revealFrom.letter, A, fill, shadow) : undefined
+              return unit('fxc', gi, ls, f.masked.letter, copy ? g.ch : charEl(gi))
+            }),
+            !copy && M?.unit === 'word' ? stroke(f.marker?.[it.word]) : null)
+        }), !copy && M?.unit === 'line' ? stroke(f.marker?.[li]) : null),
     ]
   })
 
@@ -251,18 +270,37 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
     }} />
   ))
 
-  const mask = fx.mask && f.mask !== undefined ? maskImage(fx.mask, f.mask) : undefined
+  const mask = fx.mask && f.mask !== undefined ? maskStyle(fx.mask, f.mask) : undefined
+  // The bright line riding the wipe's edge, while it moves
+  const edges = fx.mask?.edge && f.mask !== undefined && f.mask > NEAR && f.mask < 1 - NEAR ? edgesAt(fx.mask, f.mask) : []
+  const edgeColor = css(fx.mask?.edge?.color ?? A)
   const bend = (f.warp ?? 0) * fontPx
   const warp = !!fx.warp && bend > 0.05
   const dissolve = fx.dissolve && f.dissolve !== undefined && f.dissolve < 1 - NEAR ? f.dissolve : undefined
   const outer: CSSProperties = {
     padding: `${PAD}em`, margin: `-${PAD}em`,
-    ...(mask ? { maskImage: mask } : {}),
+    ...(mask ?? {}),
     ...(warp || dissolve !== undefined ? { filter: `url(#${id})` } : {}),
   }
 
+  // Bar and box: drawn before the text shows, so on their own layers, as the particles
+  const outFade = ms > durMs / 2 && (f.whole?.opacity ?? 1) < 1 ? { opacity: f.whole!.opacity } : {}
+  const X = fx.box
+  const boxEl = X && f.box ? (
+    <span className="fxpl back" style={{ inset: `${PAD}em`, ...outFade }}>
+      <span className="fxbox" style={{
+        border: `${X.widthEm}em solid ${css(X.color ?? A)}`, background: X.fill ? css(X.color ?? A, X.fill) : undefined,
+        transform: `scale(${f.box.sx.toFixed(4)}, ${f.box.sy.toFixed(4)})`,
+      }} />
+    </span>
+  ) : null
+  const barEl = fx.bar && f.bar ? (
+    <span className="fxbar" style={{ inset: `${PAD - 0.16}em ${PAD - 0.08}em`, background: css(fx.bar.color ?? A), transform: `scaleX(${f.bar.scale.toFixed(4)})`, transformOrigin: `${f.bar.origin} center` }} />
+  ) : null
+
   return (
     <span className="fxm" style={outer}>
+      {boxEl}
       <span className="fxw" style={stateStyle(f.whole, f.revealFrom.whole, A, fill, shadow)}>
         {mirror}
         {tree(false)}
@@ -272,8 +310,12 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
       {bits?.length ? (
         // Its own layer over the text: the text's way in must not hide the dust that builds it,
         // but its way out takes the particles with it
-        <span className="fxpl" style={{ inset: `${PAD}em`, ...(ms > durMs / 2 && (f.whole?.opacity ?? 1) < 1 ? { opacity: f.whole!.opacity } : {}) }}>{bits}</span>
+        <span className="fxpl" style={{ inset: `${PAD}em`, ...outFade }}>{bits}</span>
       ) : null}
+      {barEl}
+      {edges.map((x, i) => (
+        <span key={`e${i}`} className="fxedge" style={{ left: pc(x), top: `${PAD * 0.6}em`, bottom: `${PAD * 0.6}em`, width: `${fx.mask!.edge!.widthEm}em`, background: edgeColor, boxShadow: `0 0 .3em ${edgeColor}` }} />
+      ))}
       {(warp || dissolve !== undefined || mirror) && (
         <svg className="fxsvg" width="0" height="0" aria-hidden>
           {(warp || dissolve !== undefined) && (

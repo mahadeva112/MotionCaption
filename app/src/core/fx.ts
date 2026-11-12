@@ -57,6 +57,9 @@ export interface FxPhase {
   /** Way in: where each unit starts. Way out: where it ends. */
   state: FxState
   revealFrom?: RevealFrom
+  /** Each unit moves inside its own window, cut at the bottom of its line: it rises out of
+   *  (or sinks into) an edge instead of floating over the text below */
+  masked?: boolean
   /** Hindi, Marathi, Bangla and Punjabi letters hang from one top line (shirorekha). Pulled
    *  apart they read as broken, so a letter effect runs word by word on them unless this is set. */
   keepLetters?: boolean
@@ -75,7 +78,8 @@ export interface FxLoop {
 
 /** The whole caption shown through a moving mask */
 export interface FxMask {
-  kind: 'wipe' | 'iris' | 'split'
+  /** blinds: thin horizontal strips that each open from the top */
+  kind: 'wipe' | 'iris' | 'split' | 'blinds'
   /** wipe only: the direction it opens, CSS degrees (90 = left to right) */
   angle?: number
   /** Share of the mask's travel that is a soft edge (0 hard) */
@@ -84,6 +88,33 @@ export interface FxMask {
   /** Closes the same way at the end; 0 or left out: stays open */
   outMs?: number
   ease?: Bezier
+  /** blinds only: strip height, em */
+  bandEm?: number
+  /** A bright line riding the wipe's edge (wipe left to right and split only) */
+  edge?: { widthEm: number; color?: Rgb }
+}
+
+/** A solid bar that sweeps across the text and uncovers it as it leaves: it grows over the
+ *  text in the first half, then shrinks away toward the far side */
+export interface FxBar {
+  delayMs: number
+  ms: number
+  from: 'left' | 'right'
+  /** Left out: the accent */
+  color?: Rgb
+}
+
+/** An outlined box around the text that opens: first a line grows from the centre, then it
+ *  opens up and down into the box */
+export interface FxBox {
+  delayMs: number
+  ms: number
+  /** Border width, em */
+  widthEm: number
+  /** Left out: the accent */
+  color?: Rgb
+  /** Box fill opacity (0: outline only) */
+  fill?: number
 }
 
 /** A band of light passing over the letters */
@@ -186,6 +217,8 @@ export interface FxMarker {
   opacity: number
   /** Left out: the accent */
   color?: Rgb
+  /** A thin underline under each line instead of a highlighter stroke (line unit) */
+  thin?: boolean
 }
 
 /** The letters bent by noise: big at first and settling (in), or always a little (haze) */
@@ -221,6 +254,8 @@ export interface Fx {
   particles?: FxParticles
   dissolve?: FxDissolve
   reflect?: FxReflect
+  bar?: FxBar
+  box?: FxBox
   /** Colour for glow, tint, fill and marker; left out: warm gold */
   accent?: Rgb
 }
@@ -385,6 +420,8 @@ export function compileFx(fx: Fx, text: string, durMs: number, opts: { speed?: n
   const marker = fx.marker && { ...fx.marker, delayMs: fx.marker.delayMs / speed, stepMs: fx.marker.stepMs / speed, ms: fx.marker.ms / speed }
   const emphasis = fx.emphasis && { ...fx.emphasis, delayMs: fx.emphasis.delayMs / speed, ms: fx.emphasis.ms / speed }
   const focus = fx.focus && { ...fx.focus, fadeMs: fx.focus.fadeMs / speed }
+  const bar = fx.bar && { ...fx.bar, delayMs: fx.bar.delayMs / speed, ms: Math.min(fx.bar.ms / speed, durMs * IN_DONE_BY) }
+  const box = fx.box && { ...fx.box, delayMs: fx.box.delayMs / speed, ms: Math.min(fx.box.ms / speed, durMs * IN_DONE_BY) }
   const particles = fx.particles && { ...fx.particles, delayMs: fx.particles.delayMs / speed, ms: fx.particles.ms / speed }
   const dissolve = fx.dissolve && {
     ...fx.dissolve, inMs: Math.min(fx.dissolve.inMs / speed, durMs * IN_DONE_BY),
@@ -395,6 +432,7 @@ export function compileFx(fx: Fx, text: string, durMs: number, opts: { speed?: n
     ...(mask ? { mask } : {}), ...(sweep ? { sweep } : {}), ...(warp ? { warp } : {}),
     ...(headline ? { headline } : {}), ...(fx.fill ? { fill: fx.fill } : {}), ...(focus ? { focus } : {}),
     ...(emphasis ? { emphasis } : {}), ...(marker ? { marker } : {}),
+    ...(bar ? { bar } : {}), ...(box ? { box } : {}),
     ...(particles ? { particles } : {}), ...(dissolve ? { dissolve } : {}), ...(fx.reflect ? { reflect: fx.reflect } : {}),
     accent: fx.accent ?? GOLD, seed,
   }
@@ -491,6 +529,12 @@ export interface FxFrame {
   dissolve?: number
   /** Ripple drift now, em */
   ripple?: number
+  /** Levels whose units move inside their own window */
+  masked: Partial<Record<FxUnit, boolean>>
+  /** The bar now: how much of the text's width it covers and which side it holds to */
+  bar?: { scale: number; origin: 'left' | 'right' }
+  /** The box now: its width and height as shares of the full box */
+  box?: { sx: number; sy: number }
 }
 
 export interface Particle {
@@ -514,7 +558,7 @@ function phaseStates(p: FxPhase, n: number, ms: number, from: number, out: boole
 
 /** Every unit's look at ms into a caption of durMs */
 export function fxAt(fx: CompiledFx, units: Units, ms: number, durMs: number): FxFrame {
-  const frame: FxFrame = { revealFrom: {} }
+  const frame: FxFrame = { revealFrom: {}, masked: {} }
   const add = (unit: FxUnit, states: FxState[]) => {
     if (unit === 'whole') { frame.whole = combine(frame.whole ?? {}, states[0] ?? {}); return }
     const have = frame[unit]
@@ -524,12 +568,14 @@ export function fxAt(fx: CompiledFx, units: Units, ms: number, durMs: number): F
     const n = countOf(units, fx.in.unit)
     add(fx.in.unit, phaseStates(fx.in, n, ms, 0, false, fx.seed))
     if (fx.in.revealFrom) frame.revealFrom[fx.in.unit] = fx.in.revealFrom
+    if (fx.in.masked) frame.masked[fx.in.unit] = true
   }
   if (fx.out) {
     const n = countOf(units, fx.out.unit)
     const start = durMs - phaseLength(fx.out, n, fx.seed + 1)
     add(fx.out.unit, phaseStates(fx.out, n, ms, start, true, fx.seed + 1))
     if (fx.out.revealFrom) frame.revealFrom[fx.out.unit] ??= fx.out.revealFrom
+    if (fx.out.masked) frame.masked[fx.out.unit] = true
   }
   if (fx.loop) {
     const L = fx.loop
@@ -614,6 +660,17 @@ export function fxAt(fx: CompiledFx, units: Units, ms: number, durMs: number): F
     let open = D.inMs > 0 ? ease(EASE.inOut, ms / D.inMs) : 1
     if (D.outMs) open = Math.min(open, ease(EASE.inOut, (durMs - ms) / D.outMs))
     frame.dissolve = open
+  }
+  if (fx.bar) {
+    const B = fx.bar
+    const t = (ms - B.delayMs) / Math.max(1, B.ms)
+    const far = B.from === 'left' ? 'right' : 'left'
+    if (t > 0 && t < 1) frame.bar = t < 0.5 ? { scale: ease(EASE.inOut, t * 2), origin: B.from } : { scale: 1 - ease(EASE.inOut, t * 2 - 1), origin: far }
+  }
+  if (fx.box) {
+    const X = fx.box
+    const t = (ms - X.delayMs) / Math.max(1, X.ms)
+    if (t > 0) frame.box = { sx: ease(EASE.inOut, t / 0.45), sy: 0.04 + 0.96 * ease(EASE.inOut, (t - 0.4) / 0.6) }
   }
   if (fx.reflect) frame.ripple = Math.sin((2 * Math.PI * ms) / 3000) * 0.4
   return frame

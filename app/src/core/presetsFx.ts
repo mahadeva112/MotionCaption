@@ -114,6 +114,50 @@ const CALM: Preset[] = [
   }),
 ]
 
+/** Masks and wipes: the line uncovered by a moving edge, a shape, a bar or a box */
+const MASK: Preset[] = [
+  p('Mask & Wipe', 'lineWipe', 'Line Wipe', 'A crisp wipe uncovers the line from left to right, a bright line riding its edge.', {
+    mask: { kind: 'wipe', angle: 90, soft: 0.06, inMs: 800, outMs: 400, ease: EASE.inOut, edge: { widthEm: 0.05 } },
+  }),
+  p('Mask & Wipe', 'diagonalReveal', 'Diagonal Reveal', 'A slanted wipe uncovers the line from the top left corner.', {
+    mask: { kind: 'wipe', angle: 135, soft: 0.25, inMs: 900, outMs: 400, ease: EASE.inOut },
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 900, ease: EASE.out, state: { x: -0.06, y: -0.04 } },
+  }),
+  p('Mask & Wipe', 'circleIris', 'Circle Iris', 'The line opens out of a growing circle and closes into one at the end.', {
+    mask: { kind: 'iris', soft: 0.15, inMs: 800, outMs: 500, ease: EASE.inOut },
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 800, ease: EASE.out, state: { scale: 1.06 } },
+  }),
+  p('Mask & Wipe', 'splitCenter', 'Split Center', 'The line splits open from its centre, a bright line on each edge.', {
+    mask: { kind: 'split', soft: 0.04, inMs: 700, outMs: 400, ease: EASE.inOut, edge: { widthEm: 0.05 } },
+  }),
+  p('Mask & Wipe', 'barReveal', 'Bar Reveal', 'A coloured bar sweeps across and leaves the line behind it.', {
+    bar: { delayMs: 0, ms: 900, from: 'left', color: [0.95, 0.42, 0.2] },
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 1, delayMs: 450, ease: EASE.linear, state: { opacity: 0 } },
+    out: fadeOut(300),
+  }),
+  p('Mask & Wipe', 'venetianBlinds', 'Venetian Blinds', 'The line opens through thin strips, like blinds turning.', {
+    mask: { kind: 'blinds', soft: 0.3, inMs: 900, outMs: 450, ease: EASE.inOut, bandEm: 0.22 },
+  }),
+  p('Mask & Wipe', 'softGradientWipe', 'Soft Gradient Wipe', 'A very soft wipe rises from the bottom of the line.', {
+    mask: { kind: 'wipe', angle: 0, soft: 0.7, inMs: 1200, outMs: 500, ease: EASE.inOut },
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 1200, ease: EASE.out, state: { y: 0.08 } },
+  }),
+  p('Mask & Wipe', 'underlineReveal', 'Underline Reveal', 'An underline draws itself, then the words rise up out of it.', {
+    marker: { unit: 'line', pick: 'all', order: 'ltr', delayMs: 0, stepMs: 300, ms: 500, opacity: 1, thin: true },
+    in: { unit: 'word', order: 'ltr', stepMs: 70, ms: 600, delayMs: 350, ease: EASE.out, state: { y: 1.1 }, masked: true },
+    out: fadeOut(300),
+  }),
+  p('Mask & Wipe', 'boxUnfold', 'Box Unfold', 'A line grows and opens into a box, and the words appear inside it.', {
+    box: { delayMs: 0, ms: 800, widthEm: 0.05 },
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 500, delayMs: 550, ease: EASE.out, state: { opacity: 0, scale: 0.94 } },
+    out: fadeOut(300),
+  }),
+  p('Mask & Wipe', 'letterMaskRise', 'Letter Mask Rise', 'Each letter rises out of its own edge, one after another (word by word in Hindi and Bangla).', {
+    in: { unit: 'letter', order: 'ltr', stepMs: 35, ms: 520, ease: EASE.out, state: { y: 1.1 }, masked: true },
+    out: fadeOut(300),
+  }),
+]
+
 /** Phase A's first effects, until their own families come */
 const MORE: Preset[] = [
   p('Advanced', 'lightSweep', 'Light Sweep', 'A band of light passes over the letters every few seconds.', {
@@ -133,4 +177,4 @@ const MORE: Preset[] = [
   }),
 ]
 
-export const FX_PRESETS: Preset[] = [...INDIC, ...CALM, ...MORE]
+export const FX_PRESETS: Preset[] = [...INDIC, ...CALM, ...MASK, ...MORE]

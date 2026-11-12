@@ -13,6 +13,7 @@ const FAMILY: Record<Family, { m: string; s: CSSProperties }> = {
   Continuous: { m: 'm-drift', s: { fontFamily: "'Segoe UI', sans-serif", fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.18em', fontSize: '10px' } },
   'Indic Flow': { m: 'm-rise', s: { fontFamily: "'Nirmala UI', 'Segoe UI', sans-serif", fontWeight: 700, color: '#ffe2b0' } },
   Calm: { m: 'm-fade', s: { fontFamily: 'Georgia, serif', fontStyle: 'italic', fontWeight: 500, color: '#f6e7cf', letterSpacing: '.03em' } },
+  'Mask & Wipe': { m: 'm-rise', s: { fontFamily: "'Segoe UI', sans-serif", fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em', fontSize: '11px', color: '#bfe3ff' } },
   Advanced: { m: 'm-blur', s: { fontFamily: 'Georgia, serif', fontWeight: 700, color: '#ffd27a', textShadow: '0 0 10px rgba(255,190,90,.55)' } },
 }
 
