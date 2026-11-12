@@ -26,7 +26,7 @@ export function CaptionCard(p: Props) {
             ))}
           </div>
           </div>
-          <p className="hint2">Click a word to give it its own look. Edit the text in the Caption tab.</p>
+          <p className="hint2" title="Click a word to give it its own look. Edit the text in the Caption tab.">Click a word to give it its own look. Edit the text in the Caption tab.</p>
         </div>
       ) : <p className="hint2 pad">No caption here.</p>}
     </section>
