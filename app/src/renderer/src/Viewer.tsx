@@ -4,7 +4,6 @@ import { countUp, fontShare } from '@core/look'
 import { num, pt, valueAt } from '@core/sample'
 import { clock, media, useClock } from './clock'
 import { cssFace } from './fonts'
-import { FxText } from './FxText'
 import { Icon } from './Icon'
 import { css, SAFE, timecode, type SafeArea } from './model'
 
@@ -380,10 +379,7 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
         }}
       >
         {img && <img className={'vimg ' + img.place} src={img.src} alt="" draggable={false} style={{ height: img.size * fontPx }} />}
-        <span className={G ? 'vtext grad' : 'vtext'} style={gradLayer ?? undefined}>{cue.fx
-          ? <FxText fx={cue.fx} text={chars.join('')} ms={ms} durMs={cue.endMs - cue.startMs} fontPx={fontPx} fill={L.fill}
-            font={{ family: L.font, weight: face.weight, italic: face.italic }} lineEm={1.2 * L.lineSpacing} shadow={shadow} charEl={charEl} />
-          : chars.map((ch, i) => (ch === '\n' ? <br key={i} /> : charEl(i)))}</span>
+        <span className={G ? 'vtext grad' : 'vtext'} style={gradLayer ?? undefined}>{chars.map((ch, i) => (ch === '\n' ? <br key={i} /> : charEl(i)))}</span>
         {handles && <>
           {['c1', 'c2', 'c3', 'c4'].map((c) => <span key={c} className={'vh ' + c} data-grip="size" title="Drag to make it bigger or smaller" />)}
           <span className="vh turn" data-grip="turn" title="Drag to turn it (Shift: 15° steps)" />

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { compileCue } from './compile.ts'
-import { FAMILIES, PRESETS } from './presets.ts'
+import { FAMILIES, PRESETS, presetById } from './presets.ts'
 
 // Inputs checked in Resolve stills, per node. A preset may only animate these.
 const PROVEN: Record<string, string[]> = {
@@ -10,10 +10,16 @@ const PROVEN: Record<string, string[]> = {
 }
 
 describe('preset library', () => {
-  it('has 247 presets with unique ids and names', () => {
-    expect(PRESETS).toHaveLength(247)
-    expect(new Set(PRESETS.map((p) => p.id)).size).toBe(247)
-    expect(new Set(PRESETS.map((p) => p.name)).size).toBe(247)
+  it('brings the removed advanced effects in as Fade', () => {
+    expect(presetById('wordBloom')?.id).toBe('fade')
+    expect(presetById('filmBurn')?.id).toBe('fade')
+    expect(presetById('nope')).toBeUndefined()
+  })
+
+  it('has 147 presets with unique ids and names', () => {
+    expect(PRESETS).toHaveLength(147)
+    expect(new Set(PRESETS.map((p) => p.id)).size).toBe(147)
+    expect(new Set(PRESETS.map((p) => p.name)).size).toBe(147)
   })
 
   it('uses only known families, each with presets', () => {

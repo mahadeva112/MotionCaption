@@ -1,13 +1,11 @@
 import { EASE, type Fixed, type Letters, type Track } from './anim.ts'
 import { blur, fadeBoth, SOFT_FILL } from './presetKit.ts'
-import type { Fx } from './fx.ts'
 import { MORE_PRESETS } from './presetsMore.ts'
-import { FX_PRESETS } from './presetsFx.ts'
 
 // Status is honest: 'verified' only after the look was checked in Resolve output.
 export type PresetStatus = 'verified' | 'testing'
 
-export const FAMILIES = ['Cinematic', 'Social', 'Elegant', 'Basic', 'Letters', 'Continuous', 'Indic Flow', 'Calm', 'Mask & Wipe', 'Light & Glow', 'Kinetic', 'Stroke', 'Scramble', 'Elastic', 'Distort', 'Trailer'] as const
+export const FAMILIES = ['Cinematic', 'Social', 'Elegant', 'Basic', 'Letters', 'Continuous'] as const
 export type Family = (typeof FAMILIES)[number]
 
 export interface Preset {
@@ -18,8 +16,6 @@ export interface Preset {
   tracks: Track[]
   fixed?: Fixed[]
   letters?: Letters
-  /** An advanced effect, drawn by the app only (Finished clips); Text+ gets `tracks` */
-  fx?: Fx
   status: PresetStatus
 }
 
@@ -243,7 +239,7 @@ const FIRST_PRESETS: Preset[] = [
   },
 ]
 
-export const PRESETS: Preset[] = [...FIRST_PRESETS, ...MORE_PRESETS, ...FX_PRESETS]
+export const PRESETS: Preset[] = [...FIRST_PRESETS, ...MORE_PRESETS]
 
 /** Effects for selected words (Super Select). Colour comes from the word's own setting. */
 export interface WordFx {
@@ -278,5 +274,23 @@ export const WORD_FX: WordFx[] = [
   },
 ]
 
-export const presetById = (id: string) => PRESETS.find((p) => p.id === id)
+/** The 100 advanced effects, added and taken out again on 2026-11-12. A caption, pattern or
+ *  saved animation that still names one comes in as Fade instead of failing. */
+const RETIRED = new Set([
+  'shirorekhaDraw', 'shirorekhaLight', 'wordBloom', 'karaokeFill', 'markerHighlight', 'wordRiseSoft', 'lineByLine', 'inkSpread',
+  'softFocus', 'keyWordColor', 'warmGlowRise', 'breathFade', 'goldenDust', 'silkWipe', 'mistReveal', 'sunriseGradient',
+  'calmFloat', 'waterReflection', 'centerBloom', 'petalDrift', 'lineWipe', 'diagonalReveal', 'circleIris', 'splitCenter',
+  'barReveal', 'venetianBlinds', 'softGradientWipe', 'underlineReveal', 'boxUnfold', 'letterMaskRise', 'neonFlicker', 'lightSweep',
+  'shinePass', 'bloomPop', 'glowPulse', 'backlightRise', 'sparkTrail', 'haloFade', 'flareReveal', 'goldShimmer',
+  'wordSlam', 'wordScale', 'stomp', 'emphasisZoom', 'stackBuild', 'pingPong', 'beatBump', 'highlightBox',
+  'wordSwap', 'punchIn', 'outlineDraw', 'strokeThenFill', 'handwrite', 'doubleStrokePulse', 'outlineGlow', 'dashTrace',
+  'inkFill', 'sketchWobble', 'strokeEcho', 'underlineDraw', 'decode', 'typewriterCursor', 'matrixDrop', 'aksharCycle',
+  'shuffleLetters', 'flipClock', 'redactReveal', 'blurDecode', 'splitFlap', 'cipherFade', 'jellyPop', 'springLetters',
+  'waveRipple', 'rubberStretch', 'bounceDrop', 'squashLand', 'wobbleSettle', 'floatBob', 'elasticSlide', 'popBurst',
+  'waveWarp', 'rippleReveal', 'meltDown', 'smokeDissolve', 'heatHaze', 'liquidMorph', 'twist', 'lensBulge',
+  'turbulenceFade', 'shatterOut', 'blurZoomThrough', 'trailerFlare', 'dustReveal', 'trackingGlow', 'hardCutFlash', 'slowPushGlow',
+  'lightLeak', 'epicScaleDown', 'shadowDrop', 'filmBurn',
+])
+
+export const presetById = (id: string) => PRESETS.find((p) => p.id === id) ?? (RETIRED.has(id) ? PRESETS.find((p) => p.id === 'fade') : undefined)
 export const wordFxById = (id: string) => WORD_FX.find((w) => w.id === id)

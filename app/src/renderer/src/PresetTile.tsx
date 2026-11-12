@@ -11,16 +11,6 @@ const FAMILY: Record<Family, { m: string; s: CSSProperties }> = {
   Elegant: { m: 'm-rise', s: { fontFamily: 'Georgia, serif', fontStyle: 'italic', fontWeight: 600 } },
   Letters: { m: 'm-type', s: { fontFamily: 'Consolas, monospace', fontWeight: 700, textTransform: 'uppercase', fontSize: '11px' } },
   Continuous: { m: 'm-drift', s: { fontFamily: "'Segoe UI', sans-serif", fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.18em', fontSize: '10px' } },
-  'Indic Flow': { m: 'm-rise', s: { fontFamily: "'Nirmala UI', 'Segoe UI', sans-serif", fontWeight: 700, color: '#ffe2b0' } },
-  Calm: { m: 'm-fade', s: { fontFamily: 'Georgia, serif', fontStyle: 'italic', fontWeight: 500, color: '#f6e7cf', letterSpacing: '.03em' } },
-  'Mask & Wipe': { m: 'm-rise', s: { fontFamily: "'Segoe UI', sans-serif", fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em', fontSize: '11px', color: '#bfe3ff' } },
-  'Light & Glow': { m: 'm-blur', s: { fontFamily: "'Segoe UI', sans-serif", fontWeight: 800, color: '#fff3d6', textShadow: '0 0 8px rgba(255,200,120,.9), 0 0 18px rgba(255,140,60,.5)' } },
-  Kinetic: { m: 'm-slam', s: { fontFamily: "'Arial Black', sans-serif", textTransform: 'uppercase', color: '#ffd23f', transform: 'rotate(-2deg)' } },
-  Stroke: { m: 'm-type', s: { fontFamily: "'Segoe UI', sans-serif", fontWeight: 900, color: 'transparent', WebkitTextStroke: '1px #fff', fontSize: '15px' } },
-  Scramble: { m: 'm-type', s: { fontFamily: 'Consolas, monospace', fontWeight: 700, color: '#7dffa0', letterSpacing: '.06em' } },
-  Elastic: { m: 'm-pop', s: { fontFamily: "'Arial Rounded MT Bold', 'Segoe UI', sans-serif", fontWeight: 800, color: '#9be7ff' } },
-  Trailer: { m: 'm-blur', s: { fontFamily: 'Georgia, serif', textTransform: 'uppercase', letterSpacing: '.16em', fontSize: '10.5px', color: '#f6e2c0', textShadow: '0 0 10px rgba(255,170,90,.6)' } },
-  Distort: { m: 'm-drift', s: { fontFamily: 'Georgia, serif', fontStyle: 'italic', fontWeight: 700, color: '#c9b8ff', transform: 'skewX(-8deg)' } },
 }
 
 /** A few presets get their own type, so the best-known ones read at a glance */
