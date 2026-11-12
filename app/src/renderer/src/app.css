@@ -292,7 +292,7 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
 .tag.t { background: var(--sel-soft); color: var(--sel2); }
 .tag.s { background: rgba(214, 170, 80, .14); color: #e2c27a; }
 .lanes { flex: 1; overflow: auto; position: relative; }
-.ruler { position: sticky; top: 0; z-index: 2; height: 26px; cursor: ew-resize; user-select: none; background: #111317; border-bottom: 1px solid var(--seam); }
+.ruler { position: sticky; top: 0; z-index: 2; height: 26px; cursor: default; user-select: none; background: #111317; border-bottom: 1px solid var(--seam); }
 .ruler span { position: absolute; top: 7px; font-size: 10px; color: var(--t3); transform: translateX(-50%); font-variant-numeric: tabular-nums; }
 .ruler span::after { content: ''; position: absolute; left: 50%; top: 14px; width: 1px; height: 5px; background: var(--line2); }
 .lane { position: relative; height: 36px; }
