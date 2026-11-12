@@ -1,6 +1,6 @@
 // Lets the UI run in a plain browser during development (no Electron preload there).
 // Only installed when window.mc is missing and Vite is in dev mode.
-import type { Api, RenderProgress, TimelineData } from '../../preload'
+import type { Api, RenderProgress, TimelineData, UpdateState } from '../../preload'
 
 const SAMPLE = `1
 00:00:01,000 --> 00:00:03,200
@@ -58,6 +58,9 @@ export const DEV_TIMELINE: TimelineData = {
 }
 
 const renderListeners = new Set<(p: RenderProgress) => void>()
+const updListeners = new Set<(s: UpdateState) => void>()
+let upd: UpdateState = { state: 'idle', current: '1.2.0' }
+const setUpd = (next: Partial<UpdateState>) => { upd = { ...upd, ...next }; updListeners.forEach((f) => f(upd)) }
 
 export function installDevApi() {
   if (window.mc || !import.meta.env.DEV) return
@@ -122,6 +125,28 @@ export function installDevApi() {
       return video
     },
     onRenderProgress: (cb) => { renderListeners.add(cb); return () => { renderListeners.delete(cb) } },
+    // ?update in the address pretends 1.3.0 is out (?updatefail: its download fails)
+    updateState: async () => upd,
+    checkUpdate: async () => {
+      setUpd({ state: 'checking' })
+      await new Promise((r) => setTimeout(r, 700))
+      setUpd(/update/.test(location.search)
+        ? { state: 'available', version: '1.3.0', notes: ['• Custom colour on every colour row', '• Drag number boxes, like Resolve', '• Shift+Z, Alt+wheel, Ctrl+wheel on the timeline', '• Rounded drop-downs'] }
+        : { state: 'none' })
+      return upd
+    },
+    downloadUpdate: async () => {
+      const total = 138e6
+      for (let i = 0; i <= 20; i++) {
+        await new Promise((r) => setTimeout(r, 150))
+        if (i === 12 && location.search.includes('updatefail')) { setUpd({ state: 'error', error: 'net::ERR_CONNECTION_RESET' }); return upd }
+        setUpd({ state: 'downloading', percent: i * 5, transferred: (total * i) / 20, total })
+      }
+      setUpd({ state: 'ready', percent: 100 })
+      return upd
+    },
+    installUpdate: async () => { console.log('[dev] restart and install') },
+    onUpdate: (cb) => { updListeners.add(cb); return () => { updListeners.delete(cb) } },
   }
   ;(window as unknown as { mc: Api }).mc = api
 }

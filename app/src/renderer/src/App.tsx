@@ -27,6 +27,7 @@ import { useTimelineVideo } from './TimelineVideo'
 import { TEMPLATES } from './templates'
 import { Viewer } from './Viewer'
 import { Dropdown } from './Dropdown'
+import { AppMenu, UpdateDialog, UpdateStrip, useUpdates } from './Updates'
 
 // Per-computer conveniences: they survive restarts when storage works, and the app works without them
 function saved<T>(key: string, fallback: T): T {
@@ -108,6 +109,7 @@ export function App() {
   const [frame, setFrame] = useState(() => saved('mc.misc', { frame: '9:16' }).frame)
   const [sending, setSending] = useState(false)
   const [resetting, setResetting] = useState(false)
+  const updates = useUpdates()
   const [branding, setBranding] = useState(false)
   /** Clicks in the viewer add points to the caption's path (Position tab) */
   const [pathDraw, setPathDraw] = useState(false)
@@ -810,7 +812,7 @@ export function App() {
   return (
     <div className="app2">
       <header className="menubar2">
-        <i className="logo" />
+        <AppMenu u={updates} />
         <b>MotionCaption <em>Studio</em></b>
         {source?.kind === 'timeline' && tl && (
           <span className="link" title={`Linked to this Resolve timeline · ${tl.width}×${tl.height} · ${tl.fps} fps`
@@ -834,6 +836,7 @@ export function App() {
         {source && <button className="mini" onClick={openSrt}><Icon name="file" />Open SRT…</button>}
         {source && <button className="go cta" disabled={!placeable.length} onClick={() => setSending(true)}><Icon name="send" />{sendLabel}</button>}
       </header>
+      <UpdateStrip u={updates} />
 
       {!source ? (
         <Welcome info={timelineInfo} last={last} link={link} onLast={() => showTimeline(last)} onSrt={openSrt} onSrtFile={loadSrt} />
@@ -910,6 +913,7 @@ export function App() {
           />
         </div>
       )}
+      <UpdateDialog u={updates} />
       {resetting && <ResetDialog onReset={resetAll} onClose={() => setResetting(false)} />}
       {branding && <BrandDialog onClose={() => setBranding(false)}
         current={() => ({ kit: stateKit, look, motion, highlight })}

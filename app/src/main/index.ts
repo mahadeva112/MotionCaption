@@ -5,6 +5,7 @@ import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs
 import { basename, dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { closeStage, renderCues, type RenderRequest } from './render.ts'
+import { setupUpdates } from './updater.ts'
 
 // Where Resolve looks for Workspace → Scripts entries, and where the bridge reads jobs.
 const APPDATA = process.env['APPDATA'] ?? app.getPath('appData')
@@ -292,6 +293,7 @@ app.whenReady().then(() => {
   session.defaultSession.setPermissionCheckHandler((_wc, p) => fonts(p as string))
   session.defaultSession.setPermissionRequestHandler((_wc, p, cb) => cb(fonts(p as string)))
   protocol.handle('mcvideo', serveVideo)
+  setupUpdates()
   createWindow()
   // Tell the Resolve script where this app is (the install folder can change on update).
   // Resolve's Lua opens files by the Windows ANSI code page, so a path with other letters

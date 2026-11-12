@@ -16,6 +16,7 @@ const PATHS = {
   sound: 'M4 9h4l5-4v14l-5-4H4zM16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12',
   mute: 'M4 9h4l5-4v14l-5-4H4zM16 9.5l5 5M21 9.5l-5 5',
   close: 'M6 6l12 12M18 6 6 18',
+  download: 'M12 4v11M7.5 10.5 12 15l4.5-4.5M5 20h14',
 } as const
 
 export type IconName = keyof typeof PATHS

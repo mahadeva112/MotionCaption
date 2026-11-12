@@ -52,6 +52,8 @@ You can animate titles in Resolve, but each one takes Fusion work, and letter or
 
 You need Windows 10 or 11 and DaVinci Resolve (Free or Studio).
 
+**Updates:** the app looks for a new version a few seconds after it opens (1.2.0 and older do not: install the next version by hand once). When one is out, a strip under the top bar says so: **Update** downloads it and shows what's new, and **Restart and install** puts it in place (your looks, styles and captions stay). **Skip this version** and **Later** are there too. Click the logo for the version, **Check for updates**, and **Update automatically** (downloads by itself; installing still waits for you).
+
 ## Quick start
 
 ```mermaid
@@ -151,7 +153,15 @@ npm install
 | `npm run dev:web` | The UI alone in a browser, with a sample timeline (no Resolve needed) |
 | `npm test` | Unit tests (Vitest) |
 | `npm run typecheck` | TypeScript, no emit |
-| `npm run dist` | Windows installer in `app/dist/` |
+| `npm run dist` | Windows installer in `app/dist/`, with `latest.yml` and the `.blockmap` for updates |
+
+**Releasing an update:** bump `version` in `app/package.json`, run `npm run dist`, then put all three files on the GitHub release, or the app won't see it:
+
+```bash
+gh release create vX.Y.Z app/dist/MotionCaption-Studio-Setup-X.Y.Z.exe app/dist/MotionCaption-Studio-Setup-X.Y.Z.exe.blockmap app/dist/latest.yml --target main --notes-file notes.md
+```
+
+The release notes show in the app's update dialog, one line per bullet. The app updates only to the release marked **Latest** (not drafts or pre-releases).
 
 ```
 app/

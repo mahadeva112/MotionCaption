@@ -12,7 +12,7 @@
     "preview": "electron-vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "dist": "electron-vite build && electron-builder --win nsis"
+    "dist": "electron-vite build && electron-builder --win nsis --publish never"
   },
   "devDependencies": {
     "@types/node": "26.6.6",
@@ -28,6 +28,7 @@
     "vitest": "5.1.0"
   },
   "dependencies": {
+    "electron-updater": "6.8.12",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },
@@ -64,6 +65,13 @@
           "ffmpeg.exe.LICENSE",
           "ffmpeg.exe.README"
         ]
+      }
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "mahadeva112",
+        "repo": "MotionCaption"
       }
     ],
     "win": {
