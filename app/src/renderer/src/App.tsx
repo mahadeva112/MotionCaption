@@ -26,6 +26,7 @@ import { TimelineD } from './TimelineD'
 import { useTimelineVideo } from './TimelineVideo'
 import { TEMPLATES } from './templates'
 import { Viewer } from './Viewer'
+import { Dropdown } from './Dropdown'
 
 // Per-computer conveniences: they survive restarts when storage works, and the app works without them
 function saved<T>(key: string, fallback: T): T {
@@ -822,7 +823,7 @@ export function App() {
         )}
         {source?.kind === 'srt' && (
           <span className="link"><i className="dot off" />{source.name}<i className="sep" />frame
-            <select className="sl" value={frame} onChange={(e) => setFrame(e.target.value)}>{FRAMES.map((f) => <option key={f.label}>{f.label}</option>)}</select>
+            <Dropdown className="sl" value={frame} onChange={(v) => setFrame(v)}>{FRAMES.map((f) => <option key={f.label}>{f.label}</option>)}</Dropdown>
           </span>
         )}
         <span className="grow" />

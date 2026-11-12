@@ -8,6 +8,7 @@ import { FAMILIES, PRESETS, presetById } from '@core/presets'
 import { CurveEdit } from './Curve'
 import type { FontFamily } from './fonts'
 import { hex, parseHex, rgb, SWATCHES, timecode, type SafeArea, type Scope } from './model'
+import { Dropdown } from './Dropdown'
 
 /** Animations with a way out that any caption can take (Out › From…) */
 const OUTS = PRESETS.filter((x) => hasOwnOut(x.id))
@@ -260,11 +261,11 @@ export function Inspector(p: Props) {
         <div className="style">
           {saving === null ? (
             <>
-              <select className="sl" value="" title="Picking a style also sets what the ↺ buttons go back to"
-                onChange={(e) => { const s = p.styles.find((x) => x.name === e.target.value); if (s) p.onPickStyle(s) }}>
+              <Dropdown className="sl" value="" title="Picking a style also sets what the ↺ buttons go back to"
+                onChange={(v) => { const s = p.styles.find((x) => x.name === v); if (s) p.onPickStyle(s) }}>
                 <option value="">{p.styleName ? `Style · ${p.styleName}` : 'Style…'}</option>
                 {p.styles.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
-              </select>
+              </Dropdown>
               <button className="mini" onClick={() => setSaving('')}>Save</button>
             </>
           ) : (
@@ -309,20 +310,20 @@ export function Inspector(p: Props) {
           <>
             <Section title="Font" right={scopeLabel} r={lk('font', 'style', 'textCase', 'align')}>
               <Row label="Family" wide r={lk('font', 'style')}>
-                <select className="sl" value={L.font} onChange={(e) => {
-                  const f = p.fonts.find((x) => x.family === e.target.value)
+                <Dropdown className="sl" value={L.font} onChange={(v) => {
+                  const f = p.fonts.find((x) => x.family === v)
                   const style = f?.styles.includes(L.style) ? L.style : (f?.styles.find((s) => /bold/i.test(s)) ?? f?.styles[0] ?? 'Regular')
-                  p.onLook({ font: e.target.value, style })
+                  p.onLook({ font: v, style })
                 }}>
                   {!fam && <option value={L.font}>{L.font}</option>}
                   {p.fonts.map((f) => <option key={f.family} value={f.family} style={{ fontFamily: `'${f.family}'` }}>{f.family}</option>)}
-                </select>
+                </Dropdown>
               </Row>
               <Row label="Style" wide r={lk('style')}>
-                <select className="sl" value={L.style} onChange={(e) => p.onLook({ style: e.target.value })}>
+                <Dropdown className="sl" value={L.style} onChange={(v) => p.onLook({ style: v })}>
                   {!styles.includes(L.style) && <option value={L.style}>{L.style}</option>}
                   {styles.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
+                </Dropdown>
               </Row>
               {p.fontUsed && <p className="hint2">“{L.font}” has no letters for this caption's language, so the caption uses {p.fontUsed}, here and in Resolve.</p>}
               <Seg label="Case" value={L.textCase} r={lk('textCase')} onChange={(v) => p.onLook({ textCase: v })} opts={[['as', 'As typed'], ['upper', 'AA'], ['lower', 'aa'], ['title', 'Aa']]} />
@@ -412,9 +413,9 @@ export function Inspector(p: Props) {
             </Section>
             <Section title="Safe area" right="viewer only">
               <Row label="Show" wide>
-                <select className="sl" value={p.safe} onChange={(e) => p.onSafe(e.target.value as SafeArea)}>
+                <Dropdown className="sl" value={p.safe} onChange={(v) => p.onSafe(v as SafeArea)}>
                   <option value="off">Off</option><option value="reels">Instagram Reels</option><option value="shorts">YouTube Shorts</option><option value="tiktok">TikTok</option>
-                </select>
+                </Dropdown>
               </Row>
               <p className="hint2">Shows where the app puts its buttons and the account name, so captions stay readable after upload.</p>
             </Section>
@@ -456,10 +457,10 @@ export function Inspector(p: Props) {
             })()}
             <Section title="Highlight automatically" right="all captions" r={hl('rule', 'color', 'scale')}>
               <Row label="Rule" wide r={hl('rule')}>
-                <select className="sl" value={p.highlight.rule} onChange={(e) => p.onHighlight({ rule: e.target.value as Highlight['rule'] })}>
+                <Dropdown className="sl" value={p.highlight.rule} onChange={(v) => p.onHighlight({ rule: v as Highlight['rule'] })}>
                   <option value="off">Off</option><option value="last">Last word</option><option value="longest">Longest word</option>
                   <option value="numbers">Numbers</option><option value="karaoke">Word by word, as spoken</option>
-                </select>
+                </Dropdown>
               </Row>
               <Color label="Colour" value={p.highlight.color} r={hl('color')} onChange={(c) => p.onHighlight({ color: c })} />
               {p.highlight.rule !== 'karaoke' && <Slider label="Size" value={p.highlight.scale} r={hl('scale')} min={1} max={2} step={0.05} onChange={(v) => p.onHighlight({ scale: v })} />}
@@ -474,11 +475,11 @@ export function Inspector(p: Props) {
           <>
             <Section title="In" right={scopeLabel} r={mo('speed', 'stepMs')}>
               <Row label="Animation" wide>
-                <select className="sl" value={p.preset} onChange={(e) => p.onPreset(e.target.value)}>
+                <Dropdown className="sl" value={p.preset} onChange={(v) => p.onPreset(v)}>
                   {FAMILIES.map((f) => (
                     <optgroup key={f} label={f}>{PRESETS.filter((x) => x.family === f).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>
                   ))}
-                </select>
+                </Dropdown>
               </Row>
               <Slider label="Speed" value={p.motion.speed} r={mo('speed')} min={0.5} max={2} step={0.05} onChange={(v) => p.onMotion({ speed: v })} />
               {presetById(p.preset)?.letters && (
@@ -500,13 +501,13 @@ export function Inspector(p: Props) {
                 opts={[['preset', 'As designed'], ['none', 'None'], ['fade', 'Fade'], ['slide', 'Slide'], ['zoom', 'Zoom'], ['other', 'From…']]} />
               {p.motion.out === 'other' && (
                 <Row label="Leave like" wide r={mo('outFrom')}>
-                  <select className="sl" value={p.motion.outFrom ?? ''} onChange={(e) => p.onMotion({ outFrom: e.target.value })}
+                  <Dropdown className="sl" value={p.motion.outFrom ?? ''} onChange={(v) => p.onMotion({ outFrom: v })}
                     title="Captions come in with their own animation and leave the way this one does">
                     {FAMILIES.map((f) => {
                       const list = OUTS.filter((x) => x.family === f)
                       return list.length ? <optgroup key={f} label={f}>{list.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup> : null
                     })}
-                  </select>
+                  </Dropdown>
                 </Row>
               )}
               {p.motion.out !== 'preset' && p.motion.out !== 'none' && p.motion.out !== 'other' && (
@@ -575,12 +576,12 @@ function PatternSection(p: Props) {
         {!ids.length && <span className="hint2">No animations yet. Add two or more.</span>}
       </div>
       <Row label="Add" wide>
-        <select className="sl" value="" onChange={(e) => { if (e.target.value) p.onPattern({ ids: [...ids, e.target.value] }) }}>
+        <Dropdown className="sl" value="" onChange={(v) => { if (v) p.onPattern({ ids: [...ids, v] }) }}>
           <option value="">+ Add an animation…</option>
           {FAMILIES.map((f) => (
             <optgroup key={f} label={f}>{PRESETS.filter((x) => x.family === f).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>
           ))}
-        </select>
+        </Dropdown>
       </Row>
       <div className="btnrow" style={{ marginTop: 2 }}>
         <Toggle on={p.patternPick} onChange={p.onPatternPick}>Add by clicking in the library</Toggle>
