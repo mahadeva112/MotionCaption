@@ -315,6 +315,61 @@ const STROKE: Preset[] = [
   }),
 ]
 
+/** Scramble and decode: letters of the caption's own script running before they settle */
+const SCRAMBLE: Preset[] = [
+  p('Scramble', 'decode', 'Decode', 'Random letters of the same script settle into the line from left to right.', {
+    in: fadeWhole(150),
+    out: fadeOut(250),
+    scramble: { unit: 'letter', order: 'ltr', delayMs: 0, stepMs: 45, ms: 400, tickMs: 60, dir: 'in' },
+  }),
+  p('Scramble', 'typewriterCursor', 'Typewriter Cursor', 'The line is typed a letter at a time, a blinking cursor after it.', {
+    in: { unit: 'letter', order: 'ltr', stepMs: 70, ms: 1, ease: EASE.linear, state: { opacity: 0 }, keepLetters: true },
+    out: fadeOut(250),
+    cursor: { blinkMs: 480, widthEm: 0.06 },
+  }),
+  p('Scramble', 'matrixDrop', 'Matrix Drop', 'Letters drop from above in random order, changing until they land.', {
+    in: { unit: 'letter', order: 'random', stepMs: 30, ms: 500, ease: EASE.out, state: { opacity: 0, y: -1.8 } },
+    out: fadeOut(250),
+    scramble: { unit: 'letter', order: 'random', delayMs: 0, stepMs: 30, ms: 500, tickMs: 60, dir: 'in' },
+    base: { tint: 0.45 },
+    accent: [0.35, 1, 0.5],
+  }),
+  p('Scramble', 'aksharCycle', 'Akshar Cycle', 'Each word cycles through letters of its own script, then lands, one word after another.', {
+    in: fadeWhole(200),
+    out: fadeOut(250),
+    scramble: { unit: 'word', order: 'ltr', delayMs: 0, stepMs: 260, ms: 500, tickMs: 70, dir: 'in' },
+  }),
+  p('Scramble', 'shuffleLetters', 'Shuffle Letters', 'Letters start out of place and slide into their spots (words, in Hindi and Bangla).', {
+    in: { unit: 'letter', order: 'ltr', stepMs: 0, ms: 650, ease: EASE.out, state: { opacity: 0, x: 1.5, y: 0.6, rotate: 25 }, scatter: true },
+    out: fadeOut(250),
+  }),
+  p('Scramble', 'flipClock', 'Flip Clock', 'Each word flips in like a clock card, showing other letters before it lands.', {
+    in: { unit: 'word', order: 'ltr', stepMs: 150, ms: 360, ease: EASE.back, state: { opacity: 0, scaleY: 0 } },
+    out: fadeOut(250),
+    scramble: { unit: 'word', order: 'ltr', delayMs: 0, stepMs: 150, ms: 360, tickMs: 90, dir: 'in', flap: true },
+  }),
+  p('Scramble', 'redactReveal', 'Redact Reveal', 'Black bars over the words pull away one after another.', {
+    in: fadeWhole(150),
+    out: fadeOut(250),
+    marker: { unit: 'word', pick: 'all', order: 'ltr', delayMs: 300, stepMs: 160, ms: 380, opacity: 1, full: true, cover: true, color: [0.05, 0.05, 0.06] },
+  }),
+  p('Scramble', 'blurDecode', 'Blur Decode', 'Blurred random letters come into focus as the real ones.', {
+    in: { unit: 'letter', order: 'random', stepMs: 25, ms: 520, ease: EASE.out, state: { opacity: 0.3, blur: 0.25 }, keepLetters: true },
+    out: fadeOut(250),
+    scramble: { unit: 'letter', order: 'random', delayMs: 0, stepMs: 25, ms: 520, tickMs: 70, dir: 'in' },
+  }),
+  p('Scramble', 'splitFlap', 'Split-flap Board', 'Letters flap through others like a station board and stop from left to right.', {
+    in: fadeWhole(150),
+    out: fadeOut(250),
+    scramble: { unit: 'letter', order: 'ltr', delayMs: 0, stepMs: 55, ms: 650, tickMs: 70, dir: 'in', flap: true },
+  }),
+  p('Scramble', 'cipherFade', 'Cipher Fade', 'At the end the letters break up into random ones and fade.', {
+    in: fadeWhole(300),
+    out: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 350, ease: EASE.in, state: { opacity: 0 } },
+    scramble: { unit: 'letter', order: 'random', delayMs: 0, stepMs: 25, ms: 500, tickMs: 60, dir: 'out' },
+  }),
+]
+
 /** Phase A's first effects, until their own families come */
 const MORE: Preset[] = [
   p('Advanced', 'waveWarp', 'Wave Warp', 'The line comes in bent like a wave and settles straight.', {
@@ -324,4 +379,4 @@ const MORE: Preset[] = [
   }),
 ]
 
-export const FX_PRESETS: Preset[] = [...INDIC, ...CALM, ...MASK, ...LIGHT, ...KINETIC, ...STROKE, ...MORE]
+export const FX_PRESETS: Preset[] = [...INDIC, ...CALM, ...MASK, ...LIGHT, ...KINETIC, ...STROKE, ...SCRAMBLE, ...MORE]

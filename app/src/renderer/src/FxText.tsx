@@ -197,6 +197,21 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
     ? <span className="fxmk" style={{ background: markerColor, transform: `scaleX(${p.toFixed(4)})` }} />
     : null)
 
+  /** One letter of the text itself: a scrambled letter over it while it changes (the real one
+   *  keeps its place, so the line never jumps), and the cursor after it */
+  const C = f.cursor
+  const letterEl = (gi: number, ls: CSSProperties | undefined) => {
+    const g = units.glyphs[gi]!
+    const rnd = f.scramble?.[g.letter]
+    const cur = !!C && (C.letter === g.letter || (C.letter < 0 && g.letter === 0))
+    return unit('fxc' + (cur ? ' cur' : ''), gi, ls, f.masked.letter, <>
+      {rnd ? <span className="scr"><span className="scr-h">{charEl(gi)}</span><span className="scr-c">{rnd}</span></span> : charEl(gi)}
+      {cur && <span className={'fxcur' + (C!.letter < 0 ? ' before' : '')} style={{
+        opacity: C!.on ? 1 : 0, width: `${fx.cursor!.widthEm}em`, background: css(fx.cursor!.color ?? A),
+      }} />}
+    </>)
+  }
+
   const tree = (copy: Copy) => lines.map((line, li) => {
     const words = new Map(line.words.map((w) => [w.word, w]))
     const hl = !copy && f.headline && band ? headlineMask(f.headline[li]!.draw, f.headline[li]!.drop, band, lineEm) : undefined
@@ -212,11 +227,11 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
             const p = f.fill?.[it.word] ?? 0
             ws = { ...ws, clipPath: `inset(-40% ${pc(1 - p)} -40% -40%)` }
           }
-          return unit('fxu' + (M?.unit === 'word' ? ' mk' : '') + (M?.full ? ' full' : ''), `w${it.word}`, ws, f.masked.word,
+          return unit('fxu' + (M?.unit === 'word' ? ' mk' : '') + (M?.full ? ' full' : '') + (M?.cover ? ' cover' : ''), `w${it.word}`, ws, f.masked.word,
             w.glyphs.map((gi) => {
               const g = units.glyphs[gi]!
               const ls = f.letter ? stateStyle(f.letter[g.letter], f.revealFrom.letter, A, fill, shadow) : undefined
-              return unit('fxc', gi, ls, f.masked.letter, copy ? g.ch : charEl(gi))
+              return copy ? unit('fxc', gi, ls, f.masked.letter, g.ch) : letterEl(gi, ls)
             }),
             !copy && M?.unit === 'word' ? stroke(f.marker?.[it.word]) : null)
         }), !copy && M?.unit === 'line' ? stroke(f.marker?.[li]) : null),
@@ -226,9 +241,9 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
   // One word at a time: every word in the same grid cell, centred, each shown in its turn
   const swapTree = () => (
     <span className="fxswap">
-      {lines.flatMap((l) => l.words).map((w) => unit('fxu' + (M?.unit === 'word' ? ' mk' : '') + (M?.full ? ' full' : ''), `w${w.word}`,
+      {lines.flatMap((l) => l.words).map((w) => unit('fxu' + (M?.unit === 'word' ? ' mk' : '') + (M?.full ? ' full' : '') + (M?.cover ? ' cover' : ''), `w${w.word}`,
         stateStyle(f.word?.[w.word], f.revealFrom.word, A, fill, shadow), f.masked.word,
-        w.glyphs.map((gi) => unit('fxc', gi, f.letter ? stateStyle(f.letter[units.glyphs[gi]!.letter], f.revealFrom.letter, A, fill, shadow) : undefined, f.masked.letter, charEl(gi))),
+        w.glyphs.map((gi) => letterEl(gi, f.letter ? stateStyle(f.letter[units.glyphs[gi]!.letter], f.revealFrom.letter, A, fill, shadow) : undefined)),
         M?.unit === 'word' ? stroke(f.marker?.[w.word]) : null))}
     </span>
   )

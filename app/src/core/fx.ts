@@ -62,6 +62,8 @@ export interface FxPhase {
   masked?: boolean
   /** Every other unit comes from the mirrored side (x, rotate and skew turned around) */
   alternate?: boolean
+  /** Each unit takes its own share of x, y and rotate, a fixed random amount between ± the state's */
+  scatter?: boolean
   /** Hindi, Marathi, Bangla and Punjabi letters hang from one top line (shirorekha). Pulled
    *  apart they read as broken, so a letter effect runs word by word on them unless this is set. */
   keepLetters?: boolean
@@ -272,6 +274,35 @@ export interface FxMarker {
   full?: boolean
   /** On each word only while it is spoken (words), moving from word to word */
   spoken?: boolean
+  /** A bar over the text that pulls away to the right and uncovers it (redaction) */
+  cover?: boolean
+}
+
+/** Letters shown as random letters of their own script before they settle into the text (in),
+ *  or breaking up into them at the end (out) */
+export interface FxScramble {
+  /** Letters settle one by one, or a word's letters together */
+  unit: 'letter' | 'word'
+  order: FxOrder
+  delayMs: number
+  stepMs: number
+  /** ms a unit keeps changing: before it settles (in), or from its start to the end (out) */
+  ms: number
+  /** ms between changes */
+  tickMs: number
+  dir: 'in' | 'out'
+  /** in: a unit is hidden until its turn starts (typed in), not scrambled from the start */
+  blankBefore?: boolean
+  /** Each change flips like a flap on a board */
+  flap?: boolean
+}
+
+/** A blinking cursor after the last letter typed by the way in */
+export interface FxCursor {
+  blinkMs: number
+  widthEm: number
+  /** Left out: the accent */
+  color?: Rgb
 }
 
 /** The whole caption shaken as each unit of the way in lands */
@@ -376,6 +407,8 @@ export interface Fx {
   stroke?: FxStroke
   rings?: FxRings
   echo?: FxEcho
+  scramble?: FxScramble
+  cursor?: FxCursor
   flare?: FxFlare
   /** Colour for glow, tint, fill and marker; left out: warm gold */
   accent?: Rgb
@@ -564,10 +597,43 @@ export function compileFx(fx: Fx, text: string, durMs: number, opts: { speed?: n
       fill: { ...fx.stroke.fill, delayMs: fx.stroke.fill.delayMs / speed, ms: fx.stroke.fill.ms / speed },
     } } : {}),
     ...(fx.rings ? { rings: { ...fx.rings, periodMs: fx.rings.periodMs / speed } } : {}),
-    ...(fx.echo ? { echo: { ...fx.echo, inMs: fx.echo.inMs / speed } } : {}), ...(flicker ? { flicker } : {}), ...(backlight ? { backlight } : {}), ...(flare ? { flare } : {}),
+    ...(fx.echo ? { echo: { ...fx.echo, inMs: fx.echo.inMs / speed } } : {}),
+    ...(fx.scramble ? { scramble: fitScramble(fx.scramble, units, durMs, speed, seed) } : {}),
+    ...(fx.cursor ? { cursor: { ...fx.cursor, blinkMs: fx.cursor.blinkMs / speed } } : {}), ...(flicker ? { flicker } : {}), ...(backlight ? { backlight } : {}), ...(flare ? { flare } : {}),
     ...(particles ? { particles } : {}), ...(dissolve ? { dissolve } : {}), ...(fx.reflect ? { reflect: fx.reflect } : {}),
     accent: fx.accent ?? GOLD, seed,
   }
+}
+
+/** A scramble at the speed, squeezed so the way in settles by 75 % (or the way out fits) */
+function fitScramble(S: FxScramble, u: Units, durMs: number, speed: number, seed: number): FxScramble {
+  const n = S.unit === 'word' ? u.words : u.letters
+  const len = (S.delayMs + Math.max(0, ...delays(n, S.order, seed)) * S.stepMs + S.ms) / speed
+  const room = S.dir === 'in' ? durMs * IN_DONE_BY : durMs * (1 - IN_DONE_BY)
+  const k = (len > room ? room / len : 1) / speed
+  return { ...S, delayMs: S.delayMs * k, stepMs: S.stepMs * k, ms: S.ms * k, tickMs: S.tickMs / speed }
+}
+
+/** Letters a scrambled letter may show: consonants of its own script, so it reads as that script */
+const POOLS: [RegExp, string][] = [
+  [/[\u0900-\u097F]/, 'कखगघचछजझटठडढणतथदधनपफबभमयरलवशषसह'],
+  [/[\u0980-\u09FF]/, 'কখগঘচছজঝটঠডঢণতথদধনপফবভমযরলশষসহ'],
+  [/[\u0A00-\u0A7F]/, 'ਕਖਗਘਚਛਜਝਟਠਡਢਣਤਥਦਧਨਪਫਬਭਮਯਰਲਵਸਹ'],
+  [/[\u0A80-\u0AFF]/, 'કખગઘચછજઝટઠડઢણતથદધનપફબભમયરલવશષસહ'],
+  [/[\u0B00-\u0B7F]/, 'କଖଗଘଚଛଜଝଟଠଡଢଣତଥଦଧନପଫବଭମଯରଲଶଷସହ'],
+  [/[\u0B80-\u0BFF]/, 'கஙசஞடணதநபமயரலவழளறன'],
+  [/[\u0C00-\u0C7F]/, 'కఖగఘచఛజఝటఠడఢణతథదధనపఫబభమయరలవశషసహ'],
+  [/[\u0C80-\u0CFF]/, 'ಕಖಗಘಚಛಜಝಟಠಡಢಣತಥದಧನಪಫಬಭಮಯರಲವಶಷಸಹ'],
+  [/[\u0D00-\u0D7F]/, 'കഖഗഘചഛജഝടഠഡഢണതഥദധനപഫബഭമയരലവശഷസഹ'],
+  [/[0-9]/, '0123456789'],
+  [/[A-Z]/, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'],
+]
+
+/** A random letter of the same script as ch, the same for the same draw */
+export function scrambleChar(ch: string, draw: number): string {
+  const pool = POOLS.find(([re]) => re.test(ch))?.[1] ?? 'abcdefghijklmnopqrstuvwxyz'
+  const letters = Array.from(pool)
+  return letters[Math.floor(draw * letters.length) % letters.length]!
 }
 
 /** Share of the top line drawn when the letters start to come down from it */
@@ -667,6 +733,10 @@ export interface FxFrame {
   bar?: { scale: number; origin: 'left' | 'right' }
   /** The box now: its width and height as shares of the full box */
   box?: { sx: number; sy: number }
+  /** Per letter: a random letter shown over it now, or null once it has settled */
+  scramble?: (string | null)[]
+  /** Letter the cursor sits after (−1: before the first), and whether it is lit */
+  cursor?: { letter: number; on: boolean }
   /** One word at a time, all in one place (swap) */
   swap?: boolean
   /** The outline now: how far drawn, its opacity, the dashes' shift (em) and its shake (em) */
@@ -697,10 +767,17 @@ function phaseStates(p: FxPhase, n: number, ms: number, from: number, out: boole
   const d = delays(n, p.order, seed)
   const startMs = from + (p.delayMs ?? 0)
   return d.map((k, i) => {
-    const state = p.alternate && i % 2 ? mirrored(p.state) : p.state
+    let state = p.alternate && i % 2 ? mirrored(p.state) : p.state
+    if (p.scatter) state = scattered(state, random(seed * 17 + i * 101 + 3))
     const raw = p.ms <= 0 ? (ms >= startMs + k * p.stepMs ? 1 : 0) : (ms - startMs - k * p.stepMs) / p.ms
     return between(state, ease(p.ease, raw), out)
   })
+}
+
+/** The state with its own random share of x, y and rotate */
+function scattered(s: FxState, rnd: () => number): FxState {
+  const [a, b, c] = [rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1]
+  return { ...s, ...(s.x !== undefined ? { x: s.x * a } : {}), ...(s.y !== undefined ? { y: s.y * b } : {}), ...(s.rotate !== undefined ? { rotate: s.rotate * c } : {}) }
 }
 
 /** The same state from the other side */
@@ -843,7 +920,9 @@ export function fxAt(fx: CompiledFx, units: Units, ms: number, durMs: number): F
     frame.marker = d.map((di, i) => {
       if (M.pick === 'key' && M.unit === 'word' && i !== key) return 0
       const step = M.pick === 'key' ? 0 : di
-      return ease(EASE.inOut, (ms - M.delayMs - step * M.stepMs) / Math.max(1, M.ms))
+      const p = ease(EASE.inOut, (ms - M.delayMs - step * M.stepMs) / Math.max(1, M.ms))
+      // A cover starts whole and pulls away
+      return M.cover ? 1 - p : p
     })
   }
   if (fx.stroke) {
@@ -877,6 +956,37 @@ export function fxAt(fx: CompiledFx, units: Units, ms: number, durMs: number): F
     })
   }
   if (fx.echo) frame.echo = ease(EASE.out, ms / Math.max(1, fx.echo.inMs))
+  if (fx.scramble) {
+    const S = fx.scramble
+    const n = S.unit === 'word' ? units.words : units.letters
+    const d = delays(n, S.order, fx.seed)
+    const total = S.delayMs + Math.max(0, ...d) * S.stepMs + S.ms
+    const from = S.dir === 'in' ? 0 : durMs - total
+    const letters = units.glyphs.filter((g) => g.letter >= 0)
+    const tick = Math.floor(ms / Math.max(1, S.tickMs))
+    const looks: FxState[] = Array.from({ length: units.letters }, () => ({}))
+    frame.scramble = letters.map((g) => {
+      const k = d[S.unit === 'word' ? g.word : g.letter] ?? 0
+      const start = from + S.delayMs + k * S.stepMs
+      const changing = S.dir === 'in' ? ms < start + S.ms : ms >= start
+      if (!changing) return null
+      if (S.dir === 'in' && S.blankBefore && ms < start) { looks[g.letter] = { opacity: 0 }; return null }
+      if (S.flap) {
+        const f = ((ms / Math.max(1, S.tickMs)) % 1 + 1) % 1
+        looks[g.letter] = { scaleY: 0.2 + 0.8 * Math.abs(Math.cos(Math.PI * f)) }
+      }
+      return scrambleChar(g.ch, random(fx.seed * 7 + g.letter * 131 + tick * 7919)())
+    })
+    if (looks.some((h) => Object.keys(h).length)) add('letter', looks)
+  }
+  if (fx.cursor && fx.in) {
+    // After the last letter the way in has started; blinking all the while
+    const P = fx.in
+    const d = delays(units.letters, P.order, fx.seed)
+    let last = -1
+    d.forEach((k, i) => { if (ms >= (P.delayMs ?? 0) + k * P.stepMs) last = Math.max(last, i) })
+    frame.cursor = { letter: last, on: Math.floor(ms / fx.cursor.blinkMs) % 2 === 0 }
+  }
   if (fx.particles) frame.particles = particlesAt(fx.particles, fx.seed, ms)
   if (fx.dissolve) {
     const D = fx.dissolve

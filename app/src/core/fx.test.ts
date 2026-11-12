@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { EASE } from './anim.ts'
 import { compileCue } from './compile.ts'
-import { compileFx, delays, fxAt, hasHeadline, keyWord, particlesAt, phaseLength, spokenTimes, splitUnits, unitFor, type Fx } from './fx.ts'
+import { compileFx, delays, fxAt, hasHeadline, keyWord, particlesAt, phaseLength, scrambleChar, spokenTimes, splitUnits, unitFor, type Fx } from './fx.ts'
 import { sigOf } from './job.ts'
 import type { Cue } from './srt.ts'
 import { PRESETS } from './presets.ts'
@@ -136,7 +136,8 @@ describe('advanced presets', () => {
   const advanced = PRESETS.filter((p) => p.fx)
 
   it('are in their own families, testing, with no Text+ tracks', () => {
-    expect(advanced.length).toBeGreaterThanOrEqual(61)
+    expect(advanced.length).toBeGreaterThanOrEqual(71)
+    expect(advanced.filter((p) => p.family === 'Scramble')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Stroke')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Kinetic')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Light & Glow')).toHaveLength(10)
@@ -144,7 +145,7 @@ describe('advanced presets', () => {
     expect(advanced.filter((p) => p.family === 'Calm')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Indic Flow')).toHaveLength(10)
     for (const p of advanced) {
-      expect(['Indic Flow', 'Calm', 'Mask & Wipe', 'Light & Glow', 'Kinetic', 'Stroke', 'Advanced']).toContain(p.family)
+      expect(['Indic Flow', 'Calm', 'Mask & Wipe', 'Light & Glow', 'Kinetic', 'Stroke', 'Scramble', 'Advanced']).toContain(p.family)
       expect(p.status).toBe('testing')
       expect(p.tracks).toEqual([])
     }
@@ -156,7 +157,8 @@ describe('advanced presets', () => {
       const b = compileCue(cue('नमस्ते दुनिया, कैसे हो'), p.id)
       expect(a.fx, p.id).toBeDefined()
       expect(a.fx).toEqual(b.fx)
-      if (a.fx!.in) expect(a.fx!.in.unit).not.toBe('letter')
+      // Only an effect that asks to keep letters (typing, letter blur) runs them one by one on Hindi
+      if (a.fx!.in && !p.fx!.in?.keepLetters) expect(a.fx!.in.unit).not.toBe('letter')
     }
   })
 
@@ -459,5 +461,73 @@ describe('Stroke pieces', () => {
       expect(q.scale).toBeLessThanOrEqual(1.3)
     }
     expect(f.echo).toBe(1)
+  })
+})
+
+describe('Scramble pieces', () => {
+  it('shows letters of the same script while scrambled', () => {
+    expect(/[ऀ-ॿ]/.test(scrambleChar('न', 0.3))).toBe(true)
+    expect(/[ঀ-৿]/.test(scrambleChar('ক', 0.7))).toBe(true)
+    expect(/[஀-௿]/.test(scrambleChar('வ', 0.5))).toBe(true)
+    expect(/[ఀ-౿]/.test(scrambleChar('న', 0.1))).toBe(true)
+    expect(/[A-Z]/.test(scrambleChar('Q', 0.99))).toBe(true)
+    expect(/[0-9]/.test(scrambleChar('7', 0.5))).toBe(true)
+  })
+
+  it('settles letters from left to right, the same each time', () => {
+    const fx = compileFx({ scramble: { unit: 'letter', order: 'ltr', delayMs: 0, stepMs: 100, ms: 300, tickMs: 50, dir: 'in' } }, 'नमस्ते', 4000)
+    const u = splitUnits('नमस्ते')
+    const f = fxAt(fx, u, 350, 4000)
+    expect(f.scramble![0]).toBeNull()
+    expect(typeof f.scramble![2]).toBe('string')
+    expect(fxAt(fx, u, 350, 4000).scramble).toEqual(f.scramble)
+    expect(fxAt(fx, u, 2000, 4000).scramble!.every((c) => c === null)).toBe(true)
+  })
+
+  it('settles a word’s letters together', () => {
+    const fx = compileFx({ scramble: { unit: 'word', order: 'ltr', delayMs: 0, stepMs: 500, ms: 300, tickMs: 50, dir: 'in' } }, 'एक दो', 4000)
+    const u = splitUnits('एक दो')
+    const f = fxAt(fx, u, 400, 4000)
+    expect(f.scramble!.slice(0, 2)).toEqual([null, null])
+    expect(f.scramble!.slice(2).every((c) => typeof c === 'string')).toBe(true)
+  })
+
+  it('breaks up at the end on the way out', () => {
+    const fx = compileFx({ scramble: { unit: 'letter', order: 'ltr', delayMs: 0, stepMs: 0, ms: 300, tickMs: 50, dir: 'out' } }, 'ab', 4000)
+    const u = splitUnits('ab')
+    expect(fxAt(fx, u, 1000, 4000).scramble).toEqual([null, null])
+    expect(fxAt(fx, u, 3900, 4000).scramble!.every((c) => typeof c === 'string')).toBe(true)
+  })
+
+  it('keeps a typed-in letter hidden until its turn, and flaps', () => {
+    const blank = compileFx({ scramble: { unit: 'letter', order: 'ltr', delayMs: 0, stepMs: 200, ms: 100, tickMs: 50, dir: 'in', blankBefore: true } }, 'ab', 4000)
+    expect(fxAt(blank, splitUnits('ab'), 50, 4000).letter![1]!.opacity).toBe(0)
+    const flap = compileFx({ scramble: { unit: 'letter', order: 'ltr', delayMs: 0, stepMs: 0, ms: 500, tickMs: 100, dir: 'in', flap: true } }, 'ab', 4000)
+    const y = fxAt(flap, splitUnits('ab'), 50, 4000).letter![0]!.scaleY!
+    expect(y).toBeGreaterThanOrEqual(0.2)
+    expect(y).toBeLessThan(1)
+  })
+
+  it('puts the cursor after the last letter typed', () => {
+    const fx = compileFx({
+      in: { unit: 'letter', order: 'ltr', stepMs: 100, ms: 1, ease: EASE.linear, state: { opacity: 0 }, keepLetters: true },
+      cursor: { blinkMs: 500, widthEm: 0.06 },
+    }, 'नमस्ते', 4000)
+    const u = splitUnits('नमस्ते')
+    expect(fxAt(fx, u, 150, 4000).cursor).toEqual({ letter: 1, on: true })
+    expect(fxAt(fx, u, 600, 4000).cursor).toEqual({ letter: 2, on: false })
+  })
+
+  it('scatters units by fixed random shares, and pulls covers away', () => {
+    const fx = compileFx({
+      in: { unit: 'letter', order: 'ltr', stepMs: 0, ms: 500, ease: EASE.linear, state: { x: 1 }, scatter: true },
+      marker: { unit: 'word', pick: 'all', order: 'ltr', delayMs: 0, stepMs: 0, ms: 400, opacity: 1, cover: true },
+    }, 'abcd', 4000)
+    const u = splitUnits('abcd')
+    const xs = fxAt(fx, u, 0, 4000).letter!.map((s) => s.x!)
+    expect(new Set(xs.map((x) => x.toFixed(4))).size).toBeGreaterThan(1)
+    for (const x of xs) expect(Math.abs(x)).toBeLessThanOrEqual(1)
+    expect(fxAt(fx, u, 0, 4000).marker).toEqual([1])
+    expect(fxAt(fx, u, 1000, 4000).marker).toEqual([0])
   })
 })
