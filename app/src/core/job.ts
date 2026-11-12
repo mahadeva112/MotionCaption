@@ -112,9 +112,8 @@ function hash(s: string): string {
  * update leaves that one alone (MotionCaption.lua, "What was sent").
  */
 export function sigOf(cue: CompiledCue): string {
-  const { text, look, tracks, fixed, letters, words, fx } = cue
-  // fx joins only when there is one, so captions sent before it existed keep their signature
-  return hash(JSON.stringify([BUILD, text, look, tracks, fixed, letters ?? null, words, ...(fx ? [fx] : [])]))
+  const { text, look, tracks, fixed, letters, words } = cue
+  return hash(JSON.stringify([BUILD, text, look, tracks, fixed, letters ?? null, words]))
 }
 
 /** The signature a caption is sent with: a drawn caption and a Text+ caption of the same
