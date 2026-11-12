@@ -98,7 +98,7 @@ describe('word looks', () => {
     })
     const by = new Map(c.words.map((w) => [w.index, w]))
     expect(by.get(0)!.solo).toBeUndefined()
-    expect(by.get(1)!.solo).toMatchObject({ text: 'time', size: 0.07 })
+    expect(by.get(1)!.solo).toMatchObject({ text: 'time', size: DEFAULT_LOOK.size })
     expect(by.get(2)!.solo!.center[1]).toBeGreaterThan(by.get(1)!.solo!.center[1])
     expect(by.get(3)!.solo).toMatchObject({ text: 'now' })
     expect(c.text).toMatch(/^right {4,}/)
@@ -107,7 +107,7 @@ describe('word looks', () => {
   it('draws a bigger word on its own, at its size, with its effect', () => {
     const c = compileCue(cue('right time is now'), 'fade', { words: { 3: { scale: 1.5, effect: 'pop', color: [1, 1, 0] } } })
     const w = c.words[0]!
-    expect(w.solo).toMatchObject({ text: 'now', size: 0.07 * 1.5 })
+    expect(w.solo).toMatchObject({ text: 'now', size: DEFAULT_LOOK.size * 1.5 })
     expect(Math.max(...w.tracks.find((t) => t.input === 'CharacterSizeX')!.keys.map((k) => k.v as number))).toBeCloseTo(1.12)
     expect(c.text).not.toContain('now')
   })
