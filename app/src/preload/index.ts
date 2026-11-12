@@ -95,6 +95,18 @@ export interface LinkStatus {
   timeline: string | null
 }
 
+/** Where an update from GitHub has got (main/updater.ts) */
+export interface UpdateState {
+  state: 'idle' | 'checking' | 'none' | 'available' | 'downloading' | 'ready' | 'error'
+  current: string
+  version?: string
+  notes?: string[]
+  percent?: number
+  transferred?: number
+  total?: number
+  error?: string
+}
+
 const api = {
   linkStatus: (): Promise<LinkStatus> => ipcRenderer.invoke('link:status'),
   /** Asks the Link window to read the open timeline again */
@@ -127,6 +139,16 @@ const api = {
     const f = (_e: unknown, p: RenderProgress) => cb(p)
     ipcRenderer.on('render:progress', f)
     return () => { ipcRenderer.removeListener('render:progress', f) }
+  },
+  /** Updates: where it has got, look on GitHub, download it, restart into it */
+  updateState: (): Promise<UpdateState> => ipcRenderer.invoke('update:state'),
+  checkUpdate: (): Promise<UpdateState> => ipcRenderer.invoke('update:check'),
+  downloadUpdate: (): Promise<UpdateState> => ipcRenderer.invoke('update:download'),
+  installUpdate: (): Promise<void> => ipcRenderer.invoke('update:install'),
+  onUpdate: (cb: (s: UpdateState) => void): (() => void) => {
+    const f = (_e: unknown, s: UpdateState) => cb(s)
+    ipcRenderer.on('update:changed', f)
+    return () => { ipcRenderer.removeListener('update:changed', f) }
   },
 }
 
