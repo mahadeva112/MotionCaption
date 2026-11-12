@@ -79,7 +79,7 @@ span.link { text-decoration: none; cursor: default; border: 1px solid var(--seam
 /* Studio grid */
 /* Preview top left with the caption under it, animations in the middle, settings right, timeline across */
 .studio2 { flex: 1; min-height: 0; display: grid; gap: 10px; padding: 0 10px 10px; background: var(--r0);
-  grid-template-columns: 340px minmax(320px, 1fr) 340px; grid-template-rows: minmax(0, 1fr) auto 186px;
+  grid-template-columns: 340px minmax(320px, 1fr) 340px; grid-template-rows: minmax(0, 1fr) 186px 186px;
   grid-template-areas: "pv lib set" "cap lib set" "tl tl tl"; }
 .studio2.wide { grid-template-columns: 460px minmax(320px, 1fr) 340px; }
 .studio2 > .viewer { grid-area: pv; }
@@ -114,8 +114,11 @@ span.link { text-decoration: none; cursor: default; border: 1px solid var(--seam
 .lib2 .tiles { flex: 1; min-height: 0; padding: 2px 14px 14px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
 
 /* The caption under the preview */
-.capcard { display: flex; flex-direction: column; min-width: 0; }
-.capbody { padding: 0 14px 12px; display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow: auto; }
+/* A steady height (two lines of words), so the preview above keeps its size; more lines scroll */
+.capcard { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.capbody { flex: 1; min-height: 0; padding: 0 14px 12px; display: flex; flex-direction: column; gap: 8px; overflow: auto; }
+.capbody > .hint2 { flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.capline { flex: none; }
 .capline { padding: 10px 12px; border-radius: 10px; background: var(--r2); border: 1px solid var(--seam); display: flex; flex-direction: column; gap: 8px; }
 .captm { color: var(--sel2); font-variant-numeric: tabular-nums; font-size: 11px; }
 .wchips { display: flex; flex-wrap: wrap; gap: 5px; }
