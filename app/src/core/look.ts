@@ -17,7 +17,7 @@ export interface Look {
   font: string
   /** Text+ Style, e.g. Regular, Bold, ExtraBold, Black */
   style: string
-  /** Text+ Size (0.07 is a normal caption) */
+  /** Text+ Size (0.084 is the default caption) */
   size: number
   /** Text+ CharacterSpacing, 1 = as the font has it */
   tracking: number
@@ -53,7 +53,7 @@ export interface Look {
 export type ImagePlace = 'left' | 'right' | 'above'
 
 export const DEFAULT_LOOK: Look = {
-  font: 'Open Sans', style: 'Bold', size: 0.07, tracking: 1, lineSpacing: 1, textCase: 'as', align: 'center',
+  font: 'Open Sans', style: 'Bold', size: 0.084, tracking: 1, lineSpacing: 1, textCase: 'as', align: 'center',
   fill: [1, 1, 1],
   outline: { on: false, width: 0.05, color: [0, 0, 0] },
   shadow: { on: true, blur: 0.5, distance: 0.3, opacity: 0.6, color: [0, 0, 0] },
