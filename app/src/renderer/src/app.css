@@ -535,3 +535,7 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
 .fxbox { position: absolute; left: -.35em; right: -.35em; top: -.2em; bottom: -.2em; box-sizing: border-box; border-radius: .08em; }
 .fxbar { position: absolute; pointer-events: none; }
 .fxedge { position: absolute; pointer-events: none; transform: translateX(-50%); border-radius: 1em; }
+/* Light behind the text, lens flare and twinkling stars */
+.fxglow { position: absolute; left: 50%; top: 50%; width: 125%; height: 340%; pointer-events: none; }
+.fxflare { position: absolute; top: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+.fxp.twinkle { border-radius: 0; clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%); }

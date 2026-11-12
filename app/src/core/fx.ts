@@ -135,11 +135,54 @@ export interface FxSweep {
   band?: 'headline'
   /** The light stays where the band has passed (one pass): a colour rising through the letters */
   hold?: boolean
+  /** Glow around the lit letters, em */
+  glow?: number
+  /** Left out: the accent */
+  color?: Rgb
+}
+
+/** Units lighting up like a neon tube: flickering on and off before they hold */
+export interface FxFlicker {
+  unit: FxUnit
+  /** ms one unit flickers before it holds */
+  ms: number
+  /** ms between one unit starting and the next */
+  stepMs: number
+  /** ms one flicker (on or off) lasts */
+  tickMs: number
+  /** Opacity while off (an unlit tube) */
+  low: number
+  /** Glow while on, em */
+  glow: number
+}
+
+/** A soft light behind the text: a glow that grows (or a ring that spreads and fades) */
+export interface FxBacklight {
+  delayMs: number
+  ms: number
+  /** Most opacity of the light */
+  opacity: number
+  /** A ring spreading out and fading, instead of a glow that stays */
+  ring?: boolean
+  /** Left out: the accent */
+  color?: Rgb
+}
+
+/** A lens flare crossing the text from left to right */
+export interface FxFlare {
+  delayMs: number
+  ms: number
+  /** Size of the bright core, em */
+  sizeEm: number
+  /** Left out: the accent */
+  color?: Rgb
 }
 
 /** Small things moving with the text: gold dust gathering into it, or petals drifting past */
 export interface FxParticles {
-  kind: 'dust' | 'petal'
+  /** spark: thrown off a point that moves along the text over `ms` (a sparkler writing);
+   *  twinkle: small stars lighting and going out over the text, the whole time */
+  kind: 'dust' | 'petal' | 'spark' | 'twinkle'
   count: number
   delayMs: number
   /** dust: ms one grain takes to fly in; petal: ms one petal takes to cross */
@@ -256,6 +299,11 @@ export interface Fx {
   reflect?: FxReflect
   bar?: FxBar
   box?: FxBox
+  flicker?: FxFlicker
+  backlight?: FxBacklight
+  /** A look the whole caption keeps the whole time, e.g. a gold tint */
+  base?: FxState
+  flare?: FxFlare
   /** Colour for glow, tint, fill and marker; left out: warm gold */
   accent?: Rgb
 }
@@ -420,6 +468,9 @@ export function compileFx(fx: Fx, text: string, durMs: number, opts: { speed?: n
   const marker = fx.marker && { ...fx.marker, delayMs: fx.marker.delayMs / speed, stepMs: fx.marker.stepMs / speed, ms: fx.marker.ms / speed }
   const emphasis = fx.emphasis && { ...fx.emphasis, delayMs: fx.emphasis.delayMs / speed, ms: fx.emphasis.ms / speed }
   const focus = fx.focus && { ...fx.focus, fadeMs: fx.focus.fadeMs / speed }
+  const flicker = fx.flicker && { ...fx.flicker, unit: unitFor(fx.flicker.unit, text), ms: fx.flicker.ms / speed, stepMs: fx.flicker.stepMs / speed, tickMs: fx.flicker.tickMs / speed }
+  const backlight = fx.backlight && { ...fx.backlight, delayMs: fx.backlight.delayMs / speed, ms: fx.backlight.ms / speed }
+  const flare = fx.flare && { ...fx.flare, delayMs: fx.flare.delayMs / speed, ms: Math.min(fx.flare.ms / speed, durMs * IN_DONE_BY) }
   const bar = fx.bar && { ...fx.bar, delayMs: fx.bar.delayMs / speed, ms: Math.min(fx.bar.ms / speed, durMs * IN_DONE_BY) }
   const box = fx.box && { ...fx.box, delayMs: fx.box.delayMs / speed, ms: Math.min(fx.box.ms / speed, durMs * IN_DONE_BY) }
   const particles = fx.particles && { ...fx.particles, delayMs: fx.particles.delayMs / speed, ms: fx.particles.ms / speed }
@@ -433,6 +484,7 @@ export function compileFx(fx: Fx, text: string, durMs: number, opts: { speed?: n
     ...(headline ? { headline } : {}), ...(fx.fill ? { fill: fx.fill } : {}), ...(focus ? { focus } : {}),
     ...(emphasis ? { emphasis } : {}), ...(marker ? { marker } : {}),
     ...(bar ? { bar } : {}), ...(box ? { box } : {}),
+    ...(fx.base ? { base: fx.base } : {}), ...(flicker ? { flicker } : {}), ...(backlight ? { backlight } : {}), ...(flare ? { flare } : {}),
     ...(particles ? { particles } : {}), ...(dissolve ? { dissolve } : {}), ...(fx.reflect ? { reflect: fx.reflect } : {}),
     accent: fx.accent ?? GOLD, seed,
   }
@@ -535,6 +587,10 @@ export interface FxFrame {
   bar?: { scale: number; origin: 'left' | 'right' }
   /** The box now: its width and height as shares of the full box */
   box?: { sx: number; sy: number }
+  /** The light behind: 0–1 how far it has grown, and its opacity now */
+  backlight?: { grow: number; opacity: number }
+  /** The flare now: where it is across the text (−0.2…1.2) and how bright */
+  flare?: { at: number; opacity: number }
 }
 
 export interface Particle {
@@ -564,6 +620,7 @@ export function fxAt(fx: CompiledFx, units: Units, ms: number, durMs: number): F
     const have = frame[unit]
     frame[unit] = have ? have.map((s, i) => combine(s, states[i] ?? {})) : states
   }
+  if (fx.base) add('whole', [fx.base])
   if (fx.in) {
     const n = countOf(units, fx.in.unit)
     add(fx.in.unit, phaseStates(fx.in, n, ms, 0, false, fx.seed))
@@ -661,6 +718,33 @@ export function fxAt(fx: CompiledFx, units: Units, ms: number, durMs: number): F
     if (D.outMs) open = Math.min(open, ease(EASE.inOut, (durMs - ms) / D.outMs))
     frame.dissolve = open
   }
+  if (fx.flicker) {
+    const F = fx.flicker
+    const n = countOf(units, F.unit)
+    add(F.unit, Array.from({ length: n }, (_, i) => {
+      const t = ms - i * F.stepMs
+      if (t < 0) return { opacity: F.low }
+      if (t >= F.ms) return { glow: F.glow }
+      // Each tick on or off by a fixed draw; more often on as the tube warms up
+      const tick = Math.floor(t / F.tickMs)
+      const on = random(fx.seed * 131 + i * 977 + tick)() > 0.75 * (1 - t / F.ms)
+      return on ? { glow: F.glow } : { opacity: F.low }
+    }))
+  }
+  if (fx.backlight) {
+    const B = fx.backlight
+    const t = (ms - B.delayMs) / Math.max(1, B.ms)
+    if (t > 0) {
+      const grow = ease(EASE.out, t)
+      // A glow comes up and stays; a ring spreads and is gone by the end
+      frame.backlight = { grow, opacity: B.opacity * (B.ring ? Math.min(1, t * 4) * (1 - ease(EASE.in, t)) : ease(EASE.out, t)) }
+    }
+  }
+  if (fx.flare) {
+    const L = fx.flare
+    const t = (ms - L.delayMs) / Math.max(1, L.ms)
+    if (t > 0 && t < 1) frame.flare = { at: -0.2 + 1.4 * ease(EASE.inOut, t), opacity: Math.min(1, t * 5, (1 - t) * 5) }
+  }
   if (fx.bar) {
     const B = fx.bar
     const t = (ms - B.delayMs) / Math.max(1, B.ms)
@@ -692,6 +776,24 @@ export function particlesAt(P: FxParticles, seed: number, ms: number): Particle[
       const far = (P.spreadEm ?? 2) * (0.5 + 0.5 * e)
       const op = p <= 0 ? 0 : p < 0.2 ? p / 0.2 : p < 0.8 ? 1 : (1 - p) / 0.2
       out.push({ left: a, top: b, dx: Math.cos(angle) * far * (1 - k), dy: Math.sin(angle) * far * (1 - k), size, rotate: 0, opacity: op })
+    } else if (P.kind === 'spark') {
+      // Born at the moving point, thrown out and falling, gone after a short life
+      const born = P.delayMs + (i / Math.max(1, P.count)) * P.ms
+      const life = 700
+      const p = (ms - born) / life
+      if (p < 0 || p > 1) { out.push({ left: 0, top: 0, dx: 0, dy: 0, size, rotate: 0, opacity: 0 }); continue }
+      const vx = (d - 0.5) * 2.4
+      const vy = -0.8 - e * 0.9
+      out.push({
+        left: (born - P.delayMs) / P.ms, top: 0.35 + b * 0.3,
+        dx: vx * p, dy: vy * p + 1.8 * p * p, size: size * (1 - 0.6 * p), rotate: 0, opacity: 1 - p,
+      })
+    } else if (P.kind === 'twinkle') {
+      // Each star on its own clock: lights, peaks and goes out, then waits to light again
+      const period = 900 + 900 * c
+      const t = (((ms - P.delayMs) / period + d) % 1 + 1) % 1
+      const on = ms < P.delayMs ? 0 : Math.max(0, Math.sin(Math.PI * Math.min(1, t * 1.4))) ** 2
+      out.push({ left: a, top: 0.15 + b * 0.7, dx: 0, dy: 0, size, rotate: 45 * e, opacity: on })
     } else {
       // Drifting left to right and falling a little, each on its own clock and sway
       const period = P.ms * (0.8 + 0.4 * c)

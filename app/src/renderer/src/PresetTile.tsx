@@ -14,6 +14,7 @@ const FAMILY: Record<Family, { m: string; s: CSSProperties }> = {
   'Indic Flow': { m: 'm-rise', s: { fontFamily: "'Nirmala UI', 'Segoe UI', sans-serif", fontWeight: 700, color: '#ffe2b0' } },
   Calm: { m: 'm-fade', s: { fontFamily: 'Georgia, serif', fontStyle: 'italic', fontWeight: 500, color: '#f6e7cf', letterSpacing: '.03em' } },
   'Mask & Wipe': { m: 'm-rise', s: { fontFamily: "'Segoe UI', sans-serif", fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em', fontSize: '11px', color: '#bfe3ff' } },
+  'Light & Glow': { m: 'm-blur', s: { fontFamily: "'Segoe UI', sans-serif", fontWeight: 800, color: '#fff3d6', textShadow: '0 0 8px rgba(255,200,120,.9), 0 0 18px rgba(255,140,60,.5)' } },
   Advanced: { m: 'm-blur', s: { fontFamily: 'Georgia, serif', fontWeight: 700, color: '#ffd27a', textShadow: '0 0 10px rgba(255,190,90,.55)' } },
 }
 

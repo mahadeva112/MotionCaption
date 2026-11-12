@@ -158,23 +158,68 @@ const MASK: Preset[] = [
   }),
 ]
 
-/** Phase A's first effects, until their own families come */
-const MORE: Preset[] = [
-  p('Advanced', 'lightSweep', 'Light Sweep', 'A band of light passes over the letters every few seconds.', {
+/** Light and glow: neon, shine, light behind and across the text */
+const LIGHT: Preset[] = [
+  p('Light & Glow', 'neonFlicker', 'Neon Flicker', 'Each word flickers on like a neon tube warming up, then holds with a glow.', {
+    flicker: { unit: 'word', ms: 700, stepMs: 180, tickMs: 60, low: 0.12, glow: 0.18 },
+    out: fadeOut(250),
+    accent: [1, 0.36, 0.62],
+  }),
+  p('Light & Glow', 'lightSweep', 'Light Sweep', 'A band of light passes over the letters every few seconds.', {
     in: fadeWhole(300),
     out: fadeOut(250),
     sweep: { delayMs: 350, ms: 900, everyMs: 2600, width: 0.22, angle: 100, strength: 0.85 },
   }),
+  p('Light & Glow', 'shinePass', 'Shine Pass', 'A narrow glossy shine passes over the letters again and again.', {
+    in: fadeWhole(300),
+    out: fadeOut(250),
+    sweep: { delayMs: 500, ms: 650, everyMs: 2200, width: 0.18, angle: 110, strength: 1, glow: 0.22, color: [1, 0.97, 0.88] },
+  }),
+  p('Light & Glow', 'bloomPop', 'Bloom Pop', 'The line pops in with a bright flash of light that settles.', {
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 550, ease: EASE.back, state: { opacity: 0, scale: 0.85, glow: 1.1, tint: 0.8 } },
+    out: fadeOut(250),
+  }),
+  p('Light & Glow', 'glowPulse', 'Glow Pulse', 'A warm glow breathes through the words, one after another.', {
+    in: fadeWhole(350),
+    out: fadeOut(300),
+    loop: { unit: 'word', periodMs: 1800, stepMs: 220, amp: { glow: 0.35, tint: 0.5, scale: 0.025 } },
+  }),
+  p('Light & Glow', 'backlightRise', 'Backlight Rise', 'A soft light comes up behind the text and the line rises in front of it.', {
+    backlight: { delayMs: 0, ms: 900, opacity: 0.55 },
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 800, delayMs: 250, ease: EASE.out, state: { opacity: 0, y: 0.2 } },
+    out: fadeOut(350),
+  }),
+  p('Light & Glow', 'sparkTrail', 'Spark Trail', 'A sparkler writes the line from left to right, throwing sparks.', {
+    particles: { kind: 'spark', count: 70, delayMs: 0, ms: 1000, sizeEm: 0.11, color: [1, 0.86, 0.5] },
+    mask: { kind: 'wipe', angle: 90, soft: 0.08, inMs: 1000, outMs: 0, ease: EASE.linear },
+    out: fadeOut(300),
+  }),
+  p('Light & Glow', 'haloFade', 'Halo Fade', 'A ring of light spreads out from behind the line as it fades in.', {
+    backlight: { delayMs: 0, ms: 1200, opacity: 0.7, ring: true },
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 900, ease: EASE.inOut, state: { opacity: 0, glow: 0.3 } },
+    out: fadeOut(350),
+  }),
+  p('Light & Glow', 'flareReveal', 'Lens Flare Reveal', 'A lens flare crosses the line and leaves it behind.', {
+    flare: { delayMs: 0, ms: 1000, sizeEm: 0.85 },
+    mask: { kind: 'wipe', angle: 90, soft: 0.25, inMs: 1000, outMs: 0, ease: EASE.inOut },
+    out: fadeOut(300),
+  }),
+  p('Light & Glow', 'goldShimmer', 'Gold Shimmer', 'The line turns gold and small stars glint over it the whole time.', {
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 500, ease: EASE.out, state: { opacity: 0 } },
+    out: fadeOut(300),
+    particles: { kind: 'twinkle', count: 10, delayMs: 300, ms: 0, sizeEm: 0.36, color: [1, 1, 0.94] },
+    loop: { unit: 'whole', periodMs: 3000, stepMs: 0, amp: { glow: 0.12 } },
+    base: { tint: 0.85 },
+  }),
+]
+
+/** Phase A's first effects, until their own families come */
+const MORE: Preset[] = [
   p('Advanced', 'waveWarp', 'Wave Warp', 'The line comes in bent like a wave and settles straight.', {
     in: fadeWhole(450),
     out: fadeOut(300),
     warp: { sizeEm: 0.8, amountEm: 1, inMs: 1100, wave: true, drift: 0.5 },
   }),
-  p('Advanced', 'glowPulse', 'Glow Pulse', 'A warm glow breathes through the words, one after another.', {
-    in: fadeWhole(350),
-    out: fadeOut(300),
-    loop: { unit: 'word', periodMs: 1800, stepMs: 220, amp: { glow: 0.35, tint: 0.5, scale: 0.025 } },
-  }),
 ]
 
-export const FX_PRESETS: Preset[] = [...INDIC, ...CALM, ...MASK, ...MORE]
+export const FX_PRESETS: Preset[] = [...INDIC, ...CALM, ...MASK, ...LIGHT, ...MORE]

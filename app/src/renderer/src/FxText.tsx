@@ -239,7 +239,8 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
     const moving = fx.sweep.hold
       ? `linear-gradient(${fx.sweep.angle}deg, ${lit} ${pc(c - w)}, transparent ${pc(c + w)})`
       : `linear-gradient(${fx.sweep.angle}deg, transparent ${pc(c - w)}, ${lit} ${pc(c)}, transparent ${pc(c + w)})`
-    const st: CSSProperties = { color: css(A), maskImage: moving }
+    const sc = css(fx.sweep.color ?? A)
+    const st: CSSProperties = { color: sc, maskImage: moving, ...(fx.sweep.glow ? { filter: `drop-shadow(0 0 ${fx.sweep.glow}em ${sc})` } : {}) }
     if (fx.sweep.band === 'headline' && band) {
       const [a, b] = band
       const tops = `linear-gradient(180deg, transparent ${a.toFixed(3)}em, #000 ${a.toFixed(3)}em, #000 ${b.toFixed(3)}em, transparent ${b.toFixed(3)}em)`
@@ -265,7 +266,7 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
   const bits = f.particles?.filter((q) => q.opacity > NEAR).map((q, i) => (
     <span key={i} className={'fxp ' + fx.particles!.kind} style={{
       left: pc(q.left), top: pc(q.top), width: `${q.size.toFixed(3)}em`, height: `${(q.size * (fx.particles!.kind === 'petal' ? 0.62 : 1)).toFixed(3)}em`,
-      opacity: q.opacity, background: A2, ...(fx.particles!.kind === 'dust' ? { boxShadow: `0 0 ${(q.size * 2).toFixed(3)}em ${A2}` } : {}),
+      opacity: q.opacity, background: A2, ...(fx.particles!.kind !== 'petal' ? { boxShadow: `0 0 ${(q.size * 2).toFixed(3)}em ${A2}` } : {}),
       transform: `translate(-50%, -50%) translate(${q.dx.toFixed(3)}em, ${q.dy.toFixed(3)}em) rotate(${q.rotate.toFixed(1)}deg)`,
     }} />
   ))
@@ -294,12 +295,32 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
       }} />
     </span>
   ) : null
+  const BL = fx.backlight
+  const glowEl = BL && f.backlight && f.backlight.opacity > NEAR ? (
+    <span className="fxpl back" style={{ inset: `${PAD}em`, ...outFade }}>
+      <span className="fxglow" style={{
+        background: BL.ring
+          ? `radial-gradient(ellipse closest-side, transparent 55%, ${css(BL.color ?? A, 1)} 75%, transparent 100%)`
+          : `radial-gradient(ellipse closest-side, ${css(BL.color ?? A, 1)} 0%, ${css(BL.color ?? A, 0.35)} 45%, transparent 100%)`,
+        opacity: f.backlight.opacity, transform: `translate(-50%, -50%) scale(${(0.3 + 0.7 * f.backlight.grow).toFixed(4)})`,
+      }} />
+    </span>
+  ) : null
+  const flareEl = fx.flare && f.flare ? (
+    <span className="fxpl" style={{ inset: `${PAD}em` }}>
+      <span className="fxflare" style={{ left: pc(f.flare.at), opacity: f.flare.opacity, width: `${fx.flare.sizeEm * 8}em`, height: `${fx.flare.sizeEm}em`,
+        background: `radial-gradient(ellipse closest-side, #fff 0%, ${css(fx.flare.color ?? A, 0.9)} 12%, ${css(fx.flare.color ?? A, 0.25)} 40%, transparent 100%)` }} />
+      <span className="fxflare" style={{ left: pc(f.flare.at), opacity: f.flare.opacity, width: `${fx.flare.sizeEm}em`, height: `${fx.flare.sizeEm}em`, borderRadius: '50%',
+        background: `radial-gradient(circle closest-side, #fff 0%, #fff 25%, ${css(fx.flare.color ?? A, 0.6)} 55%, transparent 100%)` }} />
+    </span>
+  ) : null
   const barEl = fx.bar && f.bar ? (
     <span className="fxbar" style={{ inset: `${PAD - 0.16}em ${PAD - 0.08}em`, background: css(fx.bar.color ?? A), transform: `scaleX(${f.bar.scale.toFixed(4)})`, transformOrigin: `${f.bar.origin} center` }} />
   ) : null
 
   return (
     <span className="fxm" style={outer}>
+      {glowEl}
       {boxEl}
       <span className="fxw" style={stateStyle(f.whole, f.revealFrom.whole, A, fill, shadow)}>
         {mirror}
@@ -313,6 +334,7 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
         <span className="fxpl" style={{ inset: `${PAD}em`, ...outFade }}>{bits}</span>
       ) : null}
       {barEl}
+      {flareEl}
       {edges.map((x, i) => (
         <span key={`e${i}`} className="fxedge" style={{ left: pc(x), top: `${PAD * 0.6}em`, bottom: `${PAD * 0.6}em`, width: `${fx.mask!.edge!.widthEm}em`, background: edgeColor, boxShadow: `0 0 .3em ${edgeColor}` }} />
       ))}

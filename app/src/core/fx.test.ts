@@ -136,12 +136,13 @@ describe('advanced presets', () => {
   const advanced = PRESETS.filter((p) => p.fx)
 
   it('are in their own families, testing, with no Text+ tracks', () => {
-    expect(advanced.length).toBeGreaterThanOrEqual(33)
+    expect(advanced.length).toBeGreaterThanOrEqual(41)
+    expect(advanced.filter((p) => p.family === 'Light & Glow')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Mask & Wipe')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Calm')).toHaveLength(10)
     expect(advanced.filter((p) => p.family === 'Indic Flow')).toHaveLength(10)
     for (const p of advanced) {
-      expect(['Indic Flow', 'Calm', 'Mask & Wipe', 'Advanced']).toContain(p.family)
+      expect(['Indic Flow', 'Calm', 'Mask & Wipe', 'Light & Glow', 'Advanced']).toContain(p.family)
       expect(p.status).toBe('testing')
       expect(p.tracks).toEqual([])
     }
@@ -309,5 +310,57 @@ describe('Mask & Wipe pieces', () => {
     const f = fxAt(fx, u, 100, 4000)
     expect(f.masked).toEqual({ word: true })
     expect(f.word).toHaveLength(2)
+  })
+})
+
+describe('Light & Glow pieces', () => {
+  const u = splitUnits('रोशनी आई')
+
+  it('flickers each word before it holds, the same every time', () => {
+    const fx = compileFx({ flicker: { unit: 'word', ms: 600, stepMs: 200, tickMs: 50, low: 0.1, glow: 0.2 } }, 'रोशनी आई', 4000)
+    const before = fxAt(fx, u, 100, 4000)
+    expect(before.word![1]!.opacity).toBe(0.1)
+    const during = Array.from({ length: 12 }, (_, k) => fxAt(fx, u, k * 50, 4000).word![0]!)
+    expect(during.some((s) => s.opacity === 0.1)).toBe(true)
+    expect(during.some((s) => s.glow === 0.2)).toBe(true)
+    expect(fxAt(fx, u, 300, 4000)).toEqual(fxAt(fx, u, 300, 4000))
+    expect(fxAt(fx, u, 2000, 4000).word!.every((s) => s.glow === 0.2 && s.opacity === undefined)).toBe(true)
+  })
+
+  it('keeps a glow behind, but lets a ring spread and go', () => {
+    const glow = compileFx({ backlight: { delayMs: 0, ms: 1000, opacity: 0.5 } }, 'a', 4000)
+    const ring = compileFx({ backlight: { delayMs: 0, ms: 1000, opacity: 0.5, ring: true } }, 'a', 4000)
+    const ua = splitUnits('a')
+    expect(fxAt(glow, ua, 3000, 4000).backlight!.opacity).toBeCloseTo(0.5)
+    expect(fxAt(ring, ua, 300, 4000).backlight!.opacity).toBeGreaterThan(0)
+    expect(fxAt(ring, ua, 3000, 4000).backlight!.opacity).toBeCloseTo(0)
+  })
+
+  it('moves a flare across once', () => {
+    const fx = compileFx({ flare: { delayMs: 0, ms: 1000, sizeEm: 0.5 } }, 'a', 4000)
+    const ua = splitUnits('a')
+    expect(fxAt(fx, ua, 500, 4000).flare!.at).toBeCloseTo(0.5)
+    expect(fxAt(fx, ua, 1500, 4000).flare).toBeUndefined()
+  })
+
+  it('throws sparks from the moving point and lets them die out', () => {
+    const P = { kind: 'spark' as const, count: 10, delayMs: 0, ms: 1000, sizeEm: 0.1 }
+    const now = particlesAt(P, 3, 450).filter((q) => q.opacity > 0)
+    expect(now.length).toBeGreaterThan(0)
+    expect(now.every((q) => q.left <= 0.45 + 1e-9)).toBe(true)
+    expect(particlesAt(P, 3, 3000).every((q) => q.opacity === 0)).toBe(true)
+  })
+
+  it('lights stars on and off over the text', () => {
+    const P = { kind: 'twinkle' as const, count: 6, delayMs: 0, ms: 0, sizeEm: 0.2 }
+    const seen = Array.from({ length: 20 }, (_, k) => particlesAt(P, 1, k * 100)).flat()
+    expect(seen.some((q) => q.opacity > 0.5)).toBe(true)
+    expect(seen.some((q) => q.opacity < 0.05)).toBe(true)
+    expect(seen.every((q) => q.left >= 0 && q.left <= 1)).toBe(true)
+  })
+
+  it('keeps a base look the whole time', () => {
+    const fx = compileFx({ base: { tint: 0.8 } }, 'a', 4000)
+    expect(fxAt(fx, splitUnits('a'), 2000, 4000).whole!.tint).toBe(0.8)
   })
 })
