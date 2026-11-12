@@ -217,7 +217,11 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 input[type=range]:hover::-webkit-slider-thumb { transform: scale(1.12); }
 input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--sel-soft), 0 1px 4px rgba(0, 0, 0, .55); }
 .num { width: 100%; height: 26px; background: var(--r3); border: 1px solid var(--seam); border-radius: 7px; color: var(--t); font: inherit; font-size: 11.5px; text-align: right; padding: 0 6px; font-variant-numeric: tabular-nums; }
-.num::-webkit-inner-spin-button { opacity: .35; }
+.num::-webkit-inner-spin-button, .num::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.num { -moz-appearance: textfield; min-width: 0; }
+/* Drag to change (like Resolve): a sideways cursor until clicked to type */
+.num.drag { cursor: ew-resize; user-select: none; caret-color: transparent; }
+.num.drag:hover { border-color: var(--line2); color: #fff; }
 .sl { width: 100%; height: 30px; background: var(--r3); color: var(--t); border: 1px solid var(--seam); border-radius: 8px; padding: 0 8px; font: inherit; }
 .sl:focus, .num:focus, .textbox:focus { outline: none; border-color: var(--sel); box-shadow: 0 0 0 3px var(--sel-soft); }
 .colrow { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; padding: 3px 0; }

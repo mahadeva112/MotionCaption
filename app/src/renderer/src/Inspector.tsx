@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { DEFAULT_HIGHLIGHT, DEFAULT_MOTION, type Highlight, type Look, type Motion, type Rgb, type WordLook } from '@core/look'
 import type { Pattern } from '@core/pattern'
 import type { Mood, Smart } from '@core/smart'
@@ -113,10 +113,56 @@ function Slider({ label, value, min, max, step = 0.01, fmt, onChange, r }: {
     <Row label={label} r={r}>
       <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))}
         style={{ '--p': `${((value - min) / (max - min || 1)) * 100}%` } as CSSProperties} />
-      <input className="num" type="number" min={min} max={max} step={step} value={Number(value.toFixed(4))}
-        onChange={(e) => { const v = Number(e.target.value); if (Number.isFinite(v)) onChange(Math.min(max, Math.max(min, v))) }}
-        title={fmt ? fmt(value) : undefined} />
+      <NumBox value={value} min={min} max={max} step={step} onChange={onChange} title={fmt ? fmt(value) : undefined} />
     </Row>
+  )
+}
+/**
+ * A number you can drag, like Resolve's: drag left / right to change it (Shift for fine
+ * steps), click to type. Arrow keys step it while typing.
+ */
+function NumBox({ value, min, max, step, onChange, title }: {
+  value: number; min: number; max: number; step: number; onChange: (v: number) => void; title?: string
+}) {
+  const [txt, setTxt] = useState<string | null>(null) // set while typing
+  const drag = useRef<{ x: number; v: number; moved: boolean } | null>(null)
+  const fix = (v: number) => Math.min(max, Math.max(min, Math.round(v / step) * step))
+  const show = String(Number(value.toFixed(4)))
+  const commit = (t: string) => { const v = Number(t); if (t.trim() !== '' && Number.isFinite(v)) onChange(fix(v)) }
+  return (
+    <input className={'num' + (txt === null ? ' drag' : '')} inputMode="decimal" spellCheck={false}
+      value={txt ?? show} title={title ?? 'Drag to change, click to type'}
+      onPointerDown={(e) => {
+        if (txt !== null || e.button !== 0) return
+        e.preventDefault()
+        e.currentTarget.setPointerCapture(e.pointerId)
+        drag.current = { x: e.clientX, v: value, moved: false }
+      }}
+      onMouseDown={(e) => { if (txt === null) e.preventDefault() /* no focus or text pick while dragging */ }}
+      onPointerMove={(e) => {
+        const d = drag.current
+        if (!d) return
+        const dx = e.clientX - d.x
+        if (!d.moved && Math.abs(dx) < 3) return
+        d.moved = true
+        onChange(fix(d.v + dx * ((max - min) / 250) * (e.shiftKey ? 0.1 : 1)))
+      }}
+      onPointerUp={(e) => {
+        const d = drag.current
+        drag.current = null
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
+        if (d && !d.moved) { setTxt(show); e.currentTarget.focus(); e.currentTarget.select() }
+      }}
+      onChange={(e) => { setTxt(e.target.value); commit(e.target.value) }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
+        else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault()
+          const v = fix(value + (e.key === 'ArrowUp' ? step : -step) * (e.shiftKey ? 10 : 1))
+          onChange(v); setTxt(String(Number(v.toFixed(4))))
+        }
+      }}
+      onBlur={() => setTxt(null)} />
   )
 }
 function Seg<T extends string>({ label, value, opts, onChange, r }: { label: string; value: T; opts: [T, string][]; onChange: (v: T) => void; r?: R }) {
