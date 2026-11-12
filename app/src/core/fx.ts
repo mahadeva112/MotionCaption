@@ -43,6 +43,34 @@ export const REST: Required<FxState> = {
   opacity: 1, x: 0, y: 0, scale: 1, scaleX: 1, scaleY: 1, rotate: 0, skewX: 0, blur: 0, glow: 0, tint: 0, reveal: 1,
 }
 
+/**
+ * How a move runs: a CSS-style curve, or one of the springy moves no single curve can make:
+ * bounce (hits the ground and bounces), spring (overshoots and swings back and forth),
+ * elastic (snaps past and wobbles hard), jelly (a slow, soft wobble).
+ */
+export type FxEase = Bezier | 'bounce' | 'spring' | 'elastic' | 'jelly'
+
+/** Where a move is at x (0–1); springy moves go past 1 and back */
+export function easeAt(e: FxEase, x: number): number {
+  if (x <= 0) return 0
+  if (x >= 1) return 1
+  if (typeof e !== 'string') return bezierAt(e, x)
+  switch (e) {
+    case 'bounce': {
+      const n = 7.5625
+      const d = 2.75
+      if (x < 1 / d) return n * x * x
+      if (x < 2 / d) { const t = x - 1.5 / d; return n * t * t + 0.75 }
+      if (x < 2.5 / d) { const t = x - 2.25 / d; return n * t * t + 0.9375 }
+      const t = x - 2.625 / d
+      return n * t * t + 0.984375
+    }
+    case 'spring': return 1 - Math.exp(-6 * x) * Math.cos(x * Math.PI * 4.5)
+    case 'elastic': return 2 ** (-10 * x) * Math.sin((x * 10 - 0.75) * ((2 * Math.PI) / 3)) + 1
+    case 'jelly': return 1 - Math.exp(-4.5 * x) * Math.cos(x * Math.PI * 3.5)
+  }
+}
+
 /** One way in or out: every unit goes between `state` and rest, one after another */
 export interface FxPhase {
   unit: FxUnit
@@ -53,7 +81,7 @@ export interface FxPhase {
   ms: number
   /** ms before the first unit starts */
   delayMs?: number
-  ease: Bezier
+  ease: FxEase
   /** Way in: where each unit starts. Way out: where it ends. */
   state: FxState
   revealFrom?: RevealFrom
@@ -250,7 +278,7 @@ export interface FxFocus {
 export interface FxEmphasis {
   delayMs: number
   ms: number
-  ease?: Bezier
+  ease?: FxEase
   state: FxState
   /** Where the other words go meanwhile */
   others?: FxState
@@ -303,6 +331,14 @@ export interface FxCursor {
   widthEm: number
   /** Left out: the accent */
   color?: Rgb
+}
+
+/** Each unit of the way in squashes as it lands and wobbles back to shape */
+export interface FxLand {
+  /** 0–1: how flat it goes (0.3: 30 % shorter and wider) */
+  squash: number
+  /** ms the wobble takes to die out */
+  ms: number
 }
 
 /** The whole caption shaken as each unit of the way in lands */
@@ -409,6 +445,7 @@ export interface Fx {
   echo?: FxEcho
   scramble?: FxScramble
   cursor?: FxCursor
+  land?: FxLand
   flare?: FxFlare
   /** Colour for glow, tint, fill and marker; left out: warm gold */
   accent?: Rgb
@@ -599,7 +636,8 @@ export function compileFx(fx: Fx, text: string, durMs: number, opts: { speed?: n
     ...(fx.rings ? { rings: { ...fx.rings, periodMs: fx.rings.periodMs / speed } } : {}),
     ...(fx.echo ? { echo: { ...fx.echo, inMs: fx.echo.inMs / speed } } : {}),
     ...(fx.scramble ? { scramble: fitScramble(fx.scramble, units, durMs, speed, seed) } : {}),
-    ...(fx.cursor ? { cursor: { ...fx.cursor, blinkMs: fx.cursor.blinkMs / speed } } : {}), ...(flicker ? { flicker } : {}), ...(backlight ? { backlight } : {}), ...(flare ? { flare } : {}),
+    ...(fx.cursor ? { cursor: { ...fx.cursor, blinkMs: fx.cursor.blinkMs / speed } } : {}),
+    ...(fx.land ? { land: { ...fx.land, ms: fx.land.ms / speed } } : {}), ...(flicker ? { flicker } : {}), ...(backlight ? { backlight } : {}), ...(flare ? { flare } : {}),
     ...(particles ? { particles } : {}), ...(dissolve ? { dissolve } : {}), ...(fx.reflect ? { reflect: fx.reflect } : {}),
     accent: fx.accent ?? GOLD, seed,
   }
@@ -770,7 +808,12 @@ function phaseStates(p: FxPhase, n: number, ms: number, from: number, out: boole
     let state = p.alternate && i % 2 ? mirrored(p.state) : p.state
     if (p.scatter) state = scattered(state, random(seed * 17 + i * 101 + 3))
     const raw = p.ms <= 0 ? (ms >= startMs + k * p.stepMs ? 1 : 0) : (ms - startMs - k * p.stepMs) / p.ms
-    return between(state, ease(p.ease, raw), out)
+    const st = between(state, easeAt(p.ease, raw), out)
+    // Springy moves would make the opacity flicker as they swing: it fades quickly and straight
+    if (typeof p.ease === 'string' && state.opacity !== undefined) {
+      st.opacity = between({ opacity: state.opacity }, clamp01(raw * 3), out).opacity!
+    }
+    return st
   })
 }
 
@@ -872,8 +915,20 @@ export function fxAt(fx: CompiledFx, units: Units, ms: number, durMs: number): F
   if (fx.emphasis) {
     const E = fx.emphasis
     const key = keyWord(units)
-    const p = ease(E.ease ?? EASE.out, (ms - E.delayMs) / Math.max(1, E.ms))
+    const p = easeAt(E.ease ?? EASE.out, (ms - E.delayMs) / Math.max(1, E.ms))
     add('word', Array.from({ length: units.words }, (_, i) => (i === key ? between(E.state, p, true) : E.others ? between(E.others, p, true) : {})))
+  }
+  if (fx.land && fx.in) {
+    // Squashed flat on landing, then wobbling back: wider as it gets shorter
+    const Ld = fx.land
+    const P = fx.in
+    const n = countOf(units, P.unit)
+    add(P.unit, delays(n, P.order, fx.seed).map((k) => {
+      const t = ms - ((P.delayMs ?? 0) + k * P.stepMs + P.ms)
+      if (t < 0 || t >= Ld.ms) return {}
+      const a = Ld.squash * Math.exp((-3 * t) / Ld.ms) * Math.cos((t / Ld.ms) * Math.PI * 3)
+      return { scaleY: 1 - a, scaleX: 1 + a * 0.8 }
+    }))
   }
   if (fx.impact && fx.in) {
     // Every landing of the way in shakes the whole caption, dying out
