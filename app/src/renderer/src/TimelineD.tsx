@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent, type RefObject } from 'react'
 
 import type { Cue } from '@core/srt'
 import type { TimelineData } from '../../preload'
@@ -58,7 +58,15 @@ const KEYS = [
   'Ctrl+D: duplicate right after',
   ', and . : move one frame (with Shift: 10 frames)',
   'Ctrl+Z / Ctrl+Y: undo / redo',
+  '',
+  'Shift+Z: fit the whole timeline in view, and back',
+  'Alt+mouse wheel: zoom in / out where the mouse is',
+  'Ctrl+mouse wheel: scroll the timeline left / right',
 ].join('\n')
+
+/** Zoom limits, in pixels per second */
+const PPS_MIN = 1
+const PPS_MAX = 400
 
 /** Heights of the two lanes and their rows: one row as before, more when captions overlap */
 function rows(count: number) {
@@ -89,6 +97,57 @@ export function TimelineD(p: Props) {
   const x = (ms: number) => (ms / 1000) * pps
   const activeCue = p.cues.find((c) => c.n === p.active)
 
+  // Zoom keeping one moment where it is on screen (the mouse, or the playhead)
+  const anchor = useRef<{ ms: number; at: number } | null>(null)
+  const zoomTo = (next: number, at?: number) => {
+    const el = lanes.current
+    const v = Math.min(PPS_MAX, Math.max(PPS_MIN, next))
+    if (el) {
+      const px = at ?? Math.min(el.clientWidth - 40, Math.max(0, x(clock.get()) - el.scrollLeft))
+      anchor.current = { ms: ((el.scrollLeft + px) / pps) * 1000, at: px }
+    }
+    setPps(v)
+  }
+  useLayoutEffect(() => {
+    const el = lanes.current, a = anchor.current
+    anchor.current = null
+    if (el && a) el.scrollLeft = Math.max(0, (a.ms / 1000) * pps - a.at)
+  }, [pps])
+  // Shift+Z, as in Resolve: the whole timeline in view, and again for the zoom you had
+  const before = useRef<number | null>(null)
+  const fitPps = () => Math.min(PPS_MAX, Math.max(PPS_MIN, ((lanes.current?.clientWidth ?? 800) - 100) / (endMs / 1000)))
+  const fit = useRef(() => {})
+  fit.current = () => {
+    const f = fitPps()
+    if (before.current !== null && Math.abs(pps - f) < 0.01) { zoomTo(before.current); before.current = null }
+    else { before.current = pps; anchor.current = { ms: 0, at: 0 }; setPps(f) }
+  }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).closest?.('input, textarea, select')) return
+      if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && e.code === 'KeyZ') { fit.current(); e.preventDefault() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+  // Alt+wheel zooms where the mouse is, Ctrl+wheel scrolls sideways (as in Resolve)
+  const wheel = useRef((_: WheelEvent) => {})
+  wheel.current = (e: WheelEvent) => {
+    const el = lanes.current
+    if (!el || !(e.altKey || e.ctrlKey || e.metaKey)) return
+    e.preventDefault()
+    const d = e.deltaY || e.deltaX
+    if (e.altKey) zoomTo(pps * Math.exp(-d * 0.0015), e.clientX - el.getBoundingClientRect().left)
+    else el.scrollLeft += d
+  }
+  useEffect(() => {
+    const el = lanes.current
+    if (!el) return
+    const on = (e: WheelEvent) => wheel.current(e)
+    el.addEventListener('wheel', on, { passive: false })
+    return () => el.removeEventListener('wheel', on)
+  }, [])
+
   // Keep the caption in view when it changes
   useEffect(() => {
     const el = lanes.current
@@ -96,7 +155,7 @@ export function TimelineD(p: Props) {
     const left = x(activeCue.startMs)
     if (left < el.scrollLeft + 20 || left > el.scrollLeft + el.clientWidth - 80) el.scrollLeft = Math.max(0, left - el.clientWidth / 3)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [p.active, pps])
+  }, [p.active])
 
   // Click or drag on the ruler to move the playhead
   const scrub = (e: PointerEvent<HTMLDivElement>) => {
@@ -168,7 +227,7 @@ export function TimelineD(p: Props) {
   const tip = (c: Cue | undefined) => (c
     ? <span className="tltip" style={{ left: x(c.startMs) }}>{timecode(c.startMs, p.fps)} · {((c.endMs - c.startMs) / 1000).toFixed(2)} s</span>
     : null)
-  const step = pps > 120 ? 1 : pps > 50 ? 2 : pps > 20 ? 5 : 10
+  const step = pps > 120 ? 1 : pps > 50 ? 2 : pps > 20 ? 5 : pps > 9 ? 10 : pps > 4 ? 30 : pps > 1.5 ? 60 : 300
   const marks = Array.from({ length: Math.ceil(endMs / 1000 / step) + 1 }, (_, i) => i * step)
   const newTrack = p.target.track === 'new'
   const placed = p.cues.filter((c) => c.endMs > c.startMs && c.text.trim()).length
@@ -208,8 +267,8 @@ export function TimelineD(p: Props) {
         <button className={'tg' + (p.target.replace ? ' on' : '')} onClick={() => p.onTarget({ replace: !p.target.replace })}
           title="On: sending again only makes the captions you changed again; the others stay as they are in Resolve. Off: every send adds another copy on a new track."><i>✓</i>Update last send</button>
         <span className="zoom" title="Zoom">
-          <button onClick={() => setPps((v) => Math.max(10, v / 1.5))} title="Zoom out"><Icon name="minus" /></button>
-          <button onClick={() => setPps((v) => Math.min(400, v * 1.5))} title="Zoom in"><Icon name="plus" /></button>
+          <button onClick={() => zoomTo(pps / 1.5)} title="Zoom out (Alt+wheel; Shift+Z fits the timeline)"><Icon name="minus" /></button>
+          <button onClick={() => zoomTo(pps * 1.5)} title="Zoom in (Alt+wheel)"><Icon name="plus" /></button>
         </span>
       </div>
       <div className="tracks">
