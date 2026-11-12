@@ -491,3 +491,13 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
 /* Send window: Finished clips as PNG frames or one MOV each */
 .movrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 8px; font-size: 12px; color: var(--t2); }
 .movrow small { flex-basis: 100%; color: var(--t3); font-size: 11px; }
+
+/* Advanced effects (FxText.tsx): line › word › letter, each able to move on its own */
+.fxm, .fxw, .fxl, .fxu, .fxc, .fxsp { display: inline-block; white-space: pre; }
+.fxw { position: relative; }
+.fxl { transform-origin: 50% 55%; }
+.fxu, .fxc { transform-origin: 50% 60%; }
+/* The light sweep: a bright copy of the text, seen only through its moving band */
+.fxs { position: absolute; left: 0; top: 0; right: 0; bottom: 0; pointer-events: none; }
+.fxs * { color: inherit !important; text-shadow: none !important; -webkit-text-stroke: 0 !important; background: none !important; filter: none !important; }
+.fxsvg { position: absolute; width: 0; height: 0; overflow: hidden; }

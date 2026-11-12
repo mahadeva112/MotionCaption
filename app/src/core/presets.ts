@@ -1,11 +1,13 @@
 import { EASE, type Fixed, type Letters, type Track } from './anim.ts'
 import { blur, fadeBoth, SOFT_FILL } from './presetKit.ts'
+import type { Fx } from './fx.ts'
 import { MORE_PRESETS } from './presetsMore.ts'
+import { FX_PRESETS } from './presetsFx.ts'
 
 // Status is honest: 'verified' only after the look was checked in Resolve output.
 export type PresetStatus = 'verified' | 'testing'
 
-export const FAMILIES = ['Cinematic', 'Social', 'Elegant', 'Basic', 'Letters', 'Continuous'] as const
+export const FAMILIES = ['Cinematic', 'Social', 'Elegant', 'Basic', 'Letters', 'Continuous', 'Advanced'] as const
 export type Family = (typeof FAMILIES)[number]
 
 export interface Preset {
@@ -16,6 +18,8 @@ export interface Preset {
   tracks: Track[]
   fixed?: Fixed[]
   letters?: Letters
+  /** An advanced effect, drawn by the app only (Finished clips); Text+ gets `tracks` */
+  fx?: Fx
   status: PresetStatus
 }
 
@@ -239,7 +243,7 @@ const FIRST_PRESETS: Preset[] = [
   },
 ]
 
-export const PRESETS: Preset[] = [...FIRST_PRESETS, ...MORE_PRESETS]
+export const PRESETS: Preset[] = [...FIRST_PRESETS, ...MORE_PRESETS, ...FX_PRESETS]
 
 /** Effects for selected words (Super Select). Colour comes from the word's own setting. */
 export interface WordFx {
