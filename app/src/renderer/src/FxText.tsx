@@ -39,7 +39,7 @@ const NEAR = 1e-3
 /** Room around the text for the mask and the warp, so glow and bends are not cut at the box */
 const PAD = 0.6
 
-function stateStyle(s: FxState | undefined, from: RevealFrom | undefined, accent: Rgb, fill: Rgb, shadow?: string): CSSProperties | undefined {
+function stateStyle(s: FxState | undefined, from: RevealFrom | undefined, accent: Rgb, fill: Rgb, shadow?: string, origin?: 'top' | 'bottom'): CSSProperties | undefined {
   if (!s) return undefined
   const st: CSSProperties = {}
   const tf: string[] = []
@@ -52,7 +52,10 @@ function stateStyle(s: FxState | undefined, from: RevealFrom | undefined, accent
   if (Math.abs(sx - 1) > NEAR || Math.abs(sy - 1) > NEAR) tf.push(`scale(${sx.toFixed(4)}, ${sy.toFixed(4)})`)
   if (Math.abs(s.rotate ?? 0) > NEAR) tf.push(`rotate(${s.rotate!.toFixed(3)}deg)`)
   if (Math.abs(s.skewX ?? 0) > NEAR) tf.push(`skewX(${s.skewX!.toFixed(3)}deg)`)
-  if (tf.length) st.transform = tf.join(' ')
+  if (tf.length) {
+    st.transform = tf.join(' ')
+    if (origin) st.transformOrigin = origin === 'top' ? '50% 0' : '50% 100%'
+  }
   if (s.opacity !== undefined && s.opacity < 1 - NEAR) st.opacity = Math.max(0, s.opacity)
   if ((s.blur ?? 0) > NEAR) st.filter = `blur(${s.blur!.toFixed(4)}em)`
   if ((s.glow ?? 0) > NEAR) {
@@ -215,13 +218,13 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
   const tree = (copy: Copy) => lines.map((line, li) => {
     const words = new Map(line.words.map((w) => [w.word, w]))
     const hl = !copy && f.headline && band ? headlineMask(f.headline[li]!.draw, f.headline[li]!.drop, band, lineEm) : undefined
-    const lineStyle = { ...stateStyle(f.line?.[li], f.revealFrom.line, A, fill, shadow), ...(hl ? { ...hl, padding: `${PAD}em`, margin: `-${PAD}em` } : {}) }
+    const lineStyle = { ...stateStyle(f.line?.[li], f.revealFrom.line, A, fill, shadow, f.origin.line), ...(hl ? { ...hl, padding: `${PAD}em`, margin: `-${PAD}em` } : {}) }
     return [
       li > 0 ? <br key={`b${li}`} /> : null,
       unit('fxl' + (M?.unit === 'line' ? ' mk' : '') + (M?.thin ? ' thin' : ''), `l${li}`, lineStyle, f.masked.line && !hl, line.items.map((it) => {
           if (typeof it === 'number') return <span key={`s${it}`} className="fxsp">{copy ? units.glyphs[it]!.ch : charEl(it)}</span>
           const w = words.get(it.word)!
-          let ws = stateStyle(f.word?.[it.word], f.revealFrom.word, A, fill, shadow)
+          let ws = stateStyle(f.word?.[it.word], f.revealFrom.word, A, fill, shadow, f.origin.word)
           if (copy === 'fill') {
             // The fill copy: each word shown from its left edge up to how far it has been spoken
             const p = f.fill?.[it.word] ?? 0
@@ -230,7 +233,7 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
           return unit('fxu' + (M?.unit === 'word' ? ' mk' : '') + (M?.full ? ' full' : '') + (M?.cover ? ' cover' : ''), `w${it.word}`, ws, f.masked.word,
             w.glyphs.map((gi) => {
               const g = units.glyphs[gi]!
-              const ls = f.letter ? stateStyle(f.letter[g.letter], f.revealFrom.letter, A, fill, shadow) : undefined
+              const ls = f.letter ? stateStyle(f.letter[g.letter], f.revealFrom.letter, A, fill, shadow, f.origin.letter) : undefined
               return copy ? unit('fxc', gi, ls, f.masked.letter, g.ch) : letterEl(gi, ls)
             }),
             !copy && M?.unit === 'word' ? stroke(f.marker?.[it.word]) : null)
@@ -242,8 +245,8 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
   const swapTree = () => (
     <span className="fxswap">
       {lines.flatMap((l) => l.words).map((w) => unit('fxu' + (M?.unit === 'word' ? ' mk' : '') + (M?.full ? ' full' : '') + (M?.cover ? ' cover' : ''), `w${w.word}`,
-        stateStyle(f.word?.[w.word], f.revealFrom.word, A, fill, shadow), f.masked.word,
-        w.glyphs.map((gi) => letterEl(gi, f.letter ? stateStyle(f.letter[units.glyphs[gi]!.letter], f.revealFrom.letter, A, fill, shadow) : undefined)),
+        stateStyle(f.word?.[w.word], f.revealFrom.word, A, fill, shadow, f.origin.word), f.masked.word,
+        w.glyphs.map((gi) => letterEl(gi, f.letter ? stateStyle(f.letter[units.glyphs[gi]!.letter], f.revealFrom.letter, A, fill, shadow, f.origin.letter) : undefined)),
         M?.unit === 'word' ? stroke(f.marker?.[w.word]) : null))}
     </span>
   )
@@ -353,10 +356,11 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
   const bend = (f.warp ?? 0) * fontPx
   const warp = !!fx.warp && bend > 0.05
   const dissolve = fx.dissolve && f.dissolve !== undefined && f.dissolve < 1 - NEAR ? f.dissolve : undefined
+  const goo = fx.goo && (f.goo ?? 0) * fontPx > 0.2 ? f.goo! * fontPx : undefined
   const outer: CSSProperties = {
     padding: `${PAD}em`, margin: `-${PAD}em`,
     ...(mask ?? {}),
-    ...(warp || dissolve !== undefined ? { filter: `url(#${id})` } : {}),
+    ...(warp || dissolve !== undefined || goo !== undefined ? { filter: `url(#${id})` } : {}),
   }
 
   // Bar and box: drawn before the text shows, so on their own layers, as the particles
@@ -397,7 +401,7 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
     <span className="fxm" style={outer}>
       {glowEl}
       {boxEl}
-      <span className="fxw" style={stateStyle(f.whole, f.revealFrom.whole, A, fill, shadow)}>
+      <span className="fxw" style={stateStyle(f.whole, f.revealFrom.whole, A, fill, shadow, f.origin.whole)}>
         {mirror}
         {echoEls}
         {B ? <span className="fxb" style={bodyStyle}>{f.swap ? swapTree() : tree(false)}</span> : f.swap ? swapTree() : tree(false)}
@@ -416,16 +420,21 @@ export function FxText({ fx, text, ms, durMs, fontPx, fill, font, lineEm, shadow
       {edges.map((x, i) => (
         <span key={`e${i}`} className="fxedge" style={{ left: pc(x), top: `${PAD * 0.6}em`, bottom: `${PAD * 0.6}em`, width: `${fx.mask!.edge!.widthEm}em`, background: edgeColor, boxShadow: `0 0 .3em ${edgeColor}` }} />
       ))}
-      {(warp || dissolve !== undefined || mirror) && (
+      {(warp || dissolve !== undefined || goo !== undefined || mirror) && (
         <svg className="fxsvg" width="0" height="0" aria-hidden>
-          {(warp || dissolve !== undefined) && (
+          {(warp || dissolve !== undefined || goo !== undefined) && (
             <filter id={id} x="-25%" y="-50%" width="150%" height="200%" colorInterpolationFilters="sRGB">
               {warp && bendNodes(fx.warp!.sizeEm * fontPx, !!fx.warp!.wave, fx.seed, (f.drift ?? 0) * fontPx, bend, 'SourceGraphic', 'bent')}
               {dissolve !== undefined && <>
                 <feTurbulence type="fractalNoise" seed={(fx.seed + 17) % 1000} baseFrequency={(1 / (fx.dissolve!.sizeEm * fontPx)).toFixed(5)} numOctaves={3} result="dn" />
                 {/* Alpha from the noise: shown where it is below the threshold, with a soft edge */}
                 <feColorMatrix in="dn" type="matrix" result="da" values={dissolveMatrix(dissolve, fx.dissolve!.soft)} />
-                <feComposite in={warp ? 'bent' : 'SourceGraphic'} in2="da" operator="in" />
+                <feComposite in={warp ? 'bent' : 'SourceGraphic'} in2="da" operator="in" result="dis" />
+              </>}
+              {goo !== undefined && <>
+                {/* Gooey: blurred soft, then its edge made sharp again, so near shapes run together */}
+                <feGaussianBlur in={dissolve !== undefined ? 'dis' : warp ? 'bent' : 'SourceGraphic'} stdDeviation={goo.toFixed(2)} result="gb" />
+                <feColorMatrix in="gb" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -9" />
               </>}
             </filter>
           )}

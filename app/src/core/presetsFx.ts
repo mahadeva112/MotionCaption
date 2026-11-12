@@ -418,13 +418,57 @@ const ELASTIC: Preset[] = [
   }),
 ]
 
-/** Phase A's first effects, until their own families come */
-const MORE: Preset[] = [
-  p('Advanced', 'waveWarp', 'Wave Warp', 'The line comes in bent like a wave and settles straight.', {
+/** Distort and liquid: letters bent, melted, blown away or broken, like a liquid or a glass */
+const DISTORT: Preset[] = [
+  p('Distort', 'waveWarp', 'Wave Warp', 'The line comes in bent like a wave and settles straight.', {
     in: fadeWhole(450),
     out: fadeOut(300),
     warp: { sizeEm: 0.8, amountEm: 1, inMs: 1100, wave: true, drift: 0.5 },
   }),
+  p('Distort', 'rippleReveal', 'Ripple Reveal', 'The line comes up through rippling water and settles still.', {
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 900, ease: EASE.out, state: { opacity: 0, scale: 1.05 } },
+    out: fadeOut(300),
+    warp: { sizeEm: 0.25, amountEm: 0.55, inMs: 1100, drift: 0.3 },
+  }),
+  p('Distort', 'meltDown', 'Melt Down', 'At the end the letters melt and drip down (words, in Hindi and Bangla).', {
+    in: fadeWhole(300),
+    out: { unit: 'letter', order: 'random', stepMs: 40, ms: 650, ease: EASE.in, state: { opacity: 0, scaleY: 2.4, y: 0.9, blur: 0.08 }, origin: 'top' },
+    warp: { sizeEm: 0.4, amountEm: 0.35, inMs: 0, restEm: 0, outMs: 700 },
+  }),
+  p('Distort', 'smokeDissolve', 'Smoke Dissolve', 'At the end the line breaks into smoke and drifts away.', {
+    in: fadeWhole(350),
+    out: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 900, ease: EASE.in, state: { opacity: 0, blur: 0.3, y: -0.4, scale: 1.08 } },
+    dissolve: { sizeEm: 0.5, soft: 0.6, inMs: 0, outMs: 900 },
+  }),
+  p('Distort', 'heatHaze', 'Heat Haze', 'The line shimmers the whole time, as if seen through heat.', {
+    in: fadeWhole(400),
+    out: fadeOut(300),
+    warp: { sizeEm: 0.3, amountEm: 0.07, inMs: 0, drift: 0.5 },
+  }),
+  p('Distort', 'liquidMorph', 'Liquid Morph', 'Soft blobs run together and firm up into the letters.', {
+    in: { unit: 'whole', order: 'ltr', stepMs: 0, ms: 500, ease: EASE.out, state: { opacity: 0 } },
+    out: fadeOut(300),
+    goo: { blurEm: 0.16, inMs: 1100 },
+  }),
+  p('Distort', 'twist', 'Twist', 'Letters twist into place one after another (words, in Hindi and Bangla).', {
+    in: { unit: 'letter', order: 'ltr', stepMs: 40, ms: 600, ease: EASE.out, state: { opacity: 0, rotate: 90, skewX: 30, scale: 0.5 } },
+    out: fadeOut(250),
+  }),
+  p('Distort', 'lensBulge', 'Lens Bulge', 'A lens keeps passing along the line, swelling the words under it.', {
+    in: fadeWhole(300),
+    out: fadeOut(300),
+    lens: { periodMs: 2400, amount: 0.22, width: 0.22 },
+  }),
+  p('Distort', 'turbulenceFade', 'Turbulence Fade', 'The line comes out of churning noise that settles.', {
+    in: fadeWhole(300),
+    out: fadeOut(300),
+    dissolve: { sizeEm: 0.35, soft: 0.3, inMs: 1000, outMs: 0 },
+    warp: { sizeEm: 0.3, amountEm: 0.3, inMs: 1000 },
+  }),
+  p('Distort', 'shatterOut', 'Shatter Out', 'At the end the letters break apart and fly off like glass.', {
+    in: fadeWhole(250),
+    out: { unit: 'letter', order: 'random', stepMs: 8, ms: 600, ease: EASE.in, state: { opacity: 0, x: 2, y: 1.6, rotate: 140, scale: 0.6 }, scatter: true, keepLetters: true },
+  }),
 ]
 
-export const FX_PRESETS: Preset[] = [...INDIC, ...CALM, ...MASK, ...LIGHT, ...KINETIC, ...STROKE, ...SCRAMBLE, ...ELASTIC, ...MORE]
+export const FX_PRESETS: Preset[] = [...INDIC, ...CALM, ...MASK, ...LIGHT, ...KINETIC, ...STROKE, ...SCRAMBLE, ...ELASTIC, ...DISTORT]
