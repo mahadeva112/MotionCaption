@@ -130,13 +130,28 @@ export const DEFAULT_MOTION: Motion = { speed: 1, out: 'preset', outMs: 250 }
 
 /** Text width in em for a font (the app measures with the real font; tests use a stub) */
 export type Measure = (text: string, font: string, style: string) => number
+/** A font's ascent + descent, in em (the app asks the real font; tests use a stub) */
+export type FontHeight = (font: string, style: string) => number
 
 /**
- * CSS font size for a Text+ Size, as a share of the frame width. From Resolve stills, the
- * same Size draws letters about 17% wider (relative to frame width) on a 1080×1920 frame
- * than on 1920×1080.
+ * How Text+ sizes text (Resolve stills 2026-11-13, 1920×1080, Open Sans and Vesper Libre).
+ * With U = Size × sizeUnit(aspect) × frame width:
+ *  - one line is LINE_OF_SIZE × U tall, times Line height (font or not);
+ *  - the font's ascent + descent fills that line, so its em is LINE_OF_SIZE × U ÷ fontHeight;
+ *  - Letter space adds (value − 1) × U after every letter (grapheme), whatever the font.
+ * The same Size draws about 17% bigger, relative to frame width, on 1080×1920 than on
+ * 1920×1080 (earlier stills), hence sizeUnit.
  */
-export const fontShare = (aspect: number) => (aspect >= 1 ? 0.5 : 0.5 + (1 - aspect) * 0.2)
+export const LINE_OF_SIZE = 0.8
+export const sizeUnit = (aspect: number) => (aspect >= 1 ? 1 : 1 + (1 - aspect) * 0.4)
+/** Ascent + descent when the real font is not at hand (tests, scripts) */
+export const roughFontHeight: FontHeight = () => 1.36
+
+/** CSS sizes for a caption drawn W pixels wide: font size, extra space per letter and line pitch, in px */
+export function textPx(size: number, aspect: number, W: number, fontHeight: number, tracking: number, lineSpacing: number) {
+  const u = size * sizeUnit(aspect) * W
+  return { font: (LINE_OF_SIZE * u) / fontHeight, letter: (tracking - 1) * u, line: LINE_OF_SIZE * u * lineSpacing }
+}
 
 const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
 export const letters = (s: string) => Array.from(graphemes.segment(s), (x) => x.segment)
@@ -172,9 +187,13 @@ export interface Laid {
  * and it is drawn as its own Text+ centred on that place. `solo[i]` asks for that for a
  * word at its normal size too (moving or boxed words; see compile).
  */
-export function layout(raw: string, look: Look, scales: number[], measure: Measure, aspect: number, solo: boolean[] = []): Laid {
-  const share = fontShare(aspect) * look.size
-  const em = (s: string) => measure(s, look.font, look.style) * look.tracking
+export function layout(raw: string, look: Look, scales: number[], measure: Measure, aspect: number, solo: boolean[] = [],
+  fontHeight: FontHeight = roughFontHeight): Laid {
+  // Widths are in em of the font; share turns em into shares of the frame width
+  const px = textPx(look.size, aspect, 1, fontHeight(look.font, look.style), look.tracking, look.lineSpacing)
+  const share = px.font
+  const perLetter = px.letter / px.font
+  const em = (s: string) => measure(s, look.font, look.style) + letters(s).length * perLetter
   const text = applyCase(raw, look.textCase)
   const srcLines = look.lines === 'keep' ? text.split('\n') : [text.replace(/\s*\n\s*/g, ' ')]
   const words: { w: string; line: number }[] = []
@@ -214,8 +233,8 @@ export function layout(raw: string, look: Look, scales: number[], measure: Measu
   const lineCount = starts.length
   const lineWidths = starts.map((a, li) => lineEm(a, starts[li + 1] ?? words.length))
   const widest = Math.max(0, ...lineWidths)
-  // One line is about 1.2 em tall; in frame-height shares
-  const lineH = 1.2 * look.lineSpacing * share * aspect
+  // One line's pitch, in frame-height shares
+  const lineH = px.line * aspect
 
   const ranges: Laid['ranges'] = []
   const solos: Laid['solos'] = []

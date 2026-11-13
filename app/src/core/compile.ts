@@ -3,7 +3,7 @@ import type { Cue } from './srt.ts'
 import { presetById, wordFxById } from './presets.ts'
 import {
   autoWords, centerOf, DEFAULT_HIGHLIGHT, DEFAULT_LOOK, DEFAULT_MOTION, layout, letters as lettersOf, outlineOf,
-  type Highlight, type ImagePlace, type Look, type Measure, type Motion, type Rgb, type WordLook,
+  type FontHeight, type Highlight, type ImagePlace, type Look, type Measure, type Motion, type Rgb, type WordLook,
 } from './look.ts'
 
 export type { Rgb } from './look.ts'
@@ -93,6 +93,8 @@ export interface CompileOpts {
   aspect: number
   /** Asks the real font whether it has the caption's letters (see fontFor) */
   hasGlyphs?: HasGlyphs
+  /** The real font's ascent + descent in em, for Text+ sizes (see look.ts textPx) */
+  fontHeight?: FontHeight
 }
 
 /** Rough widths for when no real font is at hand (tests, scripts): average Latin letters */
@@ -136,6 +138,16 @@ export function timeTracks(tracks: Track[], durMs: number): TimedTrack[] {
 
 const BENGALI = /[ঀ-৿]/
 const DEVANAGARI = /[ऀ-ॿ]/
+
+/** Scripts whose letters join along a top line: Devanagari, Bengali, Gurmukhi */
+const JOINED = /[ऀ-੿]/
+export const joinedScript = (text: string) => JOINED.test(text)
+/**
+ * Most letter space such a script can take. Text+ spaces every letter apart, so above 1
+ * the top line breaks between them (Resolve test 2026-11-13: Vesper Libre at 1.07 split
+ * every letter; at 1.00 and 0.97 it stayed joined).
+ */
+export const JOINED_MAX_TRACKING = 1
 
 /** Fonts known to have Bangla or Devanagari letters */
 const INDIC_FONTS = /nirmala|mangal|kokila|aparajita|utsaah|vrinda|shonar|kalpurush|solaiman|siyam|bangla|bengali|devanagari|hind|mukta|poppins|baloo|tiro|lohit|akshar|yatra|kohinoor/i
@@ -331,10 +343,18 @@ export function compileCue(cue: Cue, presetId: string, opts: Partial<CompileOpts
   const font = fontFor(cue.text, look.font, look.style, opts.hasGlyphs)
   // A swapped font takes a style it has: Text+ has no "Nirmala UI Medium"
   const style = font === look.font ? look.style : fallbackStyle(look.style)
-  const laid = layout(cue.text, { ...look, font, style }, final.map((w) => w?.scale ?? 1), measure, aspect, final.map((w) => !!w && ownText(w)))
+  const joined = joinedScript(cue.text)
+  const tracking = joined ? Math.min(JOINED_MAX_TRACKING, look.tracking) : look.tracking
+  const laid = layout(cue.text, { ...look, font, style, tracking }, final.map((w) => w?.scale ?? 1), measure, aspect, final.map((w) => !!w && ownText(w)), opts.fontHeight)
   const center = centerOf(look, laid.width, laid.height)
 
   const tracks = timeTracks(withMotion(preset.tracks, motion), dur)
+  // Animations that spread the letters keep a joined script's top line whole
+  if (joined) {
+    for (const t of tracks) {
+      if (t.input === 'CharacterSpacing') t.keys = t.keys.map((k) => ({ ...k, v: Math.min(JOINED_MAX_TRACKING, k.v as number) }))
+    }
+  }
   // A path takes the caption's position over: from its place through each point, evenly over its time
   if (look.path.length) {
     const pts: (readonly [number, number])[] = [[0, 0], ...look.path]
@@ -404,7 +424,7 @@ export function compileCue(cue: Cue, presetId: string, opts: Partial<CompileOpts
     endMs: cue.endMs,
     text: laid.text,
     look: {
-      font, style, size: look.size, tracking: look.tracking, lineSpacing: look.lineSpacing,
+      font, style, size: look.size, tracking, lineSpacing: look.lineSpacing,
       align: ALIGN[look.align], fill: look.fill, center, rotation: look.rotation,
       ...(look.outline.on ? { outline: outlineOut(look.outline) } : {}),
       ...(look.shadow.on ? { shadow: { blur: look.shadow.blur, distance: look.shadow.distance, opacity: look.shadow.opacity, color: look.shadow.color } } : {}),

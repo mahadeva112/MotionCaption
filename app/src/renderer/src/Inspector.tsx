@@ -3,7 +3,7 @@ import { DEFAULT_HIGHLIGHT, DEFAULT_MOTION, outlineOf, type Highlight, type Look
 import type { Pattern } from '@core/pattern'
 import type { Mood, Smart } from '@core/smart'
 import { EASE } from '@core/anim'
-import { hasOwnOut } from '@core/compile'
+import { hasOwnOut, joinedScript, JOINED_MAX_TRACKING } from '@core/compile'
 import { FAMILIES, PRESETS, presetById } from '@core/presets'
 import { CurveEdit } from './Curve'
 import type { FontFamily } from './fonts'
@@ -337,6 +337,9 @@ export function Inspector(p: Props) {
             <Section title="Size and spacing" r={lk('size', 'tracking', 'lineSpacing')}>
               <Slider label="Size" value={L.size} r={lk('size')} min={0.02} max={0.2} step={0.001} onChange={(v) => p.onLook({ size: v })} />
               <Slider label="Letter space" value={L.tracking} r={lk('tracking')} min={0.8} max={1.6} onChange={(v) => p.onLook({ tracking: v })} />
+              {L.tracking > JOINED_MAX_TRACKING && p.caption && joinedScript(p.caption.text) && (
+                <p className="hint2">Hindi, Bangla and Punjabi stay at {JOINED_MAX_TRACKING}: more space splits the letters apart in Resolve and breaks the top line.</p>
+              )}
               <Slider label="Line height" value={L.lineSpacing} r={lk('lineSpacing')} min={0.7} max={1.8} onChange={(v) => p.onLook({ lineSpacing: v })} />
             </Section>
             <Section title="Fill" r={lk('fill')}><Color label="Colour" value={L.fill} r={lk('fill')} onChange={(c) => p.onLook({ fill: c })} /></Section>
