@@ -427,7 +427,12 @@ local function plain_copy(t) for n = 2, 4 do try(function() t:SetInput("Enabled"
 local function shade(t, L, withBox)
     if L.outline then
         local c = L.outline.color
-        element(t, 2, { ElementShape2 = 1, Thickness2 = L.outline.width, Red2 = c[1], Green2 = c[2], Blue2 = c[3], Opacity2 = 1 })
+        local o = L.outline
+        -- Outside only keeps the letters whole: an outline over them shows seams where the
+        -- letters of Indian scripts join. Round joins keep corners from spiking.
+        element(t, 2, { ElementShape2 = 1, Thickness2 = o.width, Red2 = c[1], Green2 = c[2], Blue2 = c[3],
+            Opacity2 = o.opacity or 1, OutsideOnly2 = (o.outside == false) and 0 or 1, JoinStyle2 = 1,
+            SoftnessX2 = (o.soft or 0) * 8, SoftnessY2 = (o.soft or 0) * 8 })
     end
     if L.shadow then
         local c, d = L.shadow.color, L.shadow.distance * 0.02
@@ -1170,7 +1175,7 @@ end
 -- keeps its font, size, colour and place when MotionCaption animates it
 local LAYER_INPUTS = { "Font", "Style", "Size", "CharacterSpacing", "LineSpacing", "Red1", "Green1", "Blue1", "Center",
     "HorizontalJustificationNew", "AngleZ",
-    "Enabled2", "Thickness2", "Red2", "Green2", "Blue2",
+    "Enabled2", "Thickness2", "Red2", "Green2", "Blue2", "OutsideOnly2", "Opacity2", "SoftnessX2",
     "Enabled3", "Red3", "Green3", "Blue3", "Opacity3", "SoftnessX3", "Offset3",
     "Enabled4", "Red4", "Green4", "Blue4", "Opacity4", "Round4", "ExtendHorizontal4" }
 

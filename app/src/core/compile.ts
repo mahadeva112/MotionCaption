@@ -2,7 +2,7 @@ import { EASE, type Fixed, type Key, type Letters, type Target, type Track, type
 import type { Cue } from './srt.ts'
 import { presetById, wordFxById } from './presets.ts'
 import {
-  autoWords, centerOf, DEFAULT_HIGHLIGHT, DEFAULT_LOOK, DEFAULT_MOTION, layout, letters as lettersOf,
+  autoWords, centerOf, DEFAULT_HIGHLIGHT, DEFAULT_LOOK, DEFAULT_MOTION, layout, letters as lettersOf, outlineOf,
   type Highlight, type ImagePlace, type Look, type Measure, type Motion, type Rgb, type WordLook,
 } from './look.ts'
 
@@ -34,7 +34,11 @@ export interface TextLook {
   /** Text+ Center, 0–1 with y up */
   center: readonly [number, number]
   rotation: number
-  outline?: { width: number; color: Rgb }
+  outline?: {
+    width: number; color: Rgb
+    /** Older jobs leave these out: outside only, full opacity, hard edge, one line */
+    outside?: boolean; opacity?: number; soft?: number; second?: { width: number; color: Rgb }
+  }
   shadow?: { blur: number; distance: number; opacity: number; color: Rgb }
   box?: { color: Rgb; opacity: number; round: number; pad: number }
   /** Drawn by the app only (Finished clips); a Text+ caption has the first colour, no picture, the final numbers */
@@ -402,7 +406,7 @@ export function compileCue(cue: Cue, presetId: string, opts: Partial<CompileOpts
     look: {
       font, style, size: look.size, tracking: look.tracking, lineSpacing: look.lineSpacing,
       align: ALIGN[look.align], fill: look.fill, center, rotation: look.rotation,
-      ...(look.outline.on ? { outline: { width: look.outline.width, color: look.outline.color } } : {}),
+      ...(look.outline.on ? { outline: outlineOut(look.outline) } : {}),
       ...(look.shadow.on ? { shadow: { blur: look.shadow.blur, distance: look.shadow.distance, opacity: look.shadow.opacity, color: look.shadow.color } } : {}),
       ...(look.box.on ? { box: { color: look.box.color, opacity: look.box.opacity, round: look.box.round, pad: look.box.pad } } : {}),
       ...(look.gradient.on ? { gradient: { color: look.gradient.color, angle: look.gradient.angle } } : {}),
@@ -415,5 +419,14 @@ export function compileCue(cue: Cue, presetId: string, opts: Partial<CompileOpts
     letters: fitLetters(lettersIn, tracks, laid.text, dur),
     words,
     ranges: laid.ranges,
+  }
+}
+
+/** The caption's outline as Text+ and the drawn frames take it */
+function outlineOut(o: Look['outline']): NonNullable<TextLook['outline']> {
+  const f = outlineOf(o)
+  return {
+    width: f.width, color: f.color, outside: f.outside, opacity: f.opacity, soft: f.soft,
+    ...(f.second ? { second: { width: f.width2, color: f.color2 } } : {}),
   }
 }

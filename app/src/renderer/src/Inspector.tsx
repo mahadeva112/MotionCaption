@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { DEFAULT_HIGHLIGHT, DEFAULT_MOTION, type Highlight, type Look, type Motion, type Rgb, type WordLook } from '@core/look'
+import { DEFAULT_HIGHLIGHT, DEFAULT_MOTION, outlineOf, type Highlight, type Look, type Motion, type Outline, type Rgb, type WordLook } from '@core/look'
 import type { Pattern } from '@core/pattern'
 import type { Mood, Smart } from '@core/smart'
 import { EASE } from '@core/anim'
@@ -18,10 +18,10 @@ const TABS: Tab[] = ['Caption', 'Look', 'Position', 'Words', 'Animation']
 
 /** Ready-made looks; Save adds the current one under a name (kept on this computer) */
 export const BUILT_IN_STYLES: { name: string; look: Partial<Look> }[] = [
-  { name: 'Clean', look: { font: 'Open Sans', style: 'Bold', size: 0.07, textCase: 'as', fill: [1, 1, 1], outline: { on: false, width: 0.05, color: [0, 0, 0] }, shadow: { on: true, blur: 0.5, distance: 0.3, opacity: 0.6, color: [0, 0, 0] }, box: { on: false, color: [0, 0, 0], opacity: 0.55, round: 0.3, pad: 0.3 } } },
-  { name: 'Reels Bold', look: { font: 'Arial Black', style: 'Regular', size: 0.08, textCase: 'upper', fill: [1, 1, 1], outline: { on: true, width: 0.08, color: [0, 0, 0] }, shadow: { on: false, blur: 0.5, distance: 0.3, opacity: 0.6, color: [0, 0, 0] }, box: { on: false, color: [0, 0, 0], opacity: 0.55, round: 0.3, pad: 0.3 } } },
-  { name: 'Podcast Box', look: { font: 'Segoe UI', style: 'Bold', size: 0.06, textCase: 'as', fill: [1, 1, 1], outline: { on: false, width: 0.05, color: [0, 0, 0] }, shadow: { on: false, blur: 0.5, distance: 0.3, opacity: 0.6, color: [0, 0, 0] }, box: { on: true, color: [0.08, 0.08, 0.1], opacity: 0.8, round: 0.4, pad: 0.45 } } },
-  { name: 'Cinematic', look: { font: 'Georgia', style: 'Regular', size: 0.055, textCase: 'as', tracking: 1.12, fill: [0.96, 0.94, 0.9], outline: { on: false, width: 0.05, color: [0, 0, 0] }, shadow: { on: true, blur: 1, distance: 0.1, opacity: 0.7, color: [0, 0, 0] }, box: { on: false, color: [0, 0, 0], opacity: 0.55, round: 0.3, pad: 0.3 } } },
+  { name: 'Clean', look: { font: 'Open Sans', style: 'Bold', size: 0.07, textCase: 'as', fill: [1, 1, 1], outline: outlineOf({ on: false, width: 0.05, color: [0, 0, 0] }), shadow: { on: true, blur: 0.5, distance: 0.3, opacity: 0.6, color: [0, 0, 0] }, box: { on: false, color: [0, 0, 0], opacity: 0.55, round: 0.3, pad: 0.3 } } },
+  { name: 'Reels Bold', look: { font: 'Arial Black', style: 'Regular', size: 0.08, textCase: 'upper', fill: [1, 1, 1], outline: outlineOf({ on: true, width: 0.08, color: [0, 0, 0] }), shadow: { on: false, blur: 0.5, distance: 0.3, opacity: 0.6, color: [0, 0, 0] }, box: { on: false, color: [0, 0, 0], opacity: 0.55, round: 0.3, pad: 0.3 } } },
+  { name: 'Podcast Box', look: { font: 'Segoe UI', style: 'Bold', size: 0.06, textCase: 'as', fill: [1, 1, 1], outline: outlineOf({ on: false, width: 0.05, color: [0, 0, 0] }), shadow: { on: false, blur: 0.5, distance: 0.3, opacity: 0.6, color: [0, 0, 0] }, box: { on: true, color: [0.08, 0.08, 0.1], opacity: 0.8, round: 0.4, pad: 0.45 } } },
+  { name: 'Cinematic', look: { font: 'Georgia', style: 'Regular', size: 0.055, textCase: 'as', tracking: 1.12, fill: [0.96, 0.94, 0.9], outline: outlineOf({ on: false, width: 0.05, color: [0, 0, 0] }), shadow: { on: true, blur: 1, distance: 0.1, opacity: 0.7, color: [0, 0, 0] }, box: { on: false, color: [0, 0, 0], opacity: 0.55, round: 0.3, pad: 0.3 } } },
 ]
 
 interface Props {
@@ -233,6 +233,11 @@ export function Inspector(p: Props) {
     dirty: !same(L[k][f], B[k][f]),
     reset: () => p.onLook({ [k]: { ...L[k], [f]: B[k][f] } }),
   })
+  // Outline, with the settings older saved looks do not have filled in
+  const OL = outlineOf(L.outline)
+  const OB = outlineOf(B.outline)
+  const setO = (o: Partial<Outline>) => p.onLook({ outline: { ...OL, ...o } })
+  const ol = (f: keyof Outline): R => ({ dirty: !same(OL[f], OB[f]), reset: () => setO({ [f]: OB[f] }) })
   // Words go back to following the caption; highlight and motion to how the app starts
   const wd = (...keys: (keyof WordLook)[]): R => ({
     dirty: keys.some((k) => p.wordLook?.[k] !== undefined),
@@ -335,9 +340,25 @@ export function Inspector(p: Props) {
               <Slider label="Line height" value={L.lineSpacing} r={lk('lineSpacing')} min={0.7} max={1.8} onChange={(v) => p.onLook({ lineSpacing: v })} />
             </Section>
             <Section title="Fill" r={lk('fill')}><Color label="Colour" value={L.fill} r={lk('fill')} onChange={(c) => p.onLook({ fill: c })} /></Section>
-            <Section title={<>Outline <Toggle on={L.outline.on} onChange={(on) => p.onLook({ outline: { ...L.outline, on } })}>On</Toggle></>} off={!L.outline.on} r={lk('outline')}>
-              <Slider label="Width" value={L.outline.width} r={sub('outline', 'width')} min={0.01} max={0.25} step={0.005} onChange={(v) => p.onLook({ outline: { ...L.outline, width: v } })} />
-              <Color label="Colour" value={L.outline.color} r={sub('outline', 'color')} onChange={(c) => p.onLook({ outline: { ...L.outline, color: c } })} />
+            <Section title={<>Outline <Toggle on={OL.on} onChange={(on) => setO({ on })}>On</Toggle></>} off={!OL.on} r={lk('outline')}>
+              <Slider label="Width" value={OL.width} r={ol('width')} min={0.01} max={0.5} step={0.005} onChange={(v) => setO({ width: v })} />
+              <Color label="Colour" value={OL.color} r={ol('color')} onChange={(c) => setO({ color: c })} />
+              <Row label="Border" r={ol('outside')}>
+                <Toggle on={OL.outside} onChange={(outside) => setO({ outside })}>Outer border only</Toggle>
+              </Row>
+              <p className="hint2">{OL.outside
+                ? 'The line sits outside the letters, so they keep their full weight. Best for Hindi, Bengali and other Indian scripts.'
+                : 'The line sits on the edge of the letters and eats into them a little.'}</p>
+              <Slider label="Opacity" value={OL.opacity} r={ol('opacity')} min={0} max={1} onChange={(v) => setO({ opacity: v })} />
+              <Slider label="Softness" value={OL.soft} r={ol('soft')} min={0} max={1} onChange={(v) => setO({ soft: v })} />
+              <Row label="Second line" r={ol('second')}>
+                <Toggle on={OL.second} onChange={(second) => setO({ second })}>Around the first</Toggle>
+              </Row>
+              {OL.second && <>
+                <Slider label="Width 2" value={OL.width2} r={ol('width2')} min={0.01} max={0.5} step={0.005} onChange={(v) => setO({ width2: v })} />
+                <Color label="Colour 2" value={OL.color2} r={ol('color2')} onChange={(c) => setO({ color2: c })} />
+                {drawnNote}
+              </>}
             </Section>
             <Section title={<>Shadow <Toggle on={L.shadow.on} onChange={(on) => p.onLook({ shadow: { ...L.shadow, on } })}>On</Toggle></>} off={!L.shadow.on} r={lk('shadow')}>
               <Slider label="Blur" value={L.shadow.blur} r={sub('shadow', 'blur')} min={0} max={2} onChange={(v) => p.onLook({ shadow: { ...L.shadow, blur: v } })} />

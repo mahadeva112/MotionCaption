@@ -3,10 +3,10 @@
 // Look, so an animated layer keeps the font, size, colour and place it was given in Resolve.
 //
 // The conversions undo what the bridge writes (MotionCaption.lua style_text / shade):
-// outline Thickness2 = width, shadow SoftnessX3 = blur × 16 and Offset3 = distance × 0.02,
+// outline Thickness2 = width, SoftnessX2 = soft × 8, shadow SoftnessX3 = blur × 16 and Offset3 = distance × 0.02,
 // box ExtendHorizontal4 = pad × 0.4.
 
-import type { Align, Look, Rgb } from './look.ts'
+import { outlineOf, type Align, type Look, type Rgb } from './look.ts'
 import type { Cue } from './srt.ts'
 
 export type RawInputs = Record<string, number | string | readonly [number, number]>
@@ -54,7 +54,10 @@ export function lookOfLayer(raw: RawInputs): Partial<Look> {
   look.y = c ? round(c[1] - 0.5) : 0
   look.rotation = round(num(raw, 'AngleZ', 0), 2)
 
-  look.outline = { on: on(raw, 2), width: round(num(raw, 'Thickness2', 0.05)), color: color(raw, 2, [0, 0, 0]) }
+  look.outline = outlineOf({
+    on: on(raw, 2), width: round(num(raw, 'Thickness2', 0.05)), color: color(raw, 2, [0, 0, 0]),
+    outside: num(raw, 'OutsideOnly2', 1) > 0.5, opacity: round(num(raw, 'Opacity2', 1), 3), soft: round(num(raw, 'SoftnessX2', 0) / 8, 3),
+  })
   const off = pair(raw, 'Offset3')
   look.shadow = {
     on: on(raw, 3),

@@ -545,7 +545,12 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
 .cv-side small { font-size: 10px; color: var(--t3); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 
 /* Gradient letters keep their box as a layer behind; a picture sits beside or above the text */
-.vtext { white-space: pre; }
+.vtext { white-space: pre; position: relative; }
+/* The outline: copies of the letters laid exactly under the front ones */
+.vback { position: absolute; inset: 0; pointer-events: none; }
+.vline { position: absolute; inset: 0; white-space: pre; }
+.vsolo-in.front { position: relative; }
+.vdefs { position: absolute; width: 0; height: 0; overflow: hidden; }
 .vtext.grad { display: inline-block; }
 .vimg { position: absolute; display: block; width: auto; max-width: none; pointer-events: none; }
 .vimg.left { right: 100%; top: 50%; transform: translateY(-50%); margin-right: .3em; }

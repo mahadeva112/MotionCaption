@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
-import type { CompiledCue, TimedTrack } from '@core/compile'
+import type { CompiledCue, Rgb, TimedTrack } from '@core/compile'
 import { countUp, fontShare } from '@core/look'
 import { num, pt, valueAt } from '@core/sample'
 import { clock, media, useClock } from './clock'
@@ -320,12 +320,42 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
   const shadow = L.shadow
     ? `${L.shadow.distance * fontPx * 0.12}px ${L.shadow.distance * fontPx * 0.12}px ${L.shadow.blur * fontPx * 0.35}px ${css(L.shadow.color, L.shadow.opacity)}`
     : undefined
-  const outline = L.outline ? `${Math.max(0.5, L.outline.width * fontPx * 0.5)}px ${css(L.outline.color)}` : undefined
+  const dropShadow = L.shadow
+    ? `drop-shadow(${L.shadow.distance * fontPx * 0.12}px ${L.shadow.distance * fontPx * 0.12}px ${L.shadow.blur * fontPx * 0.2}px ${css(L.shadow.color, L.shadow.opacity)})`
+    : undefined
+  const O = L.outline
   const base: CSSProperties = {
     fontFamily: `'${L.font}', 'Nirmala UI', 'Segoe UI Emoji', 'Segoe UI Symbol', sans-serif`, fontWeight: face.weight, fontStyle: face.italic ? 'italic' : 'normal',
     letterSpacing: `${(spacing - 1) * 0.5}em`, lineHeight: 1.2 * L.lineSpacing,
-    textShadow: shadow, WebkitTextStroke: outline, paintOrder: 'stroke fill',
+    // With an outline the shadow falls from the outlined shape (see behind)
+    textShadow: O ? undefined : shadow,
   }
+  // The outline is drawn as copies of the letters behind them, all at once. A stroke on
+  // each letter would cross the letters next to it where they join (the headline of
+  // Devanagari, Bengali…) and show seams. Centred on the edge, the letters in front are
+  // thinned by half the line, as one shape, so they still join cleanly.
+  const strokePx = (px: number) => (O ? Math.max(0.5, O.width * px * 0.5) : 0)
+  const thinBy = (px: number) => (O && O.outside === false ? Math.round(strokePx(px) * 50) / 100 : 0)
+  const thinFilter = (px: number) => (thinBy(px) ? `url(#mc-thin-${Math.round(thinBy(px) * 100)})` : undefined)
+  const behind = (px: number, pad: string | number, copy: (layer: string) => ReactNode) => {
+    if (!O) return null
+    const sw = strokePx(px)
+    const sw2 = O.second ? sw + Math.max(0.5, O.second.width * px * 0.5) : 0
+    const line = (c: Rgb, w: number, k: string) => (
+      <span key={k} className="vline" style={{ padding: pad, color: css(c), WebkitTextStroke: `${w}px ${css(c)}` }}>{copy(k)}</span>
+    )
+    return (
+      <span className="vback" aria-hidden style={{ filter: dropShadow }}>
+        <span className="vback" style={{ opacity: O.opacity ?? 1, filter: O.soft ? `blur(${O.soft * px * 0.08}px)` : undefined }}>
+          {O.second && line(O.second.color, sw2, 'o2')}
+          {line(O.color, sw, 'o1')}
+        </span>
+      </span>
+    )
+  }
+  const thinDefs = O && O.outside === false
+    ? [...new Set([fontPx, ...cue.words.filter((w) => w.solo).map((w) => w.solo!.size * W * share)].map(thinBy))]
+    : []
   // Gradient letters: a layer around the letters whose background is cut to them, so the
   // box stays behind. A text shadow would draw over see-through letters, so that layer
   // casts a drop shadow instead.
@@ -333,14 +363,13 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
   const gradLayer: CSSProperties | null = G ? {
     backgroundImage: `linear-gradient(${G.angle}deg, ${css(L.fill)}, ${css(G.color)})`, WebkitBackgroundClip: 'text', backgroundClip: 'text',
     color: 'transparent', textShadow: 'none',
-    filter: L.shadow
-      ? `drop-shadow(${L.shadow.distance * fontPx * 0.12}px ${L.shadow.distance * fontPx * 0.12}px ${L.shadow.blur * fontPx * 0.2}px ${css(L.shadow.color, L.shadow.opacity)})`
-      : undefined,
+    filter: O ? thinFilter(fontPx) : dropShadow,
   } : null
   const img = L.image
 
-  /** One letter as drawn: its letter animation, its word's colour and effect */
-  const charEl = (i: number) => {
+  /** One letter as drawn: its letter animation, its word's colour and effect. Behind (the
+   *  outline's copy) it keeps only where it is: colours, glows and boxes are the front's. */
+  const charEl = (i: number, back?: string) => {
     const ch = chars[i]!
     const w = styled.get(i)
     const own = cue.letters ? follower(lettersT, ms - turn(i) * step, W) : {}
@@ -348,12 +377,21 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
     const fx = w ? follower(w.tracks.filter((t) => t.input !== 'Opacity1'), ms - shift, W) : {}
     const lit = w ? num(at(w.tracks, 'Opacity1', ms), 1) > 0.5 : false
     const wi = wordOf[i]
+    if (back) {
+      // A letter fading in would show its outline's colour through it; the copy behind
+      // fades in later, so the outline arrives as the letter firms up
+      const bt: CSSProperties = {
+        ...own, ...(own.opacity !== undefined ? { opacity: own.opacity ** 3 } : {}),
+        ...(fx.transform ? { transform: fx.transform } : {}), ...(w?.box ? { visibility: 'hidden' } : {}),
+      }
+      return <span key={back + i} className="ch" style={bt}>{ch}</span>
+    }
     const st: CSSProperties = {
       ...own,
       ...(w && lit ? { color: css(w.color) } : {}),
       ...(fx.transform ? { transform: fx.transform } : {}),
       ...(w?.glow ? { textShadow: `0 0 .35em ${css(w.color)}, 0 0 .8em ${css(w.color)}` } : {}),
-      ...(w?.box ? { background: css(w.box), WebkitTextStroke: '0' } : {}),
+      ...(w?.box ? { background: css(w.box) } : {}),
     }
     return <span key={i} className={'ch' + (wi !== null && wi === selWord ? ' sel' : '')} data-w={wi ?? undefined} style={st}>{ch}</span>
   }
@@ -366,6 +404,15 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
 
   return (
     <div className="vgroup" style={group}>
+      {thinDefs.length > 0 && (
+        <svg className="vdefs" width="0" height="0" aria-hidden>
+          {thinDefs.map((r) => (
+            <filter key={r} id={`mc-thin-${Math.round(r * 100)}`} x="-5%" y="-5%" width="110%" height="110%">
+              <feMorphology operator="erode" radius={r} />
+            </filter>
+          ))}
+        </svg>
+      )}
       <div
         ref={blockRef}
         className={'vblock' + (handles ? ' edit' : '')}
@@ -379,7 +426,10 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
         }}
       >
         {img && <img className={'vimg ' + img.place} src={img.src} alt="" draggable={false} style={{ height: img.size * fontPx }} />}
-        <span className={G ? 'vtext grad' : 'vtext'} style={gradLayer ?? undefined}>{chars.map((ch, i) => (ch === '\n' ? <br key={i} /> : charEl(i)))}</span>
+        {behind(fontPx, L.box ? `${L.box.pad * 0.25}em ${L.box.pad * 0.5}em` : 0, (k) => chars.map((ch, i) => (ch === '\n' ? <br key={k + i} /> : charEl(i, k))))}
+        <span className={G ? 'vtext grad' : 'vtext'} style={gradLayer ?? (O ? { filter: thinFilter(fontPx) } : undefined)}>
+          {chars.map((ch, i) => (ch === '\n' ? <br key={i} /> : charEl(i)))}
+        </span>
         {handles && <>
           {['c1', 'c2', 'c3', 'c4'].map((c) => <span key={c} className={'vh ' + c} data-grip="size" title="Drag to make it bigger or smaller" />)}
           <span className="vh turn" data-grip="turn" title="Drag to turn it (Shift: 15° steps)" />
@@ -390,17 +440,23 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
         const shift = cue.letters ? w.first * step : 0
         const fx = follower(w.tracks.filter((t) => t.input !== 'Opacity1'), ms - shift, W)
         const sc = Array.from(graphemes.segment(counted(s.text)), (x) => x.segment)
+        const px = s.size * W * share
+        const letters = (k?: string) => sc.map((c, j) => {
+          const f = cue.letters ? follower(lettersT, ms - turn(w.first + j) * step, W) : undefined
+          const st = k && f?.opacity !== undefined ? { ...f, opacity: f.opacity ** 3 } : f
+          return <span key={(k ?? '') + j} className="ch" style={st}>{c}</span>
+        })
+        const inner = fx.transform ? { transform: fx.transform } : undefined
         return (
           <div key={w.index} className={'vsolo' + (w.index === selWord ? ' sel' : '')} data-w={w.index}
             onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp}
             style={{
-              ...base, left: s.center[0] * W, top: (1 - s.center[1]) * H, fontSize: s.size * W * share, color: css(w.color), opacity,
+              ...base, left: s.center[0] * W, top: (1 - s.center[1]) * H, fontSize: px, color: css(w.color), opacity,
               ...(w.glow ? { textShadow: `0 0 .35em ${css(w.color)}, 0 0 .8em ${css(w.color)}` } : {}),
-              ...(w.box ? { background: css(w.box), padding: '0 .15em', borderRadius: '.18em', WebkitTextStroke: '0' } : {}),
+              ...(w.box ? { background: css(w.box), padding: '0 .15em', borderRadius: '.18em' } : {}),
             }}>
-            <span className="vsolo-in" style={fx.transform ? { transform: fx.transform } : undefined}>
-              {sc.map((c, j) => <span key={j} className="ch" style={cue.letters ? follower(lettersT, ms - turn(w.first + j) * step, W) : undefined}>{c}</span>)}
-            </span>
+            {!w.box && behind(px, 0, (k) => <span key={k} className="vsolo-in" style={inner}>{letters(k)}</span>)}
+            <span className="vsolo-in front" style={{ ...inner, ...(!w.box && O ? { filter: thinFilter(px) } : {}) }}>{letters()}</span>
           </div>
         )
       })}
