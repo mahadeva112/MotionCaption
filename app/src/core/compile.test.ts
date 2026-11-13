@@ -209,3 +209,19 @@ describe('MOV export', () => {
     expect(job.cues[0]!.sig.endsWith('m')).toBe(true)
   })
 })
+
+describe('letter space in joined scripts', () => {
+  const look = { ...DEFAULT_LOOK, font: 'Nirmala UI', tracking: 1.07 }
+  it('keeps Hindi at 1 or less, so the top line stays joined in Resolve', () => {
+    expect(compileCue(cue('वह एक महान विद्वान है'), 'fade', { look }).look.tracking).toBe(1)
+    expect(compileCue(cue('আমি তোমাকে'), 'fade', { look }).look.tracking).toBe(1)
+    expect(compileCue(cue('वह विद्वान है'), 'fade', { look: { ...look, tracking: 0.97 } }).look.tracking).toBe(0.97)
+  })
+  it('leaves other scripts as set', () => {
+    expect(compileCue(cue('Every moment'), 'fade', { look: { ...look, font: 'Open Sans' } }).look.tracking).toBe(1.07)
+  })
+  it('keeps letter-spreading animations at 1 too', () => {
+    const spread = compileCue(cue('वह एक महान विद्वान है'), 'tracking', { look }).tracks.find((t) => t.input === 'CharacterSpacing')!
+    expect(Math.max(...spread.keys.map((k) => k.v as number))).toBe(1)
+  })
+})

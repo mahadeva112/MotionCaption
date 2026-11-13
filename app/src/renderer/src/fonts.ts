@@ -1,5 +1,5 @@
 import { FALLBACK_FONT, type HasGlyphs } from '@core/compile'
-import type { Measure } from '@core/look'
+import { roughFontHeight, type FontHeight, type Measure } from '@core/look'
 
 // Fonts on this computer, for the Look tab. Resolve's Text+ takes a family (Font) and a
 // style name (Style), which is what Local Font Access gives too.
@@ -67,6 +67,25 @@ export const measure: Measure = (text, font, style) => {
   if (cache.size > 20000) cache.clear()
   cache.set(key, em)
   return em
+}
+
+const heights = new Map<string, number>()
+
+/** The font's ascent + descent in em: Text+ fits a line of Size to it (core/look.ts textPx) */
+export const fontHeight: FontHeight = (font, style) => {
+  const key = font + '|' + style
+  const hit = heights.get(key)
+  if (hit !== undefined) return hit
+  let h = roughFontHeight(font, style)
+  if (ctx) {
+    const f = cssFace(style)
+    ctx.font = `${f.italic ? 'italic ' : ''}${f.weight} 100px '${font}', 'Nirmala UI', sans-serif`
+    const m = ctx.measureText('Hg')
+    if (m.fontBoundingBoxAscent + m.fontBoundingBoxDescent > 0) h = (m.fontBoundingBoxAscent + m.fontBoundingBoxDescent) / 100
+  }
+  // A font still loading reports the fallback's height: only keep a loaded one's
+  if (typeof document === 'undefined' || document.fonts.check(`100px '${font}'`)) heights.set(key, h)
+  return h
 }
 
 /**

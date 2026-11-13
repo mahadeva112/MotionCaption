@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
 import type { CompiledCue, Rgb, TimedTrack } from '@core/compile'
-import { countUp, fontShare } from '@core/look'
+import { countUp, LINE_OF_SIZE, textPx } from '@core/look'
 import { num, pt, valueAt } from '@core/sample'
 import { clock, media, useClock } from './clock'
-import { cssFace } from './fonts'
+import { cssFace, fontHeight } from './fonts'
 import { Icon } from './Icon'
 import { css, SAFE, timecode, type SafeArea } from './model'
 
@@ -336,8 +336,10 @@ export interface CapProps {
 
 export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMove, onUp, handles }: CapProps) {
   const L = cue.look
-  const share = fontShare(aspect)
-  const fontPx = L.size * W * share
+  // Sizes as Text+ makes them (core/look.ts textPx), so drawn clips and Text+ match
+  const fh = fontHeight(L.font, L.style)
+  const sizePx = (size: number) => textPx(size, aspect, W, fh, 1, 1).font
+  const fontPx = sizePx(L.size)
   const face = cssFace(L.style)
   const text = cue.tracks.filter((t) => t.target === 'text')
   const moveT = cue.tracks.filter((t) => t.target === 'move')
@@ -367,7 +369,8 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
   const O = L.outline
   const base: CSSProperties = {
     fontFamily: `'${L.font}', 'Nirmala UI', 'Segoe UI Emoji', 'Segoe UI Symbol', sans-serif`, fontWeight: face.weight, fontStyle: face.italic ? 'italic' : 'normal',
-    letterSpacing: `${(spacing - 1) * 0.5}em`, lineHeight: 1.2 * L.lineSpacing,
+    // Letter space in em, so a bigger word gets its own share as in Text+; a line pitch of fontHeight × Line height
+    letterSpacing: `${(spacing - 1) * fh / LINE_OF_SIZE}em`, lineHeight: fh * L.lineSpacing,
     // With an outline the shadow falls from the outlined shape (see behind)
     textShadow: O ? undefined : shadow,
   }
@@ -395,7 +398,7 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
     )
   }
   const thinDefs = O && O.outside === false
-    ? [...new Set([fontPx, ...cue.words.filter((w) => w.solo).map((w) => w.solo!.size * W * share)].map(thinBy))]
+    ? [...new Set([fontPx, ...cue.words.filter((w) => w.solo).map((w) => sizePx(w.solo!.size))].map(thinBy))]
     : []
   // Gradient letters: a layer around the letters whose background is cut to them, so the
   // box stays behind. A text shadow would draw over see-through letters, so that layer
@@ -481,7 +484,7 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
         const shift = cue.letters ? w.first * step : 0
         const fx = follower(w.tracks.filter((t) => t.input !== 'Opacity1'), ms - shift, W)
         const sc = Array.from(graphemes.segment(counted(s.text)), (x) => x.segment)
-        const px = s.size * W * share
+        const px = sizePx(s.size)
         const letters = (k?: string) => sc.map((c, j) => {
           const f = cue.letters ? follower(lettersT, ms - turn(w.first + j) * step, W) : undefined
           const st = k && f?.opacity !== undefined ? { ...f, opacity: f.opacity ** 3 } : f

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { compileCue, roughMeasure, withMotion } from './compile.ts'
-import { applyCase, autoWords, centerOf, DEFAULT_LOOK, layout, type Look } from './look.ts'
+import { applyCase, autoWords, centerOf, DEFAULT_LOOK, layout, textPx, type Look } from './look.ts'
 import type { Cue } from './srt.ts'
 
 const cue = (text: string, startMs = 0, endMs = 2400): Cue => ({ n: 1, index: 1, startMs, endMs, raw: text, text, line: 1 })
@@ -136,5 +136,21 @@ describe('motion', () => {
     const c = compileCue(cue('tilted'), 'fade', { look: L({ rotation: 5 }) })
     expect(c.tracks.find((t) => t.input === 'Angle')!.keys[0]!.v).toBe(5)
     expect(c.look.rotation).toBe(5)
+  })
+})
+
+describe('textPx: sizes as Text+ makes them (Resolve stills 2026-11-13, 1920×1080)', () => {
+  it('puts a line of Size 0.084 at 129 px, 193 px with Line height 1.5', () => {
+    expect(textPx(0.084, 16 / 9, 1920, 1.364, 1, 1).line).toBeCloseTo(129, 0)
+    expect(textPx(0.084, 16 / 9, 1920, 1.364, 1, 1.5).line).toBeCloseTo(193.5, 0)
+  })
+  it('fits the font to the line: Open Sans (1.364 em tall) and Vesper Libre (1.896 em) at their measured sizes', () => {
+    // Ink 1168 px wide at 80.64 px in the browser; Text+ drew 1369 px
+    expect((1168 * textPx(0.084, 16 / 9, 1920, 1.364, 1, 1).font) / 80.64).toBeCloseTo(1369, -1)
+    // Ink 1186 px wide at 144 px; Text+ drew 1008 px
+    expect((1186 * textPx(0.15, 16 / 9, 1920, 1.896, 1, 1).font) / 144).toBeCloseTo(1005, -1)
+  })
+  it('adds (letter space − 1) × Size × width per letter: +0.1 at 0.084 is 16 px a letter (452 px over 28)', () => {
+    expect(textPx(0.084, 16 / 9, 1920, 1.364, 1.1, 1).letter * 28).toBeCloseTo(452, 0)
   })
 })

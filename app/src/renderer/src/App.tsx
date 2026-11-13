@@ -9,7 +9,7 @@ import { nudge, onFrame, splitAt, splitText, type Span } from '@core/retime'
 import { parseSrt } from '@core/srt'
 import type { Cue } from '@core/srt'
 import type { LinkStatus, RenderProgress, TimelineData } from '../../preload'
-import { hasGlyphs, loadFonts, measure, type FontFamily } from './fonts'
+import { fontHeight, hasGlyphs, loadFonts, measure, type FontFamily } from './fonts'
 import { clock, media } from './clock'
 import { CaptionCard } from './CaptionCard'
 import { BUILT_IN_STYLES, Inspector, type Tab } from './Inspector'
@@ -468,7 +468,7 @@ export function App() {
     return em != null && highlight.rule === 'off' ? { [em]: { color: highlight.color, scale: highlight.scale } } : {}
   }, [edits, smartPicks, highlight])
   const opts = useCallback((n: number): Partial<CompileOpts> => ({
-    look: lookOf(look, edits, n), words: wordsOf(n), highlight, motion, measure, aspect, hasGlyphs,
+    look: lookOf(look, edits, n), words: wordsOf(n), highlight, motion, measure, aspect, hasGlyphs, fontHeight,
   }), [look, edits, highlight, motion, aspect, wordsOf])
 
   const compiled = useMemo(() => {
