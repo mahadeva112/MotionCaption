@@ -26,7 +26,7 @@ export interface Look {
   textCase: TextCase
   align: Align
   fill: Rgb
-  outline: { on: boolean; width: number; color: Rgb }
+  outline: Outline
   shadow: { on: boolean; blur: number; distance: number; opacity: number; color: Rgb }
   box: { on: boolean; color: Rgb; opacity: number; round: number; pad: number }
   /** 0–8, rows top to bottom: 0 top-left … 4 middle … 7 bottom-centre */
@@ -52,10 +52,27 @@ export interface Look {
 
 export type ImagePlace = 'left' | 'right' | 'above'
 
+/** The line around the letters. It is drawn behind all of them at once, so letters that
+ *  touch or overlap (the headline of Devanagari, Bengali and the like) show no seams. */
+export interface Outline {
+  on: boolean
+  width: number
+  color: Rgb
+  /** Only outside the letters, which keep their full weight; off, it is centred on the edge and eats into them */
+  outside: boolean
+  opacity: number
+  /** Soft edge, 0–1 */
+  soft: number
+  /** A second line around the first */
+  second: boolean
+  width2: number
+  color2: Rgb
+}
+
 export const DEFAULT_LOOK: Look = {
   font: 'Open Sans', style: 'Bold', size: 0.084, tracking: 1, lineSpacing: 1, textCase: 'as', align: 'center',
   fill: [1, 1, 1],
-  outline: { on: false, width: 0.05, color: [0, 0, 0] },
+  outline: { on: false, width: 0.05, color: [0, 0, 0], outside: true, opacity: 1, soft: 0, second: false, width2: 0.05, color2: [1, 1, 1] },
   shadow: { on: true, blur: 0.5, distance: 0.3, opacity: 0.6, color: [0, 0, 0] },
   box: { on: false, color: [0, 0, 0], opacity: 0.55, round: 0.3, pad: 0.3 },
   anchor: 7, x: 0, y: 0, rotation: 0, maxWidth: 0.8, lines: '2',
@@ -275,3 +292,6 @@ export function countUp(text: string, t: number, from: number): string {
     return s.length >= m.length ? s.slice(-m.length) : ' '.repeat(m.length - s.length) + s
   })
 }
+
+/** An outline with the settings older saved looks do not have */
+export const outlineOf = (o: Partial<Outline> | undefined): Outline => ({ ...DEFAULT_LOOK.outline, ...o })
