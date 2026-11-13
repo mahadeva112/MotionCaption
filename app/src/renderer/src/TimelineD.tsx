@@ -60,6 +60,7 @@ const KEYS = [
   'Ctrl+C / Ctrl+V: copy, and paste at the playhead',
   'Ctrl+D: duplicate right after',
   ', and . : move one frame (with Shift: 10 frames)',
+  'Ctrl+F: preview full screen (Esc to leave)',
   'Ctrl+Z / Ctrl+Y: undo / redo',
   '',
   'Home / End: playhead to the start / end',

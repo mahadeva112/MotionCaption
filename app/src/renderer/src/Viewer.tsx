@@ -93,9 +93,47 @@ export function Viewer(p: Props) {
   const wrap = useRef<HTMLDivElement>(null)
   const frame = useRef<HTMLDivElement>(null)
   const block = useRef<HTMLDivElement>(null)
+  const root = useRef<HTMLDivElement>(null)
   const [box, setBox] = useState({ w: 560, h: 600 })
   const [warn, setWarn] = useState(false)
-  const W = Math.round(Math.max(160, Math.min(box.w * FILL, Math.min(box.h * FILL, MAX_H) * aspect)))
+
+  // Full screen (Ctrl+F, as Resolve's Cinema Viewer): the preview fills the monitor, its
+  // buttons stay; Esc or Ctrl+F again comes back. The frame then grows past MAX_H.
+  // Where real full screen is refused (a browser that blocks it), it fills the window instead.
+  const [real, setReal] = useState(false)
+  const [inWindow, setInWindow] = useState(false)
+  const full = real || inWindow
+  const toggleFull = () => {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+    else if (inWindow) setInWindow(false)
+    else if (root.current?.requestFullscreen) {
+      // Some browsers neither grant nor refuse (the request just waits): fill the window meanwhile
+      const wait = setTimeout(() => { if (!document.fullscreenElement) setInWindow(true) }, 400)
+      root.current.requestFullscreen().then(() => clearTimeout(wait), () => { clearTimeout(wait); setInWindow(true) })
+    } else setInWindow(true)
+  }
+  useEffect(() => {
+    const onChange = () => {
+      const on = document.fullscreenElement === root.current
+      setReal(on)
+      if (on) setInWindow(false)
+    }
+    document.addEventListener('fullscreenchange', onChange)
+    return () => document.removeEventListener('fullscreenchange', onChange)
+  }, [])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && inWindow) { setInWindow(false); return }
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 'f') return
+      if ((e.target as HTMLElement).closest?.('input, textarea, select')) return
+      e.preventDefault()
+      toggleFull()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
+  const W = Math.round(Math.max(160, Math.min(box.w * (full ? 0.96 : FILL), Math.min(box.h * (full ? 0.96 : FILL), full ? Infinity : MAX_H) * aspect)))
   const H = Math.round(W / aspect)
 
   useEffect(() => {
@@ -245,8 +283,11 @@ export function Viewer(p: Props) {
   )
 
   return (
-    <div className={'viewer' + (p.loop ? ' trying' : '')}>
-      <div className="phead"><b>Preview</b>{p.videoTools}<span className="vlabel">{p.label}</span></div>
+    <div className={'viewer' + (p.loop ? ' trying' : '') + (full ? ' full' : '') + (inWindow ? ' inwin' : '')} ref={root}>
+      <div className="phead"><b>Preview</b>{p.videoTools}<span className="vlabel">{p.label}</span>
+        <span className="vtools"><button className="vt" onClick={toggleFull} title={full ? 'Leave full screen (Esc or Ctrl+F)' : 'Full screen (Ctrl+F)'}>
+          <Icon name={full ? 'unfull' : 'full'} /></button></span>
+      </div>
       <div className="vstage" ref={wrap}>{fr}</div>
       <div className="transport">
         <div className="scrub" onPointerDown={scrub} onPointerMove={scrub} title="Click or drag to move the playhead">
