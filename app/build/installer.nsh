@@ -19,6 +19,8 @@
   CopyFiles /SILENT "$INSTDIR\resources\MotionCaption.lua" "${MC_SCRIPTS}"
   CreateDirectory "${MC_DATA}\templates"
   CopyFiles /SILENT "$INSTDIR\resources\templates\*.drb" "${MC_DATA}\templates"
+  ; The still the script writes its files through in Resolve 21.1+ (main/bridgeFiles.ts)
+  CopyFiles /SILENT "$INSTDIR\resources\mc_mailbox.png" "${MC_DATA}"
 
   ; Where the app is, so the Resolve script can open it when there is nothing to place.
   ; The app writes this file again on every start.
@@ -32,5 +34,7 @@
   ${IfNot} ${isUpdated}
     Delete "${MC_SCRIPTS}\MotionCaption.lua"
     RMDir /r "${MC_DATA}"
+    ; "Start with Windows" (app.setLoginItemSettings names it by the AppUserModelId)
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "com.motioncaption.studio"
   ${EndIf}
 !macroend

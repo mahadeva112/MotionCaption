@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, protocol, session } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, session, Tray } from 'electron'
 import { createReadStream, watch } from 'node:fs'
 import { execFile } from 'node:child_process'
 import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
@@ -6,6 +6,7 @@ import { basename, dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { closeStage, renderCues, type RenderRequest } from './render.ts'
 import { setupUpdates } from './updater.ts'
+import { readBridge, writeInbox as writeInboxIn } from './bridgeFiles.ts'
 
 // Where Resolve looks for Workspace → Scripts entries, and where the bridge reads jobs.
 const APPDATA = process.env['APPDATA'] ?? app.getPath('appData')
@@ -28,6 +29,9 @@ const RENDERS = join(MC_DIR, 'renders')
 /** Timeline videos Resolve rendered for the preview, and which is the latest for each timeline */
 const PREVIEWS = join(MC_DIR, 'preview')
 const PREVIEW_INDEX = join(PREVIEWS, 'latest.json')
+/** The still the Resolve script writes its files through in Resolve 21.1+ (main/bridgeFiles.ts) */
+const MAILBOX = join(MC_DIR, 'mc_mailbox.png')
+const writeInbox = () => writeInboxIn(MC_DIR)
 
 // The preview plays timeline videos from mcvideo://file/<name>, only from PREVIEWS. Seeking
 // needs byte ranges, so the handler answers them itself.
@@ -73,7 +77,23 @@ async function sameFile(a: string, b: string): Promise<boolean> {
   }
 }
 
-function createWindow(): void {
+// The top-bar logo, for the title bar, taskbar and tray (build/icon.ico, made by scripts/make_icon.py)
+const ICON = app.isPackaged ? join(process.resourcesPath, 'icon.ico') : join(__dirname, '..', '..', 'build', 'icon.ico')
+
+/**
+ * Resolve 21.1+ cannot start programs from its scripts, so the app waits in the tray to be
+ * called: it starts with Windows (--background, no window), closing the window only hides it,
+ * and a click on MotionCaption in Resolve brings it forward (open.txt.csv, see watchOpen).
+ * Quit from the tray menu ends it.
+ */
+let mainWin: BrowserWindow | null = null
+let tray: Tray | null = null
+let quitting = false
+const BACKGROUND = '--background'
+/** Written once the app has turned "Start with Windows" on by itself, so turning it off sticks */
+const AUTOSTART_SET = join(MC_DIR, 'autostart.txt')
+
+function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -81,8 +101,7 @@ function createWindow(): void {
     minHeight: 700,
     backgroundColor: '#0e0f13',
     title: 'MotionCaption Studio',
-    // The top-bar logo, for the title bar and taskbar (build/icon.ico, made by scripts/make_icon.py)
-    icon: app.isPackaged ? join(process.resourcesPath, 'icon.ico') : join(__dirname, '..', '..', 'build', 'icon.ico'),
+    icon: ICON,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -90,14 +109,20 @@ function createWindow(): void {
       nodeIntegration: false,
     },
   })
+  mainWin = win
   win.setMenuBarVisibility(false)
+  win.on('close', (e) => {
+    if (quitting || !tray) return
+    e.preventDefault()
+    win.hide()
+  })
 
   // Tell the page when the Resolve script writes a new timeline.json. The folder is
   // watched, not the file, because the script replaces the file each time.
   mkdir(MC_DIR, { recursive: true }).then(() => {
     let t: NodeJS.Timeout | undefined
     const w = watch(MC_DIR, (_ev, name) => {
-      if (name !== 'timeline.json') return
+      if (name !== 'timeline.json' && name !== 'timeline.json.csv') return
       clearTimeout(t)
       t = setTimeout(() => { if (!win.isDestroyed()) win.webContents.send('timeline:changed') }, 150)
     })
@@ -109,7 +134,64 @@ function createWindow(): void {
   } else {
     win.loadFile(join(__dirname, '../renderer/index.html'))
   }
-  win.on('closed', () => closeStage())
+  win.on('closed', () => {
+    if (mainWin === win) mainWin = null
+    closeStage()
+  })
+  return win
+}
+
+/** Brings the window forward, making it first when the app started in the background */
+function showMain(): void {
+  const fresh = !(mainWin && !mainWin.isDestroyed())
+  const win = fresh ? createWindow() : mainWin!
+  // Windows keeps an app in the background from taking the foreground; on top for a moment gets it there
+  const forward = () => {
+    if (win.isDestroyed()) return
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.setAlwaysOnTop(true)
+    win.focus()
+    win.moveTop()
+    setTimeout(() => { if (!win.isDestroyed()) win.setAlwaysOnTop(false) }, 400)
+  }
+  // A new window shows itself and then the page takes a moment: forward again once it is drawn
+  if (fresh) win.once('ready-to-show', forward)
+  forward()
+}
+
+const loginItem = () => ({ path: process.execPath, args: [BACKGROUND] })
+const autoStartOn = () => app.getLoginItemSettings(loginItem()).openAtLogin
+function setAutoStart(on: boolean): void {
+  app.setLoginItemSettings({ ...loginItem(), openAtLogin: on })
+}
+
+function setupTray(): void {
+  tray = new Tray(ICON)
+  tray.setToolTip('MotionCaption Studio')
+  const menu = () => Menu.buildFromTemplate([
+    { label: 'Open MotionCaption Studio', click: showMain },
+    {
+      label: 'Start with Windows', type: 'checkbox', checked: app.isPackaged && autoStartOn(), enabled: app.isPackaged,
+      click: (item) => { setAutoStart(item.checked); tray?.setContextMenu(menu()) },
+    },
+    { type: 'separator' },
+    { label: 'Quit MotionCaption Studio', click: () => { quitting = true; app.quit() } },
+  ])
+  tray.setContextMenu(menu())
+  tray.on('click', showMain)
+}
+
+/** The Resolve script asks for the app by writing open.txt (open.txt.csv in Resolve 21.1+) */
+function watchOpen(): void {
+  mkdir(MC_DIR, { recursive: true }).then(() => {
+    let t: NodeJS.Timeout | undefined
+    watch(MC_DIR, (_ev, name) => {
+      if (name !== 'open.txt.csv' && name !== 'open.txt') return
+      clearTimeout(t)
+      t = setTimeout(showMain, 100)
+    })
+  }).catch(() => {})
 }
 
 /** The app's page, for the hidden window that draws captions */
@@ -143,7 +225,7 @@ ipcMain.handle('srt:open', async () => {
 /** The timeline the Resolve script last read, or null before the first click */
 ipcMain.handle('timeline:get', async () => {
   try {
-    return JSON.parse(await readFile(TIMELINE, 'utf8'))
+    return JSON.parse(await readBridge(TIMELINE))
   } catch {
     return null
   }
@@ -163,6 +245,7 @@ ipcMain.handle('link:status', async () => {
 ipcMain.handle('timeline:refresh', async () => {
   await mkdir(MC_DIR, { recursive: true })
   await writeFile(REFRESH, new Date().toISOString(), 'utf8')
+  await writeInbox().catch(() => {})
   return true
 })
 
@@ -171,17 +254,26 @@ ipcMain.handle('timeline:refresh', async () => {
  * Automation), so a Send needs no click there. Resolves to OK, NO_RESOLVE, NO_MENU …
  * or ERROR …, as printed by run-in-resolve.ps1.
  */
-ipcMain.handle('resolve:run', () => new Promise<string>((done) => {
+ipcMain.handle('resolve:run', async () => {
+  await writeInbox().catch(() => {})
+  return runInResolve()
+})
+
+const runInResolve = () => new Promise<string>((done) => {
   execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', resource('run-in-resolve.ps1')],
     { windowsHide: true, timeout: 20000 },
     (err, out) => done(String(out || '').trim().split(/\r?\n/).pop() || (err ? 'ERROR ' + err.message : 'ERROR no answer')))
-}))
+})
 
 ipcMain.handle('resolve:status', async () => ({
   resolveFound: await exists(RESOLVE_DIR),
   scriptInstalled: await exists(SCRIPT),
-  scriptCurrent: (await sameFile(resource('MotionCaption.lua'), SCRIPT)) && (await templatesCurrent()),
+  scriptCurrent: await installCurrent(),
 }))
+
+async function installCurrent(): Promise<boolean> {
+  return (await sameFile(resource('MotionCaption.lua'), SCRIPT)) && (await sameFile(resource('mc_mailbox.png'), MAILBOX)) && (await templatesCurrent())
+}
 
 /**
  * One Text+ template per frame rate (scripts/make_templates.py). Resolve converts a
@@ -202,6 +294,8 @@ async function templatesCurrent(): Promise<boolean> {
 async function install(): Promise<void> {
   await mkdir(SCRIPTS_DIR, { recursive: true })
   await copyFile(resource('MotionCaption.lua'), SCRIPT)
+  await mkdir(MC_DIR, { recursive: true })
+  await copyFile(resource('mc_mailbox.png'), MAILBOX)
   await mkdir(TEMPLATES, { recursive: true })
   for (const f of await templateFiles()) await copyFile(join(resource('templates'), f), join(TEMPLATES, f))
 }
@@ -212,16 +306,20 @@ ipcMain.handle('resolve:install', async () => {
 })
 
 ipcMain.handle('job:send', async (_e, lua: string) => {
-  if (!(await sameFile(resource('MotionCaption.lua'), SCRIPT)) || !(await templatesCurrent())) await install()
+  if (!(await installCurrent())) await install()
   await writeFile(JOB, lua, 'utf8')
+  await writeInbox()
   return JOB
 })
 
 /** The bridge's report for this job, or null while Resolve has not run it yet */
 ipcMain.handle('job:result', async (_e, jobId: string) => {
   try {
-    const r = JSON.parse(await readFile(RESULT, 'utf8')) as { jobId?: string }
-    return r.jobId === jobId ? r : null
+    const r = JSON.parse(await readBridge(RESULT)) as { jobId?: string }
+    if (r.jobId !== jobId) return null
+    // The job is done: the next inbox says so, so a click in Resolve does not place it again
+    await writeInbox().catch(() => {})
+    return r
   } catch {
     return null
   }
@@ -230,7 +328,7 @@ ipcMain.handle('job:result', async (_e, jobId: string) => {
 /** How far the Resolve script has got with this job, or null before it starts */
 ipcMain.handle('job:progress', async (_e, jobId: string) => {
   try {
-    const p = JSON.parse(await readFile(PROGRESS, 'utf8')) as { jobId?: string }
+    const p = JSON.parse(await readBridge(PROGRESS)) as { jobId?: string }
     return p.jobId === jobId ? p : null
   } catch {
     return null
@@ -268,13 +366,11 @@ ipcMain.handle('preview:keep', async (_e, key: string, file: string) => {
 // under that shortcut and shows its icon, not Electron's
 app.setAppUserModelId('com.motioncaption.studio')
 if (!app.requestSingleInstanceLock()) app.quit()
-app.on('second-instance', () => {
-  const win = BrowserWindow.getAllWindows()[0]
-  if (!win) return createWindow()
-  if (win.isMinimized()) win.restore()
-  win.show()
-  win.focus()
+app.on('second-instance', (_e, argv) => {
+  // Windows starting the app at login while it already runs changes nothing
+  if (!argv.includes(BACKGROUND)) showMain()
 })
+app.on('before-quit', () => { quitting = true })
 
 app.whenReady().then(() => {
   // Test hook: MC_RENDER_TEST=<request.json> draws its captions, writes <request.json>.out.json, and quits
@@ -294,7 +390,20 @@ app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((_wc, p, cb) => cb(fonts(p as string)))
   protocol.handle('mcvideo', serveVideo)
   setupUpdates()
-  createWindow()
+  setupTray()
+  watchOpen()
+  // Started by Windows at login: wait in the tray until Resolve or the tray asks for the window
+  if (!process.argv.includes(BACKGROUND)) createWindow()
+  writeInbox().catch(() => {})
+  // Start with Windows is on from the first run; after that it is whatever the tray menu says
+  if (app.isPackaged) {
+    exists(AUTOSTART_SET).then(async (done) => {
+      if (done) return
+      setAutoStart(true)
+      await mkdir(MC_DIR, { recursive: true })
+      await writeFile(AUTOSTART_SET, new Date().toISOString(), 'utf8')
+    }).catch(() => {})
+  }
   // Tell the Resolve script where this app is (the install folder can change on update).
   // Resolve's Lua opens files by the Windows ANSI code page, so a path with other letters
   // is left to the installer, which writes it in that code page.
@@ -303,9 +412,7 @@ app.whenReady().then(() => {
       .then(() => writeFile(join(MC_DIR, 'app.txt'), app.getPath('exe'), 'utf8'))
       .catch(() => {})
   }
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
+  app.on('activate', showMain)
 })
 
 app.on('window-all-closed', () => {
