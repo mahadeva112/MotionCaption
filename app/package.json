@@ -50,6 +50,7 @@
         "filter": [
           "MotionCaption.lua",
           "run-in-resolve.ps1",
+          "mc_mailbox.png",
           "templates/*.drb"
         ]
       },

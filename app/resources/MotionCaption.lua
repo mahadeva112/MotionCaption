@@ -50,20 +50,6 @@ local function try(fn)
     return nil, a
 end
 
-local function read_file(p)
-    local f = io.open(p, "rb")
-    if not f then return nil end
-    local s = f:read("*a"); f:close()
-    return s
-end
-
-local function write_file(p, s)
-    local f = io.open(p, "wb")
-    if not f then return false end
-    f:write(s); f:close()
-    return true
-end
-
 -- Resolve's Lua tables are not always {index = object}, and some carry extra
 -- string/number entries; keep only the objects, from whichever side they are on
 local function objects(t)
@@ -73,6 +59,109 @@ local function objects(t)
         elseif type(k) == "userdata" then out[#out + 1] = k end
     end
     return out
+end
+
+local rv = resolve or (fusion and fusion:GetResolve())
+local fu_ = fusion or fu
+
+-- ── Files ──────────────────────────────────────────────────────────────────
+-- Resolve 21.1 and later run menu scripts in a sandbox: no io, loadfile, dofile, os.remove
+-- or bmd.openfileexternal. What is left is enough to talk to the app another way:
+--   reading  the app writes inbox.lua, which calls fusion:SetData with the files this
+--            script reads (job.lua, result.json, sent_*.lua …); fusion:RunScript runs it
+--            (a moment later, so it is waited for) and fusion:GetData hands them over.
+--   writing  a small still (mc_mailbox.png) sits in the MotionCaption bin; the text goes
+--            into its Comments, hex-encoded between MCX and XMC, and MediaPool
+--            ExportMetadata writes that to <file>.csv (UTF-16), which the app decodes.
+-- What this script writes is also kept in Fusion's memory, so it reads its own latest
+-- result and records back within the same Resolve session even before the app has
+-- written a new inbox.
+local SANDBOX = not (type(io) == "table" and io.open)
+local INBOX, MAILBOX = BASE .. "inbox.lua", BASE .. "mc_mailbox.png"
+
+local function key_of(p) return ((p:match("[^\\/]+$") or p)):lower() end
+
+local inbox
+local function load_inbox()
+    if inbox then return inbox end
+    inbox = {}
+    if not (fu_ and bmd.fileexists(INBOX)) then return inbox end
+    try(function() fu_:SetData("MotionCaption.Inbox", nil) end)
+    try(function() fu_:RunScript(INBOX) end)
+    for _ = 1, 150 do
+        local t = try(function() return fu_:GetData("MotionCaption.Inbox") end)
+        if type(t) == "table" then inbox = t; break end
+        bmd.wait(0.02)
+    end
+    try(function() fu_:SetData("MotionCaption.Inbox", nil) end)
+    return inbox
+end
+
+local HEX = {}
+for i = 0, 255 do HEX[string.char(i)] = string.format("%02x", i) end
+
+local mailbox, mailboxPool
+local function mailbox_clip()
+    if mailbox then return mailbox, mailboxPool end
+    local project = rv and try(function() return rv:GetProjectManager():GetCurrentProject() end)
+    local mp = project and try(function() return project:GetMediaPool() end)
+    local root = mp and try(function() return mp:GetRootFolder() end)
+    if not root then return nil end
+    local bin
+    for _, sub in ipairs(objects(try(function() return root:GetSubFolderList() end))) do
+        if sub:GetName() == "MotionCaption" then bin = sub end
+    end
+    for _, c in ipairs(objects(bin and try(function() return bin:GetClipList() end))) do
+        if try(function() return c:GetName() end) == "mc_mailbox.png" then mailbox = c end
+    end
+    if not mailbox and bmd.fileexists(MAILBOX) then
+        bin = bin or try(function() return mp:AddSubFolder(root, "MotionCaption") end)
+        local was = try(function() return mp:GetCurrentFolder() end)
+        if bin then try(function() mp:SetCurrentFolder(bin) end) end
+        mailbox = objects(try(function() return mp:ImportMedia({ MAILBOX }) end))[1]
+        if was then try(function() mp:SetCurrentFolder(was) end) end
+    end
+    mailboxPool = mp
+    return mailbox, mp
+end
+
+local function read_file(p)
+    if SANDBOX then
+        local k = key_of(p)
+        local mine = try(function() return fu_:GetData("MotionCaption.File." .. k) end)
+        if type(mine) == "string" then return mine end
+        local v = load_inbox()[k]
+        return type(v) == "string" and v or nil
+    end
+    local f = io.open(p, "rb")
+    if not f then return nil end
+    local s = f:read("*a"); f:close()
+    return s
+end
+
+local function write_file(p, s)
+    if SANDBOX then
+        try(function() fu_:SetData("MotionCaption.File." .. key_of(p), s) end)
+        local clip, mp = mailbox_clip()
+        if not clip then return false end
+        local ok = try(function()
+            return clip:SetMetadata("Comments", "MCX" .. (s:gsub(".", HEX)) .. "XMC") and mp:ExportMetadata(p .. ".csv", { clip })
+        end)
+        try(function() clip:SetMetadata("Comments", "") end)
+        return ok and true or false
+    end
+    local f = io.open(p, "wb")
+    if not f then return false end
+    f:write(s); f:close()
+    return true
+end
+
+-- A Lua file as a function, or nil and why
+local function load_lua(p)
+    if not SANDBOX then return loadfile(p) end
+    local s = read_file(p)
+    if not s then return nil, "cannot open " .. p end
+    return loadstring(s, "=" .. key_of(p))
 end
 
 local function json(v)
@@ -94,7 +183,6 @@ local function json(v)
     return "{" .. table.concat(parts, ",") .. "}"
 end
 
-local rv = resolve or (fusion and fusion:GetResolve())
 local result = { ok = false, placed = 0, failed = 0, errors = {} }
 -- Set when there is nothing to place: the script opens the app and leaves result.json alone
 local idle = false
@@ -102,6 +190,7 @@ local idle = false
 -- The installer, and the app on every start, write where the app is to app.txt
 -- (the install folder can be changed during setup)
 local function is_file(p)
+    if SANDBOX then return bmd.fileexists(p) == true end
     local f = io.open(p, "rb")
     if not f then return false end
     f:close()
@@ -109,6 +198,11 @@ local function is_file(p)
 end
 
 local function open_app()
+    -- The sandbox cannot start programs. The app waits in the tray (it starts with Windows)
+    -- and comes forward when this request appears as open.txt.csv
+    if SANDBOX and not bmd.openfileexternal then
+        return write_file(BASE .. "open.txt", os.date("%Y-%m-%dT%H:%M:%S") .. " " .. tostring(os.clock()))
+    end
     local path = (read_file(BASE .. "app.txt") or ""):gsub("^%s+", ""):gsub("%s+$", "")
     if path == "" or not is_file(path) then
         path = (os.getenv("LOCALAPPDATA") or "") .. "\\Programs\\MotionCaption Studio\\MotionCaption Studio.exe"
@@ -125,7 +219,7 @@ end
 
 -- ── Job ────────────────────────────────────────────────────────────────────
 local function load_job()
-    local fn, err = loadfile(JOB)
+    local fn, err = load_lua(JOB)
     if not fn then return nil, "No job found. In MotionCaption, press “Send to Resolve” first. (" .. tostring(err) .. ")" end
     setfenv(fn, {}) -- no globals: the job can only be data
     local ok, job = pcall(fn)
@@ -217,7 +311,7 @@ local function template_of(mp, rate)
 
     local tag = template_tag(rate)
     local file = tag and TEMPLATES .. "Template_" .. tag .. ".drb"
-    if file and read_file(file) then
+    if file and is_file(file) then
         bin = bin or try(function() return mp:AddSubFolder(root, "MotionCaption") end)
         local sub = bin and try(function() return mp:AddSubFolder(bin, "Text+ " .. tag .. " fps") end)
         local was = try(function() return mp:GetCurrentFolder() end)
@@ -619,7 +713,12 @@ local function build(item, cue)
     if not ok then error(err, 0) end
 end
 
+-- In the sandbox each write is a metadata export (~40 ms), so progress is written at most
+-- four times a second, and always at the end of a phase
+local lastProgress = -1
 local function progress(jobId, phase, done, total)
+    if SANDBOX and done ~= total and os.clock() - lastProgress < 0.25 then return end
+    lastProgress = os.clock()
     write_file(PROGRESS, json({ jobId = jobId, phase = phase, done = done, total = total }))
 end
 
@@ -709,7 +808,7 @@ local function made_by(rec, trackName)
 end
 
 local function load_record(path)
-    local fn = loadfile(path)
+    local fn = load_lua(path)
     local t = fn and (setfenv(fn, {}) and try(fn))
     return type(t) == "table" and t or nil
 end
@@ -1160,9 +1259,9 @@ local function place(job, tl, project, mp, tag)
                 local t = os.clock() + 0.4
                 while os.clock() < t do end
                 local p = BASE .. "stills\\" .. (tag and (tag .. "_") or "") .. "c" .. st.n .. "_" .. st.ms .. ".jpg"
-                os.remove(p)
+                if os.remove then os.remove(p) end
                 try(function() project:ExportCurrentFrameAsStill(p) end)
-                if read_file(p) then saved = saved + 1 end
+                if is_file(p) then saved = saved + 1 end
             end
         end
         log("Stills saved: " .. saved .. " of " .. #test.stills .. " → " .. BASE .. "stills\\")
@@ -1367,7 +1466,7 @@ local function render_preview(job, project, tl)
     log("OK    Left out of the video: " .. #tracksOff .. " MC tracks, " .. #clipsOff .. " Text+ layers")
 
     local file = P.dir .. P.name .. ".mp4"
-    os.remove(file)
+    if os.remove then os.remove(file) end
     local id
     local ok, err = pcall(function()
         try(function() project:SetCurrentRenderMode(1) end) -- one file for the whole timeline
@@ -1564,6 +1663,7 @@ end
 local function reset()
     result = { ok = false, placed = 0, failed = 0, errors = {} }
     lines, probes, idle = {}, {}, false
+    inbox = nil
 end
 
 -- One pass: place the waiting job, or with none, read the timeline. True when idle.
@@ -1582,6 +1682,10 @@ local function run_once()
 end
 
 local function job_id()
+    if SANDBOX then
+        inbox = nil -- the Link window asks again and again: read the app's latest inbox
+        return ((read_file(JOB) or ""):sub(1, 600)):match('id = "([^"]+)"')
+    end
     local f = io.open(JOB, "rb")
     if not f then return nil end
     local head = f:read(600) or ""
