@@ -153,4 +153,10 @@ describe('textPx: sizes as Text+ makes them (Resolve stills 2026-11-13, 1920×10
   it('adds (letter space − 1) × Size × width per letter: +0.1 at 0.084 is 16 px a letter (452 px over 28)', () => {
     expect(textPx(0.084, 16 / 9, 1920, 1.364, 1.1, 1).letter * 28).toBeCloseTo(452, 0)
   })
+  it('sizes 1080×1920 by the same rule (Resolve 21.2 stills 2026-11-16): lines 69 px apart at 0.08, 34.5 at 0.04', () => {
+    expect(textPx(0.08, 9 / 16, 1080, 1.362, 1, 1).line).toBeCloseTo(69, 0)
+    expect(textPx(0.04, 9 / 16, 1080, 1.362, 1, 1).line).toBeCloseTo(34.5, 0)
+    // Letter space 1.2 over ten letters: 154 px wider (nine gaps between the outer letters)
+    expect(textPx(0.08, 9 / 16, 1080, 1.362, 1.2, 1).letter * 9).toBeCloseTo(155, -1)
+  })
 })

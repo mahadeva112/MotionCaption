@@ -134,22 +134,38 @@ export type Measure = (text: string, font: string, style: string) => number
 export type FontHeight = (font: string, style: string) => number
 
 /**
- * How Text+ sizes text (Resolve stills 2026-11-13, 1920×1080, Open Sans and Vesper Libre).
- * With U = Size × sizeUnit(aspect) × frame width:
+ * How Text+ sizes text (Resolve stills: 1920×1080 on 2026-11-13, 1080×1920 in Resolve 21.2
+ * on 2026-11-16, Open Sans and Vesper Libre). With U = Size × frame width, on every frame shape:
  *  - one line is LINE_OF_SIZE × U tall, times Line height (font or not);
  *  - the font's ascent + descent fills that line, so its em is LINE_OF_SIZE × U ÷ fontHeight;
  *  - Letter space adds (value − 1) × U after every letter (grapheme), whatever the font.
- * The same Size draws about 17% bigger, relative to frame width, on 1080×1920 than on
- * 1920×1080 (earlier stills), hence sizeUnit.
+ * (Up to 2.1.1 the app drew 9:16 about 17% bigger than this; the 2026-11-16 stills showed
+ * Text+ does not.)
  */
 export const LINE_OF_SIZE = 0.8
-export const sizeUnit = (aspect: number) => (aspect >= 1 ? 1 : 1 + (1 - aspect) * 0.4)
 /** Ascent + descent when the real font is not at hand (tests, scripts) */
 export const roughFontHeight: FontHeight = () => 1.36
 
+/**
+ * How Text+ draws outline, shadow and box, from the bridge's inputs (Resolve 21.2 stills,
+ * 1080×1920 at Size 0.08 and 0.04, and 1920×1080, 2026-11-16). U = Size × frame width, as in textPx.
+ *  - Outline Thickness t reaches 0.5 × t × U past the letters, with round corners. Centred
+ *    or outside only, the letters stay whole on top of it.
+ *  - Shadow Offset d moves it d × U; Softness s blurs it by a gaussian of σ ≈ s × SOFT_W ×
+ *    frame width, whatever the Size (12.5 px at 1080 wide and 20.5 at 1920 for s = 16).
+ *  - The box is the line box (ascent to descent), widened at each end by the font's descent,
+ *    then by ExtendHorizontal × U and ExtendVertical × U; Round r rounds its corners by r × U.
+ */
+export const SOFT_W = 0.0111 / 16
+/** The look's settings as the bridge hands them to Text+ (resources/MotionCaption.lua shade) */
+export const OUTLINE_REACH = 0.5
+export const SHADOW_OFFSET = 0.02
+export const SHADOW_SOFT = 16
+export const BOX_EXTEND = { x: 0.4, y: 0.25 }
+
 /** CSS sizes for a caption drawn W pixels wide: font size, extra space per letter and line pitch, in px */
-export function textPx(size: number, aspect: number, W: number, fontHeight: number, tracking: number, lineSpacing: number) {
-  const u = size * sizeUnit(aspect) * W
+export function textPx(size: number, _aspect: number, W: number, fontHeight: number, tracking: number, lineSpacing: number) {
+  const u = size * W
   return { font: (LINE_OF_SIZE * u) / fontHeight, letter: (tracking - 1) * u, line: LINE_OF_SIZE * u * lineSpacing }
 }
 

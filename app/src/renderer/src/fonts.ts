@@ -88,6 +88,24 @@ export const fontHeight: FontHeight = (font, style) => {
   return h
 }
 
+const descents = new Map<string, number>()
+
+/** The font's descent in em: Text+ widens a box by it at each end (core/look.ts BOX_EXTEND) */
+export const fontDescent = (font: string, style: string): number => {
+  const key = font + '|' + style
+  const hit = descents.get(key)
+  if (hit !== undefined) return hit
+  let d = 0.3
+  if (ctx) {
+    const f = cssFace(style)
+    ctx.font = `${f.italic ? 'italic ' : ''}${f.weight} 100px '${font}', 'Nirmala UI', sans-serif`
+    const m = ctx.measureText('Hg')
+    if (m.fontBoundingBoxDescent > 0) d = m.fontBoundingBoxDescent / 100
+  }
+  if (typeof document === 'undefined' || document.fonts.check(`100px '${font}'`)) descents.set(key, d)
+  return d
+}
+
 /**
  * Does this font draw the text itself? `measure` falls back to Nirmala UI for letters a
  * font lacks, so a font without them comes out exactly as wide as Nirmala UI does.
