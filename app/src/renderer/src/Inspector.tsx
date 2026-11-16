@@ -343,15 +343,10 @@ export function Inspector(p: Props) {
               <Slider label="Line height" value={L.lineSpacing} r={lk('lineSpacing')} min={0.7} max={1.8} onChange={(v) => p.onLook({ lineSpacing: v })} />
             </Section>
             <Section title="Fill" r={lk('fill')}><Color label="Colour" value={L.fill} r={lk('fill')} onChange={(c) => p.onLook({ fill: c })} /></Section>
-            <Section title={<>Outline <Toggle on={OL.on} onChange={(on) => setO({ on })}>On</Toggle></>} off={!OL.on} r={lk('outline')}>
+            <Section title={<>Stroke <Toggle on={OL.on} onChange={(on) => setO({ on })}>On</Toggle></>} off={!OL.on} r={lk('outline')}>
               <Slider label="Width" value={OL.width} r={ol('width')} min={0.01} max={0.5} step={0.005} onChange={(v) => setO({ width: v })} />
               <Color label="Colour" value={OL.color} r={ol('color')} onChange={(c) => setO({ color: c })} />
-              <Row label="Border" r={ol('outside')}>
-                <Toggle on={OL.outside} onChange={(outside) => setO({ outside })}>Outer border only</Toggle>
-              </Row>
-              <p className="hint2">{OL.outside
-                ? 'The line sits outside the letters, so they keep their full weight. Best for Hindi, Bengali and other Indian scripts.'
-                : 'The line sits on the edge of the letters and eats into them a little.'}</p>
+              <p className="hint2">A thin line around each letter, behind it, so the letters keep their full weight. For a background behind the text, use Box behind text.</p>
               <Slider label="Opacity" value={OL.opacity} r={ol('opacity')} min={0} max={1} onChange={(v) => setO({ opacity: v })} />
               <Slider label="Softness" value={OL.soft} r={ol('soft')} min={0} max={1} onChange={(v) => setO({ soft: v })} />
               <Row label="Second line" r={ol('second')}>

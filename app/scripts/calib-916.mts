@@ -4,16 +4,17 @@
 //                                        1080×1920 timeline MC_Calib916 with a still of each
 //   node scripts/calib-916.mts draw <req.json>   a drawing request for the app's test hook:
 //                                        npm run build && set MC_RENDER_TEST=<req.json> && npx electron .
-// Add 2 at the end for the second round (Size, box start, blur), 3 for the third (1920×1080). Every caption is still (Fade, a still at 1200 ms, when it is fully in).
+// Add 2 at the end for the second round (Size, box start, blur), 3 for the third (1920×1080), 4 for the stroke and the shadow under the box. Every caption is still (Fade, a still at 1200 ms, when it is fully in).
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { compileCue, type CompiledCue } from '../src/core/compile.ts'
-import { DEFAULT_LOOK, type Look } from '../src/core/look.ts'
+import { DEFAULT_LOOK, type Look, type WordLook } from '../src/core/look.ts'
 import { jobToLua, makeJob } from '../src/core/job.ts'
 import { writeInbox } from '../src/main/bridgeFiles.ts'
 import type { Cue } from '../src/core/srt.ts'
 
 const wide = process.argv.includes('3')
+const stroke = process.argv.includes('4')
 const W = wide ? 1920 : 1080
 const H = wide ? 1080 : 1920
 const aspect = W / H
@@ -69,16 +70,25 @@ const ROUND3: [string, string, Partial<Look>][] = [
   ['16:9 Box pad 1, round 0.5', 'HHHH', box(1, 0.5)],
   ['16:9 Vesper Libre Hindi, outline 0.2, default shadow', 'प्रदूषण के नाम पर', { font: 'Vesper Libre', outline: { ...DEFAULT_LOOK.outline, on: true, width: 0.2, color: [0, 0, 0] }, shadow: DEFAULT_LOOK.shadow }],
 ]
-export const CASES = wide ? ROUND3 : process.argv.includes('2') ? ROUND2 : ROUND1
-const tag = wide ? 'calib169' : process.argv.includes('2') ? 'calib916b' : 'calib916'
+// Round 4, on 1080×1920: the thin stroke, and the shadow under the box
+const strokeOf = (width: number, color: readonly [number, number, number] = R) => ({ outline: { ...DEFAULT_LOOK.outline, on: true, width, color } })
+const ROUND4: [string, string, Partial<Look>, Record<number, WordLook>?][] = [
+  ['Stroke 0.1', 'HHHH', strokeOf(0.1)],
+  ['Stroke 0.3', 'HHHH', strokeOf(0.3)],
+  ['Stroke 0.5 Hindi', 'प्रदूषण के नाम पर', { font: 'Vesper Libre', ...strokeOf(0.5) }],
+  ['Box 0.6, stroke 0.2 black, shadow, Hindi', 'प्रदूषण के नाम पर', { font: 'Vesper Libre', box: { on: true, color: B, opacity: 0.8, round: 0.3, pad: 0.6 }, ...strokeOf(0.2, [0, 0, 0]), shadow: DEFAULT_LOOK.shadow }],
+  ['Rectangle box 0.5', 'HHHH', { box: { on: true, color: B, opacity: 1, round: 0.3, pad: 0.5 } }],
+]
+export const CASES: [string, string, Partial<Look>, Record<number, WordLook>?][] = stroke ? ROUND4 : wide ? ROUND3 : process.argv.includes('2') ? ROUND2 : ROUND1
+const tag = stroke ? 'calib_stroke' : wide ? 'calib169' : process.argv.includes('2') ? 'calib916b' : 'calib916'
 
 const cues: CompiledCue[] = []
 let next = 1000
-CASES.forEach(([, text, look], i) => {
+CASES.forEach(([, text, look, words], i) => {
   const n = i + 1
   const cue: Cue = { n, index: n, startMs: next, endMs: next + LEN, raw: text, text, line: 0 }
   next += LEN + GAP
-  cues.push(compileCue(cue, 'fade', { aspect, look: { ...DEFAULT_LOOK, ...base, ...look }, hasGlyphs: () => true }))
+  cues.push(compileCue(cue, 'fade', { aspect, look: { ...DEFAULT_LOOK, ...base, ...look }, words: words ?? {}, hasGlyphs: () => true }))
 })
 
 const [mode, req] = process.argv.slice(2)
@@ -86,7 +96,7 @@ const MC = join(process.env['APPDATA'] ?? '.', 'MotionCaption')
 if (mode === 'job') {
   mkdirSync(join(MC, 'stills'), { recursive: true })
   const job = makeJob('Calibration 9x16.srt', cues, {
-    newTimeline: wide ? 'MC_Calib169' : process.argv.includes('2') ? 'MC_Calib916b' : 'MC_Calib916', size: { width: W, height: H }, openLog: true,
+    newTimeline: stroke ? 'MC_CalibStroke' : wide ? 'MC_Calib169' : process.argv.includes('2') ? 'MC_Calib916b' : 'MC_Calib916', size: { width: W, height: H }, openLog: true,
     stills: cues.map((c) => ({ n: c.n, ms: STILL_MS })),
   })
   writeFileSync(join(MC, 'job.lua'), jobToLua(job), 'utf8')

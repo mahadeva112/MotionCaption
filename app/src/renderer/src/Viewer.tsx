@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
 import type { CompiledCue, Rgb, TimedTrack } from '@core/compile'
-import { BOX_EXTEND, countUp, LINE_OF_SIZE, OUTLINE_REACH, SHADOW_OFFSET, SHADOW_SOFT, SOFT_W, textPx } from '@core/look'
+import { BOX_EXTEND, countUp, LINE_OF_SIZE, OUTLINE_REACH, SHADOW_OFFSET, SHADOW_SOFT, SOFT_W, STROKE_THICK, textPx } from '@core/look'
 import { num, pt, valueAt } from '@core/sample'
 import { clock, media, useClock } from './clock'
 import { cssFace, fontDescent, fontHeight } from './fonts'
@@ -378,7 +378,7 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
     color: css(L.shadow.color, L.shadow.opacity),
   }
   const shadow = sh ? `${sh.off}px ${sh.off}px ${2 * sh.sigma}px ${sh.color}` : undefined
-  const dropShadow = sh ? `drop-shadow(${sh.off}px ${sh.off}px ${sh.sigma}px ${sh.color})` : undefined
+  const shadowId = sh ? `mc-shadow-${Math.round(sh.off * 100)}-${Math.round(sh.sigma * 100)}-${L.shadow!.color.map((c) => Math.round(c * 255)).join('-')}-${Math.round(L.shadow!.opacity * 100)}` : ''
   const O = L.outline
   // Text+ adds letter space between letters only: CSS adds it after the last letter of a
   // line too, which would push a centred line off by half a space
@@ -390,49 +390,56 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
     // Letter space in em, so a bigger word gets its own share as in Text+; a line pitch of fontHeight × Line height
     letterSpacing: letterSpace, lineHeight: fh * L.lineSpacing,
   }
-  // The shadow falls from the whole text at once, as in Text+: a text shadow on each letter
-  // would also darken the letter before it. With an outline it falls from the outlined
-  // shape (see behind).
-  const textLayerShadow = O ? undefined : dropShadow
-  // The outline is drawn as copies of the letters behind them, all at once. A stroke on
-  // each letter would cross the letters next to it where they join (the headline of
-  // Devanagari, Bengali…) and show seams. Text+ keeps the letters whole on top of it,
-  // centred or not, and rounds its corners: a stroke reaches half the way (its corners
-  // are sharp), and a filter (roundDefs) grows that shape the other half, rounding them.
-  const reachOf = (px: number) => (O ? Math.max(0.5, OUTLINE_REACH * O.width * unitOf(px)) : 0)
-  const reach2Of = (px: number) => (O?.second ? reachOf(px) + Math.max(0.5, OUTLINE_REACH * O.second.width * unitOf(px)) : 0)
+  // The stroke is drawn as copies of the letters behind them, all
+  // at once. A stroke on each letter would cross the letters next to it where they join
+  // (the headline of Devanagari, Bengali…) and show seams. Text+ keeps the letters whole on
+  // top of it, centred or not, and rounds its corners: a stroke reaches half the way (its
+  // corners are sharp), and a filter (roundDefs) grows that shape the other half, rounding them.
+  const reachOf = (px: number) => (O ? Math.max(0.5, OUTLINE_REACH * STROKE_THICK * O.width * unitOf(px)) : 0)
+  const reach2Of = (px: number) => (O?.second ? reachOf(px) + Math.max(0.5, OUTLINE_REACH * STROKE_THICK * O.second.width * unitOf(px)) : 0)
+  // A thin stroke is drawn as it is (twice the reach, centred on the edge); a wider one
+  // reaches half way and the rounding filter grows it the rest
+  const strokeCss = (reach: number) => `${roundFilter(reach) ? reach : 2 * reach}px`
+  const line = (c: Rgb, reach: number, k: string, pad: string | number, copy: (layer: string) => ReactNode) => (
+    <span key={k} className="vline" style={{ padding: pad, color: css(c), WebkitTextStroke: `${strokeCss(reach)} ${css(c)}`, filter: roundFilter(reach) }}>{copy(k)}</span>
+  )
+  /** The shadow, under the box and everything else, as in Text+: it falls from the letters
+   *  with their stroke, all at once (a text shadow on each letter would also darken the
+   *  letter before it), and only the shadow is drawn (filter shadowId) */
+  const shade = (px: number, pad: string | number, copy: (layer: string) => ReactNode) => {
+    if (!sh) return null
+    const reach = O ? (O.second ? reach2Of(px) : reachOf(px)) : 0
+    const st: CSSProperties = reach
+      ? { padding: pad, WebkitTextStroke: `${strokeCss(reach)} #000`, filter: [roundFilter(reach), `url(#${shadowId})`].filter(Boolean).join(' ') }
+      : { padding: pad, filter: `url(#${shadowId})` }
+    return <span className="vback" aria-hidden><span className="vline" style={{ color: '#000', ...st }}>{copy('sh')}</span></span>
+  }
   const behind = (px: number, pad: string | number, copy: (layer: string) => ReactNode) => {
     if (!O) return null
-    const line = (c: Rgb, reach: number, k: string) => (
-      <span key={k} className="vline" style={{ padding: pad, color: css(c), WebkitTextStroke: `${reach}px ${css(c)}`, filter: roundFilter(reach) }}>{copy(k)}</span>
-    )
     const sw = reachOf(px)
     const sw2 = reach2Of(px)
     return (
-      <span className="vback" aria-hidden style={{ filter: dropShadow }}>
-        <span className="vback" style={{ opacity: O.opacity ?? 1, filter: O.soft ? `blur(${O.soft * px * 0.08}px)` : undefined }}>
-          {O.second && line(O.second.color, sw2, 'o2')}
-          {line(O.color, sw, 'o1')}
-        </span>
+      <span className="vback" aria-hidden style={{ opacity: O.opacity ?? 1, filter: O.soft ? `blur(${O.soft * px * 0.08}px)` : undefined }}>
+        {O.second && line(O.second.color, sw2, 'o2', pad, copy)}
+        {line(O.color, sw, 'o1', pad, copy)}
       </span>
     )
   }
   // One rounding filter per outline reach: a gaussian of the stroked letters, cut at the
   // level a straight edge reaches half the outline further out (ROUND_Z deviations)
   const roundId = (reach: number) => `mc-round-${Math.round(reach * 100)}`
-  const roundFilter = (reach: number) => (reach / 2 / ROUND_Z >= 0.25 ? `url(#${roundId(reach)})` : undefined)
+  const roundFilter = (reach: number) => (reach / 2 / ROUND_Z >= 1 ? `url(#${roundId(reach)})` : undefined)
   const roundDefs = O
     ? [...new Set([fontPx, ...cue.words.filter((w) => w.solo && !w.box).map((w) => sizePx(w.solo!.size))]
-      .flatMap((px) => [reachOf(px), ...(O.second ? [reach2Of(px)] : [])]))].filter((r) => roundFilter(r))
+      .flatMap((px) => [...(O ? [reachOf(px)] : []), ...(O?.second ? [reach2Of(px)] : [])]))]
+      .filter((r) => roundFilter(r))
     : []
   // Gradient letters: a layer around the letters whose background is cut to them, so the
-  // box stays behind. A text shadow would draw over see-through letters, so that layer
-  // casts a drop shadow instead.
+  // box stays behind.
   const G = L.gradient
   const gradLayer: CSSProperties | null = G ? {
     backgroundImage: `linear-gradient(${G.angle}deg, ${css(L.fill)}, ${css(G.color)})`, WebkitBackgroundClip: 'text', backgroundClip: 'text',
     color: 'transparent', textShadow: 'none',
-    filter: O ? undefined : dropShadow,
   } : null
   const img = L.image
   // Boxes as Text+ draws them (core/look.ts): the line box, wider by the font's descent at each end
@@ -496,6 +503,16 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
           })}
         </svg>
       )}
+      {sh && (
+        <svg className="vdefs" width="0" height="0" aria-hidden>
+          <filter id={shadowId} x="-100%" y="-100%" width="300%" height="300%" colorInterpolationFilters="sRGB">
+            <feGaussianBlur in="SourceAlpha" stdDeviation={sh.sigma} />
+            <feOffset dx={sh.off} dy={sh.off} result="s" />
+            <feFlood floodColor={css(L.shadow!.color)} floodOpacity={L.shadow!.opacity} />
+            <feComposite in2="s" operator="in" />
+          </filter>
+        </svg>
+      )}
       <div
         ref={blockRef}
         className={'vblock' + (handles ? ' edit' : '')}
@@ -505,12 +522,14 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
           left: L.center[0] * W, top: (1 - L.center[1]) * H, fontSize: fontPx, color: css(L.fill), textAlign: (['left', 'center', 'right'] as const)[L.align],
           opacity, // Text+ softness, scaled with the frame so a drawn frame matches the preview
           filter: blur ? `blur(${blur * W * 0.0003}px)` : undefined,
-          ...(L.box ? { background: css(L.box.color, L.box.opacity), padding: boxPad, borderRadius: L.box.round * U } : {}),
+          ...(L.box ? { padding: boxPad } : {}),
         }}
       >
+        {shade(fontPx, boxPad, (k) => chars.map((ch, i) => (ch === '\n' ? <br key={k + i} /> : charEl(i, k))))}
+        {L.box && <span className="vback" aria-hidden style={{ background: css(L.box.color, L.box.opacity), borderRadius: L.box.round * U }} />}
         {img && <img className={'vimg ' + img.place} src={img.src} alt="" draggable={false} style={{ height: img.size * fontPx }} />}
-        {behind(fontPx, L.box ? boxPad : 0, (k) => chars.map((ch, i) => (ch === '\n' ? <br key={k + i} /> : charEl(i, k))))}
-        <span className={G ? 'vtext grad' : 'vtext'} style={gradLayer ?? { filter: textLayerShadow }}>
+        {behind(fontPx, boxPad, (k) => chars.map((ch, i) => (ch === '\n' ? <br key={k + i} /> : charEl(i, k))))}
+        <span className={G ? 'vtext grad' : 'vtext'} style={gradLayer ?? undefined}>
           {chars.map((ch, i) => (ch === '\n' ? <br key={i} /> : charEl(i)))}
         </span>
         {handles && <>
@@ -538,8 +557,9 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
               ...(w.glow ? { textShadow: `0 0 .35em ${css(w.color)}, 0 0 .8em ${css(w.color)}` } : {}),
               ...(w.box ? { background: css(w.box), padding: wordBoxPad(px), borderRadius: WORD_BOX.round * unitOf(px), textShadow: shadow } : {}),
             }}>
+            {!w.box && shade(px, 0, (k) => <span key={k} className="vsolo-in" style={inner}>{letters(k)}</span>)}
             {!w.box && behind(px, 0, (k) => <span key={k} className="vsolo-in" style={inner}>{letters(k)}</span>)}
-            <span className="vsolo-in front" style={{ ...inner, filter: w.box ? undefined : textLayerShadow }}>{letters()}</span>
+            <span className="vsolo-in front" style={inner}>{letters()}</span>
           </div>
         )
       })}

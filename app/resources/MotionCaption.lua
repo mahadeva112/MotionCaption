@@ -524,7 +524,8 @@ local function shade(t, L, withBox)
         local o = L.outline
         -- Outside only keeps the letters whole: an outline over them shows seams where the
         -- letters of Indian scripts join. Round joins keep corners from spiking.
-        element(t, 2, { ElementShape2 = 1, Thickness2 = o.width, Red2 = c[1], Green2 = c[2], Blue2 = c[3],
+        -- The stroke stays thin and follows the letters: Width x 0.3 (core/look.ts STROKE_THICK)
+        element(t, 2, { ElementShape2 = 1, Thickness2 = o.width * 0.3, Red2 = c[1], Green2 = c[2], Blue2 = c[3],
             Opacity2 = o.opacity or 1, OutsideOnly2 = (o.outside == false) and 0 or 1, JoinStyle2 = 1,
             SoftnessX2 = (o.soft or 0) * 8, SoftnessY2 = (o.soft or 0) * 8 })
     end

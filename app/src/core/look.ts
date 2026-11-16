@@ -52,8 +52,9 @@ export interface Look {
 
 export type ImagePlace = 'left' | 'right' | 'above'
 
-/** The line around the letters. It is drawn behind all of them at once, so letters that
- *  touch or overlap (the headline of Devanagari, Bengali and the like) show no seams. */
+/** The stroke: a thin line around the letters, following their shape (the Inspector's
+ *  Stroke). It is drawn behind all of them at once, so letters that touch or overlap (the
+ *  headline of Devanagari, Bengali and the like) show no seams. */
 export interface Outline {
   on: boolean
   width: number
@@ -159,6 +160,9 @@ export const roughFontHeight: FontHeight = () => 1.36
 export const SOFT_W = 0.0111 / 16
 /** The look's settings as the bridge hands them to Text+ (resources/MotionCaption.lua shade) */
 export const OUTLINE_REACH = 0.5
+/** Text+ Thickness for a stroke Width: the stroke stays thin and follows the letters (as the
+ *  app drew it up to 2.2.0) instead of swelling into a shape around the whole line */
+export const STROKE_THICK = 0.3
 export const SHADOW_OFFSET = 0.02
 export const SHADOW_SOFT = 16
 export const BOX_EXTEND = { x: 0.4, y: 0.25 }
