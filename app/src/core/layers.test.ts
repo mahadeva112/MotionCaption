@@ -22,7 +22,8 @@ describe('Text+ layers', () => {
   })
 
   it('undoes the bridge’s outline, shadow and box values', () => {
-    const l = lookOfLayer({ Enabled2: 1, Thickness2: 0.08, Red2: 1, Green2: 0, Blue2: 0,
+    // The stroke goes to Text+ at 0.3 of its Width (look.ts STROKE_THICK)
+    const l = lookOfLayer({ Enabled2: 1, Thickness2: 0.024, Red2: 1, Green2: 0, Blue2: 0,
       Enabled3: 1, SoftnessX3: 8, Offset3: [0.006, -0.006], Opacity3: 0.5,
       Enabled4: 1, Opacity4: 0.7, Round4: 0.2, ExtendHorizontal4: 0.12, HorizontalJustificationNew: 0 })
     expect(l.outline).toMatchObject({ on: true, width: 0.08, color: [1, 0, 0], outside: true, opacity: 1, soft: 0, second: false })

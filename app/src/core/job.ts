@@ -89,7 +89,7 @@ export type SentCue = CompiledCue & { sig: string; render?: Rendered }
 
 /** Goes into every signature. Raise it when the bridge builds a caption differently, so
  *  captions already in Resolve are made again by the next update. */
-const BUILD = 1
+const BUILD = 2
 
 /** 64-bit string hash (cyrb53's two halves), as 16 hex digits */
 function hash(s: string): string {
@@ -128,8 +128,9 @@ export function fpsText(fps: number): string {
 }
 
 /** Bump when the app draws frames differently, so frames drawn before are not reused and
- *  the next Send places the captions again (2: 9:16 size, outline, shadow and box as Text+) */
-export const RENDER_VERSION = 2
+ *  the next Send places the captions again (2: 9:16 size, outline, shadow and box as Text+;
+ *  3: thin stroke, shadow under the box) */
+export const RENDER_VERSION = 3
 
 /** Names the frames of one caption at one frame size and rate: the same key, the same images */
 export const renderKey = (cue: CompiledCue, width: number, height: number, fps: number): string =>
