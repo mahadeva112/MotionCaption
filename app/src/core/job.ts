@@ -118,7 +118,8 @@ export function sigOf(cue: CompiledCue): string {
 
 /** The signature a caption is sent with: a drawn caption and a Text+ caption of the same
  *  look are different clips in Resolve, so switching between them makes it again */
-export const sendSig = (cue: CompiledCue, rendered: boolean, mov = false): string => sigOf(cue) + (rendered ? (mov ? 'm' : 'r') : '')
+export const sendSig = (cue: CompiledCue, rendered: boolean, mov = false): string =>
+  sigOf(cue) + (rendered ? (mov ? 'm' : 'r') + RENDER_VERSION : '')
 
 /** A frame rate as ffmpeg takes it: the NTSC rates exactly (24000/1001), others as they are */
 export function fpsText(fps: number): string {
@@ -126,8 +127,9 @@ export function fpsText(fps: number): string {
   return Math.abs(fps - (n * 1000) / 1001) < 1e-6 && Math.abs(fps - n) > 1e-3 ? `${n * 1000}/1001` : String(Math.round(fps * 1e6) / 1e6)
 }
 
-/** Bump when the app draws frames differently, so frames drawn before are not reused */
-export const RENDER_VERSION = 1
+/** Bump when the app draws frames differently, so frames drawn before are not reused and
+ *  the next Send places the captions again (2: 9:16 size, outline, shadow and box as Text+) */
+export const RENDER_VERSION = 2
 
 /** Names the frames of one caption at one frame size and rate: the same key, the same images */
 export const renderKey = (cue: CompiledCue, width: number, height: number, fps: number): string =>

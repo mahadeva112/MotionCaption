@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
 import type { CompiledCue, Rgb, TimedTrack } from '@core/compile'
-import { countUp, LINE_OF_SIZE, textPx } from '@core/look'
+import { BOX_EXTEND, countUp, LINE_OF_SIZE, OUTLINE_REACH, SHADOW_OFFSET, SHADOW_SOFT, SOFT_W, textPx } from '@core/look'
 import { num, pt, valueAt } from '@core/sample'
 import { clock, media, useClock } from './clock'
-import { cssFace, fontHeight } from './fonts'
+import { cssFace, fontDescent, fontHeight } from './fonts'
 import { Icon } from './Icon'
 import { css, SAFE, timecode, type SafeArea } from './model'
 
@@ -11,6 +11,13 @@ import { css, SAFE, timecode, type SafeArea } from './model'
 // and the same layout (line breaks, blank room for bigger words). Text+ is the reference.
 
 const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+// Rounding an outline (Caption roundDefs): the level a gaussian of σ has at ROUND_Z σ past
+// a straight edge, and how steep it is there (standard normal tail and density at 1.5)
+const ROUND_Z = 1.5
+const ROUND_TAIL = 0.0668072
+const ROUND_PDF = 0.1295176
+// A box behind one word: the bridge's ExtendHorizontal4, ExtendVertical4 and Round4 for it
+const WORD_BOX = { x: 0.08, y: 0.06, round: 0.3 }
 
 function at(tracks: TimedTrack[], input: string, ms: number) {
   const t = tracks.find((x) => x.input === input)
@@ -360,34 +367,47 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
   const styled = new Map<number, CompiledCue['words'][number]>()
   for (const w of cue.words) if (!w.solo) for (let i = w.first; i <= w.last; i++) styled.set(i, w)
 
-  const shadow = L.shadow
-    ? `${L.shadow.distance * fontPx * 0.12}px ${L.shadow.distance * fontPx * 0.12}px ${L.shadow.blur * fontPx * 0.35}px ${css(L.shadow.color, L.shadow.opacity)}`
-    : undefined
-  const dropShadow = L.shadow
-    ? `drop-shadow(${L.shadow.distance * fontPx * 0.12}px ${L.shadow.distance * fontPx * 0.12}px ${L.shadow.blur * fontPx * 0.2}px ${css(L.shadow.color, L.shadow.opacity)})`
-    : undefined
+  // Text+'s unit (Size × frame width) for text drawn at a font size of px (core/look.ts textPx)
+  const unitOf = (px: number) => (px * fh) / LINE_OF_SIZE
+  const U = unitOf(fontPx)
+  // Shadow as Text+ draws it (core/look.ts): moved with the Size, blurred by the frame.
+  // A text shadow's blur is 2σ, a drop shadow's is σ.
+  const sh = L.shadow && {
+    off: L.shadow.distance * SHADOW_OFFSET * U,
+    sigma: L.shadow.blur * SHADOW_SOFT * SOFT_W * W,
+    color: css(L.shadow.color, L.shadow.opacity),
+  }
+  const shadow = sh ? `${sh.off}px ${sh.off}px ${2 * sh.sigma}px ${sh.color}` : undefined
+  const dropShadow = sh ? `drop-shadow(${sh.off}px ${sh.off}px ${sh.sigma}px ${sh.color})` : undefined
   const O = L.outline
+  // Text+ adds letter space between letters only: CSS adds it after the last letter of a
+  // line too, which would push a centred line off by half a space
+  const letterSpace = `${(spacing - 1) * fh / LINE_OF_SIZE}em`
+  const lineEnd = (i: number, cs: string[]): CSSProperties =>
+    spacing !== 1 && (i === cs.length - 1 || cs[i + 1] === '\n') ? { marginRight: `calc(-1 * ${letterSpace})` } : {}
   const base: CSSProperties = {
     fontFamily: `'${L.font}', 'Nirmala UI', 'Segoe UI Emoji', 'Segoe UI Symbol', sans-serif`, fontWeight: face.weight, fontStyle: face.italic ? 'italic' : 'normal',
     // Letter space in em, so a bigger word gets its own share as in Text+; a line pitch of fontHeight × Line height
-    letterSpacing: `${(spacing - 1) * fh / LINE_OF_SIZE}em`, lineHeight: fh * L.lineSpacing,
-    // With an outline the shadow falls from the outlined shape (see behind)
-    textShadow: O ? undefined : shadow,
+    letterSpacing: letterSpace, lineHeight: fh * L.lineSpacing,
   }
+  // The shadow falls from the whole text at once, as in Text+: a text shadow on each letter
+  // would also darken the letter before it. With an outline it falls from the outlined
+  // shape (see behind).
+  const textLayerShadow = O ? undefined : dropShadow
   // The outline is drawn as copies of the letters behind them, all at once. A stroke on
   // each letter would cross the letters next to it where they join (the headline of
-  // Devanagari, Bengali…) and show seams. Centred on the edge, the letters in front are
-  // thinned by half the line, as one shape, so they still join cleanly.
-  const strokePx = (px: number) => (O ? Math.max(0.5, O.width * px * 0.5) : 0)
-  const thinBy = (px: number) => (O && O.outside === false ? Math.round(strokePx(px) * 50) / 100 : 0)
-  const thinFilter = (px: number) => (thinBy(px) ? `url(#mc-thin-${Math.round(thinBy(px) * 100)})` : undefined)
+  // Devanagari, Bengali…) and show seams. Text+ keeps the letters whole on top of it,
+  // centred or not, and rounds its corners: a stroke reaches half the way (its corners
+  // are sharp), and a filter (roundDefs) grows that shape the other half, rounding them.
+  const reachOf = (px: number) => (O ? Math.max(0.5, OUTLINE_REACH * O.width * unitOf(px)) : 0)
+  const reach2Of = (px: number) => (O?.second ? reachOf(px) + Math.max(0.5, OUTLINE_REACH * O.second.width * unitOf(px)) : 0)
   const behind = (px: number, pad: string | number, copy: (layer: string) => ReactNode) => {
     if (!O) return null
-    const sw = strokePx(px)
-    const sw2 = O.second ? sw + Math.max(0.5, O.second.width * px * 0.5) : 0
-    const line = (c: Rgb, w: number, k: string) => (
-      <span key={k} className="vline" style={{ padding: pad, color: css(c), WebkitTextStroke: `${w}px ${css(c)}` }}>{copy(k)}</span>
+    const line = (c: Rgb, reach: number, k: string) => (
+      <span key={k} className="vline" style={{ padding: pad, color: css(c), WebkitTextStroke: `${reach}px ${css(c)}`, filter: roundFilter(reach) }}>{copy(k)}</span>
     )
+    const sw = reachOf(px)
+    const sw2 = reach2Of(px)
     return (
       <span className="vback" aria-hidden style={{ filter: dropShadow }}>
         <span className="vback" style={{ opacity: O.opacity ?? 1, filter: O.soft ? `blur(${O.soft * px * 0.08}px)` : undefined }}>
@@ -397,8 +417,13 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
       </span>
     )
   }
-  const thinDefs = O && O.outside === false
-    ? [...new Set([fontPx, ...cue.words.filter((w) => w.solo).map((w) => sizePx(w.solo!.size))].map(thinBy))]
+  // One rounding filter per outline reach: a gaussian of the stroked letters, cut at the
+  // level a straight edge reaches half the outline further out (ROUND_Z deviations)
+  const roundId = (reach: number) => `mc-round-${Math.round(reach * 100)}`
+  const roundFilter = (reach: number) => (reach / 2 / ROUND_Z >= 0.25 ? `url(#${roundId(reach)})` : undefined)
+  const roundDefs = O
+    ? [...new Set([fontPx, ...cue.words.filter((w) => w.solo && !w.box).map((w) => sizePx(w.solo!.size))]
+      .flatMap((px) => [reachOf(px), ...(O.second ? [reach2Of(px)] : [])]))].filter((r) => roundFilter(r))
     : []
   // Gradient letters: a layer around the letters whose background is cut to them, so the
   // box stays behind. A text shadow would draw over see-through letters, so that layer
@@ -407,9 +432,13 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
   const gradLayer: CSSProperties | null = G ? {
     backgroundImage: `linear-gradient(${G.angle}deg, ${css(L.fill)}, ${css(G.color)})`, WebkitBackgroundClip: 'text', backgroundClip: 'text',
     color: 'transparent', textShadow: 'none',
-    filter: O ? thinFilter(fontPx) : dropShadow,
+    filter: O ? undefined : dropShadow,
   } : null
   const img = L.image
+  // Boxes as Text+ draws them (core/look.ts): the line box, wider by the font's descent at each end
+  const descent = fontDescent(L.font, L.style)
+  const boxPad = L.box ? `${L.box.pad * BOX_EXTEND.y * U}px ${descent * fontPx + L.box.pad * BOX_EXTEND.x * U}px` : 0
+  const wordBoxPad = (px: number) => `${WORD_BOX.y * unitOf(px)}px ${descent * px + WORD_BOX.x * unitOf(px)}px`
 
   /** One letter as drawn: its letter animation, its word's colour and effect. Behind (the
    *  outline's copy) it keeps only where it is: colours, glows and boxes are the front's. */
@@ -421,12 +450,13 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
     const fx = w ? follower(w.tracks.filter((t) => t.input !== 'Opacity1'), ms - shift, W) : {}
     const lit = w ? num(at(w.tracks, 'Opacity1', ms), 1) > 0.5 : false
     const wi = wordOf[i]
+    const end = lineEnd(i, chars)
     if (back) {
       // A letter fading in would show its outline's colour through it; the copy behind
       // fades in later, so the outline arrives as the letter firms up
       const bt: CSSProperties = {
         ...own, ...(own.opacity !== undefined ? { opacity: own.opacity ** 3 } : {}),
-        ...(fx.transform ? { transform: fx.transform } : {}), ...(w?.box ? { visibility: 'hidden' } : {}),
+        ...(fx.transform ? { transform: fx.transform } : {}), ...(w?.box ? { visibility: 'hidden' } : {}), ...end,
       }
       return <span key={back + i} className="ch" style={bt}>{ch}</span>
     }
@@ -436,6 +466,7 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
       ...(fx.transform ? { transform: fx.transform } : {}),
       ...(w?.glow ? { textShadow: `0 0 .35em ${css(w.color)}, 0 0 .8em ${css(w.color)}` } : {}),
       ...(w?.box ? { background: css(w.box) } : {}),
+      ...end,
     }
     return <span key={i} className={'ch' + (wi !== null && wi === selWord ? ' sel' : '')} data-w={wi ?? undefined} style={st}>{ch}</span>
   }
@@ -448,13 +479,21 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
 
   return (
     <div className="vgroup" style={group}>
-      {thinDefs.length > 0 && (
+      {roundDefs.length > 0 && (
         <svg className="vdefs" width="0" height="0" aria-hidden>
-          {thinDefs.map((r) => (
-            <filter key={r} id={`mc-thin-${Math.round(r * 100)}`} x="-5%" y="-5%" width="110%" height="110%">
-              <feMorphology operator="erode" radius={r} />
-            </filter>
-          ))}
+          {roundDefs.map((r) => {
+            // Blur by σ, then make the level a straight edge has ROUND_Z σ out opaque, with a one-pixel edge
+            const sigma = r / 2 / ROUND_Z
+            const slope = sigma / ROUND_PDF
+            return (
+              <filter key={r} id={roundId(r)} x="-50%" y="-50%" width="200%" height="200%" colorInterpolationFilters="sRGB">
+                <feGaussianBlur in="SourceGraphic" stdDeviation={sigma} />
+                <feComponentTransfer>
+                  <feFuncA type="linear" slope={slope} intercept={0.5 - slope * ROUND_TAIL} />
+                </feComponentTransfer>
+              </filter>
+            )
+          })}
         </svg>
       )}
       <div
@@ -466,12 +505,12 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
           left: L.center[0] * W, top: (1 - L.center[1]) * H, fontSize: fontPx, color: css(L.fill), textAlign: (['left', 'center', 'right'] as const)[L.align],
           opacity, // Text+ softness, scaled with the frame so a drawn frame matches the preview
           filter: blur ? `blur(${blur * W * 0.0003}px)` : undefined,
-          ...(L.box ? { background: css(L.box.color, L.box.opacity), padding: `${L.box.pad * 0.25}em ${L.box.pad * 0.5}em`, borderRadius: `${L.box.round * 0.6}em` } : {}),
+          ...(L.box ? { background: css(L.box.color, L.box.opacity), padding: boxPad, borderRadius: L.box.round * U } : {}),
         }}
       >
         {img && <img className={'vimg ' + img.place} src={img.src} alt="" draggable={false} style={{ height: img.size * fontPx }} />}
-        {behind(fontPx, L.box ? `${L.box.pad * 0.25}em ${L.box.pad * 0.5}em` : 0, (k) => chars.map((ch, i) => (ch === '\n' ? <br key={k + i} /> : charEl(i, k))))}
-        <span className={G ? 'vtext grad' : 'vtext'} style={gradLayer ?? (O ? { filter: thinFilter(fontPx) } : undefined)}>
+        {behind(fontPx, L.box ? boxPad : 0, (k) => chars.map((ch, i) => (ch === '\n' ? <br key={k + i} /> : charEl(i, k))))}
+        <span className={G ? 'vtext grad' : 'vtext'} style={gradLayer ?? { filter: textLayerShadow }}>
           {chars.map((ch, i) => (ch === '\n' ? <br key={i} /> : charEl(i)))}
         </span>
         {handles && <>
@@ -487,7 +526,7 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
         const px = sizePx(s.size)
         const letters = (k?: string) => sc.map((c, j) => {
           const f = cue.letters ? follower(lettersT, ms - turn(w.first + j) * step, W) : undefined
-          const st = k && f?.opacity !== undefined ? { ...f, opacity: f.opacity ** 3 } : f
+          const st = { ...(k && f?.opacity !== undefined ? { ...f, opacity: f.opacity ** 3 } : f), ...lineEnd(j, sc) }
           return <span key={(k ?? '') + j} className="ch" style={st}>{c}</span>
         })
         const inner = fx.transform ? { transform: fx.transform } : undefined
@@ -497,10 +536,10 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
             style={{
               ...base, left: s.center[0] * W, top: (1 - s.center[1]) * H, fontSize: px, color: css(w.color), opacity,
               ...(w.glow ? { textShadow: `0 0 .35em ${css(w.color)}, 0 0 .8em ${css(w.color)}` } : {}),
-              ...(w.box ? { background: css(w.box), padding: '0 .15em', borderRadius: '.18em' } : {}),
+              ...(w.box ? { background: css(w.box), padding: wordBoxPad(px), borderRadius: WORD_BOX.round * unitOf(px), textShadow: shadow } : {}),
             }}>
             {!w.box && behind(px, 0, (k) => <span key={k} className="vsolo-in" style={inner}>{letters(k)}</span>)}
-            <span className="vsolo-in front" style={{ ...inner, ...(!w.box && O ? { filter: thinFilter(px) } : {}) }}>{letters()}</span>
+            <span className="vsolo-in front" style={{ ...inner, filter: w.box ? undefined : textLayerShadow }}>{letters()}</span>
           </div>
         )
       })}

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { EASE } from './anim.ts'
 import { compileCue, fallbackStyle, fontFor, hasOwnOut, timeTracks, withMotion, wordRange } from './compile.ts'
 import { presetById } from './presets.ts'
-import { jobToLua, luaString, makeJob, sendSig, sigOf, toLua } from './job.ts'
+import { jobToLua, luaString, makeJob, RENDER_VERSION, sendSig, sigOf, toLua } from './job.ts'
 import { DEFAULT_LOOK } from './look.ts'
 import type { Cue } from './srt.ts'
 
@@ -206,7 +206,7 @@ describe('MOV export', () => {
     const c = compileCue(cue('Hi'), 'fade')
     expect(sendSig(c, true, true)).not.toBe(sendSig(c, true, false))
     const job = makeJob('x', [c], undefined, new Date(), { renders: [{ dir: 'd', frames: 5, width: 10, height: 10, file: 'd\clip.mov' }] })
-    expect(job.cues[0]!.sig.endsWith('m')).toBe(true)
+    expect(job.cues[0]!.sig.endsWith('m' + RENDER_VERSION)).toBe(true)
   })
 })
 
