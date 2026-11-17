@@ -9,6 +9,7 @@ const PATHS = {
   play: 'M8 5v14l11-7z',
   pause: 'M8 5v14M16 5v14',
   minus: 'M5 12h14',
+  grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
   plus: 'M12 5v14M5 12h14',
   check: 'M5 12.5l4.5 4.5L19 7.5',
   film: 'M4 5h16v14H4zM8 5v14M16 5v14M4 9.5h4M4 14.5h4M16 9.5h4M16 14.5h4',

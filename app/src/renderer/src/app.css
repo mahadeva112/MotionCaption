@@ -14,6 +14,9 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--r0); overflow: hidden; }
+/* An app, not a page: its labels and lists are not selectable text (Ctrl+A selects captions instead) */
+body { user-select: none; -webkit-user-select: none; }
+input, textarea, [contenteditable="true"], .selectable { user-select: text; -webkit-user-select: text; }
 button { font: inherit; color: inherit; cursor: pointer; }
 button:disabled { opacity: .45; cursor: default; }
 kbd { background: var(--r3); border: 1px solid var(--line2); border-radius: 5px; padding: 0 5px; font-family: inherit; font-size: 11px; }
@@ -324,9 +327,14 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
 .sendbar .arrow { color: var(--t3); }
 .sendbar .ro { color: var(--t); font-weight: 500; }
 .sendbar .tg { margin-left: 6px; }
-.sendbar .zoom { margin-left: auto; display: inline-flex; gap: 2px; }
-.sendbar .zoom button { width: 28px; height: 28px; display: grid; place-items: center; background: none; border: 0; border-radius: 8px; color: var(--t2); padding: 0; }
-.sendbar .zoom button:hover { background: var(--r2); color: var(--t); }
+.sendbar .zoom { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 8px; padding: 0 2px 0 10px;
+  position: sticky; right: -14px; margin-right: -14px; padding-right: 14px; height: 100%; background: var(--zbg, var(--r1)); box-shadow: -14px 0 12px -6px var(--zbg, var(--r1)); z-index: 1; }
+.sendbar .zoom .zb { width: 22px; height: 22px; flex: none; display: grid; place-items: center; background: none; border: 1.5px solid var(--line2); border-radius: 50%; color: var(--t2); padding: 0; transition: border-color .12s, color .12s, background .12s, transform .1s; }
+.sendbar .zoom .zb .ic { width: 12px; height: 12px; }
+.sendbar .zoom .zb:hover { border-color: var(--sel); color: var(--sel2); background: var(--sel-soft); }
+.sendbar .zoom .zb:active { transform: scale(.92); }
+/* The zoom slider: the app's orange fill and white knob, like the Inspector's sliders */
+.sendbar .zoom .zslider { width: 130px; }
 .go { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 32px; padding: 0 16px; border: 0; border-radius: 10px; color: #fff; font-weight: 700; white-space: nowrap;
   background: linear-gradient(180deg, #ff8a52, #f2552c); box-shadow: 0 6px 18px rgba(255, 90, 50, .32), inset 0 1px 0 rgba(255, 255, 255, .25); transition: filter .15s, transform .1s; }
 .go:hover:not(:disabled) { filter: brightness(1.08); }
@@ -575,3 +583,37 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
 /* Send window: Finished clips as PNG frames or one MOV each */
 .movrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 8px; font-size: 12px; color: var(--t2); }
 .movrow small { flex-basis: 100%; color: var(--t3); font-size: 11px; }
+
+/* Super templates (TemplateGallery.tsx): the button and its gallery */
+.sendbar .tmplbtn { height: 28px; color: var(--t); }
+.tmplbtn.open { border-color: var(--sel); background: var(--sel-soft); }
+.tgal { position: fixed; z-index: 1000; display: flex; flex-direction: column; background: var(--r1); border: 1px solid var(--line2); border-radius: var(--rad);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .55), 0 0 0 1px rgba(0, 0, 0, .3); overflow: hidden; animation: tgalIn .14s ease-out; }
+@keyframes tgalIn { from { opacity: 0; transform: translateY(-4px); } }
+.tgal-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px 8px; }
+.tgal-head b { font-size: 13px; color: #fff; font-weight: 600; }
+.tgal-sub { flex: 1; min-width: 0; color: var(--t3); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tgal-find { width: 170px; height: 28px; background: var(--r3); border: 1px solid var(--seam); border-radius: 8px; color: var(--t); font: inherit; padding: 0 10px; }
+.tgal-find:focus { outline: none; border-color: var(--sel); box-shadow: 0 0 0 3px var(--sel-soft); }
+.tgal-tabs { display: flex; gap: 4px; padding: 0 14px 10px; border-bottom: 1px solid var(--seam); }
+.tgal-tab { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px; border-radius: 13px; border: 1px solid transparent; background: transparent; color: var(--t2); }
+.tgal-tab:hover { background: var(--r3); color: var(--t); }
+.tgal-tab.on { background: var(--sel-soft); border-color: var(--sel); color: var(--t); }
+.tgal-tab i { font-style: normal; font-size: 10px; color: var(--t3); background: var(--r3); border-radius: 8px; padding: 0 5px; min-width: 16px; text-align: center; }
+.tgal-tab.on i { color: var(--sel2); background: rgba(255, 122, 61, .18); }
+.tgal-grid { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); grid-auto-rows: max-content; align-content: start; gap: 10px; padding: 12px 14px 14px; }
+.tcard { display: flex; min-width: 0; flex-direction: column; align-items: stretch; gap: 2px; padding: 0 0 9px; text-align: left; border-radius: 11px; border: 1px solid var(--seam); background: var(--r2); overflow: hidden;
+  transition: border-color .12s, transform .12s, background .12s; }
+.tcard:hover, .tcard:focus-visible { border-color: var(--sel); background: var(--r3); transform: translateY(-1px); outline: none; }
+.tcard-name, .tcard-desc, .tcard-meta { flex: none; }
+.tcard-name { padding: 7px 10px 0; color: var(--t); font-weight: 600; font-size: 12px; }
+.tcard-desc { padding: 0 10px; color: var(--t2); font-size: 11px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.7em; }
+.tcard-meta { padding: 3px 10px 0; color: var(--t3); font-size: 10.5px; }
+.tthumb { position: relative; flex: none; container-type: inline-size; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border-bottom: 1px solid var(--seam);
+  background: radial-gradient(120% 90% at 70% 20%, #4a5a6e 0%, #2a3442 45%, #161b23 100%); }
+.tthumb::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 55%, rgba(0, 0, 0, .35)); pointer-events: none; }
+.tsup { position: absolute; z-index: 1; white-space: nowrap; }
+.tline { white-space: nowrap; }
+.tcard:hover .tsup { animation: tsupIn .45s cubic-bezier(.2, .9, .3, 1.2); }
+@keyframes tsupIn { from { opacity: 0; filter: blur(2px); } 60% { opacity: 1; filter: none; } }
+.tgal-none { grid-column: 1 / -1; padding: 30px; text-align: center; color: var(--t3); }

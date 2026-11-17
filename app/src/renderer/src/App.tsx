@@ -724,6 +724,11 @@ export function App() {
     else if (ctrl && k === 'v') { placeCopies(clip.current, onFrame(clock.get(), fps)); done() }
     else if (ctrl && k === 'd') { const l = picked(); if (l.length) placeCopies(withEdits(l), Math.max(...l.map((c) => c.endMs))); done() }
     else if (ctrl && k === 'j') { joinCues(); done() }
+    // Every caption on the timeline (supers, subtitles, SRT), not the app's text
+    else if (ctrl && k === 'a' && !e.shiftKey && !e.altKey) {
+      if (cues.length) { setSel(new Set(cues.map((c) => c.n))); setScope('selected'); anchor.current = cues[0]!.n }
+      done()
+    }
     else if ((k === 's' && !ctrl && !e.altKey) || (ctrl && k === 'b')) { splitCue(); done() }
     else if (!ctrl && (back || fwd)) { nudgeCues((back ? -1 : 1) * (e.shiftKey ? 10 : 1), e.repeat); done() }
   }
