@@ -1,4 +1,4 @@
-import type { Fixed, Letters, Track } from './anim.ts'
+import type { Bezier, Fixed, Letters, Track } from './anim.ts'
 import type { Family, Preset } from './presets.ts'
 import { blur, EASE, exit, fadeBoth, fadeOut, letter, move, SOFT_FILL, steps, text, tween, whole } from './presetKit.ts'
 
@@ -16,12 +16,20 @@ function p(id: string, name: string, family: Family, desc: string, tracks: Track
 // Not yet seen in Resolve output, so they start as 'testing'.
 const SUBTLE_CINEMATIC = ['cleanCut', 'lensBreath', 'titleCard', 'horizon', 'settleDown', 'focusShift',
   'exitDrift', 'docTitle', 'trailerFade', 'fineRise', 'anamorphic', 'quietPush']
-const UNCHECKED = new Set(['cascadeRtl', 'typeFast', 'bounceIn', ...SUBTLE_CINEMATIC])
+// Smooth cinematic set added 2026-11-17 for the super templates: long, soft ease-outs that
+// glide into place out of a blur and leave just as softly. Not yet seen in Resolve output.
+const SMOOTH_CINEMATIC = ['glideLeft', 'glideRightIn', 'smoothRise', 'lensSettle', 'silkLetters', 'letterGlide',
+  'cineReveal', 'floatFocus', 'swoop']
+const UNCHECKED = new Set(['cascadeRtl', 'typeFast', 'bounceIn', ...SUBTLE_CINEMATIC, ...SMOOTH_CINEMATIC])
 
 const L = (stepMs: number, order: Letters['order'] = 'ltr'): { letters: Letters } => ({ letters: { order, stepMs } })
 const SOFT = { fixed: [SOFT_FILL] }
 const at = (x: number, y = 0.5) => [x, y] as const
 const C = at(0.5)
+/** A long, soft ease-out: quick to start, then a slow glide into place (like ease-out expo) */
+const GLIDE: Bezier = [0.16, 1, 0.3, 1]
+/** Visible from the start, fading over the last ms (for letter presets, whose letters fade in on their own) */
+const outOnly = (ms: number) => text.opacity([{ at: 0, v: 1 }, ...fadeOut(ms)])
 
 export const MORE_PRESETS: Preset[] = [
   // ── Basic ────────────────────────────────────────────────────────────────
@@ -142,6 +150,34 @@ export const MORE_PRESETS: Preset[] = [
     letter.offset(tween(at(0, -0.008), at(0, 0), 420)), letter.opacity(tween(0, 1, 380, EASE.inOut))], L(18)),
   p('anamorphic', 'Anamorphic', 'Cinematic', 'Letters come in slightly wide and narrow to shape, soft and even.', [
     letter.sizeX(tween(1.25, 1, 450, EASE.inOut)), letter.opacity(tween(0, 1, 350, EASE.inOut))], L(16)),
+  // Smooth set: everything glides in on a long ease-out out of a soft blur, and leaves the
+  // way it came, a little further on and softer
+  p('glideLeft', 'Glide In Left', 'Cinematic', 'Glides in from the left out of a soft blur, and glides on to the right as it leaves.', [
+    move.at([...tween(at(0.47), C, 1100, GLIDE), ...exit(C, at(0.512), 650)]), ...blur([...tween(6, 0, 800, GLIDE), ...exit(0, 4, 500)]),
+    fadeBoth(600, 500)], SOFT),
+  p('glideRightIn', 'Glide In Right', 'Cinematic', 'Glides in from the right out of a soft blur, and glides on to the left as it leaves.', [
+    move.at([...tween(at(0.53), C, 1100, GLIDE), ...exit(C, at(0.488), 650)]), ...blur([...tween(6, 0, 800, GLIDE), ...exit(0, 4, 500)]),
+    fadeBoth(600, 500)], SOFT),
+  p('smoothRise', 'Smooth Rise', 'Cinematic', 'Rises into place on a long, soft glide and drifts up as it leaves.', [
+    move.at([...tween(at(0.5, 0.465), C, 1200, GLIDE), ...exit(C, at(0.5, 0.51), 650)]), ...blur([...tween(5, 0, 800, GLIDE), ...exit(0, 4, 500)]),
+    fadeBoth(650, 500)], SOFT),
+  p('lensSettle', 'Lens Settle', 'Cinematic', 'Starts large and soft and settles into sharp focus; eases back as it leaves.', [
+    move.size([...tween(1.12, 1, 1300, GLIDE), ...exit(1, 0.97, 600)]), ...blur([...tween(10, 0, 900, GLIDE), ...exit(0, 6, 500)]),
+    fadeBoth(700, 500)], SOFT),
+  p('silkLetters', 'Silk Letters', 'Cinematic', 'Letters float up one after another out of a soft blur.', [
+    letter.offset(tween(at(0, -0.012), at(0, 0), 750, GLIDE)), letter.opacity(tween(0, 1, 600, EASE.inOut)),
+    ...blur([...tween(4, 0, 1000, GLIDE), ...exit(0, 4, 500)]), outOnly(500)], { ...L(28), ...SOFT }),
+  p('letterGlide', 'Letter Glide', 'Cinematic', 'Letters glide in from the left, one after another, and settle softly.', [
+    letter.offset(tween(at(-0.012, 0), at(0, 0), 700, GLIDE)), letter.opacity(tween(0, 1, 550, EASE.inOut)), outOnly(500)], L(24)),
+  p('cineReveal', 'Cinematic Reveal', 'Cinematic', 'Wide letters close in as it pushes into focus, slow and smooth.', [
+    text.spacing(tween(1.1, 1, 2200, GLIDE)), move.size(tween(1.05, 1, 2200, GLIDE)), ...blur([...tween(8, 0, 1200, GLIDE), ...exit(0, 6, 700)]),
+    fadeBoth(1000, 700)], SOFT),
+  p('floatFocus', 'Float & Focus', 'Cinematic', 'Floats up into focus, then keeps pushing in very slowly.', [
+    move.at(tween(at(0.5, 0.48), C, 1400, GLIDE)), move.size(whole(1, 1.025)), ...blur([...tween(6, 0, 1000, GLIDE), ...exit(0, 5, 600)]),
+    fadeBoth(800, 600)], SOFT),
+  p('swoop', 'Swoop In', 'Cinematic', 'Swoops in on a soft curve, turning level as it lands.', [
+    move.at([...tween(at(0.47, 0.485), C, 1200, GLIDE), ...exit(C, at(0.51, 0.505), 600)]), move.angle(tween(-2.5, 0, 1200, GLIDE)),
+    ...blur([...tween(6, 0, 800, GLIDE), ...exit(0, 4, 500)]), fadeBoth(600, 500)], SOFT),
   p('quietPush', 'Quiet Push', 'Cinematic', 'Comes into focus, then pushes in very slowly for the rest of the shot.', [
     move.size(whole(1, 1.025)), ...blur(tween(3, 0, 600)), fadeBoth(500, 400)], SOFT),
 

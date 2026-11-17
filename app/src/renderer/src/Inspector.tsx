@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { DEFAULT_HIGHLIGHT, DEFAULT_MOTION, outlineOf, type Highlight, type Look, type Motion, type Outline, type Rgb, type WordLook } from '@core/look'
+import { DECO_NAMES, DEFAULT_HIGHLIGHT, DEFAULT_MOTION, outlineOf, type Deco, type Highlight, type Look, type Motion, type Outline, type Rgb, type WordLook } from '@core/look'
 import type { Pattern } from '@core/pattern'
 import type { Mood, Smart } from '@core/smart'
 import { EASE } from '@core/anim'
@@ -400,6 +400,24 @@ export function Inspector(p: Props) {
               <p className="hint2">Every number in the text counts up to its value, e.g. “1,000+ followers”.</p>
               {L.count.on && drawnNote}
             </Section>
+            {(L.deco?.length ?? 0) > 0 && (
+              <Section title="Shapes" r={lk('deco')}>
+                {L.deco.map((d, i) => {
+                  const set = (x: Partial<Deco>) => p.onLook({ deco: L.deco.map((y, j) => (j === i ? { ...y, ...x } : y)) })
+                  return (
+                    <div key={i} className="decorow">
+                      <Row label={DECO_NAMES[d.kind]} wide>
+                        <button className="mini" title="Take this shape away" onClick={() => p.onLook({ deco: L.deco.filter((_, j) => j !== i) })}>Remove</button>
+                      </Row>
+                      {d.kind !== 'letterbox' && <Color label="Colour" value={d.color} onChange={(c) => set({ color: c })} />}
+                      <Slider label="Opacity" value={d.opacity ?? 1} min={0} max={1} onChange={(v) => set({ opacity: v })} />
+                    </div>
+                  )
+                })}
+                <p className="hint2">Shapes sit around the text and come in on their own; they follow its size, place and animation.</p>
+                {drawnNote}
+              </Section>
+            )}
           </>
         )}
 

@@ -3,7 +3,7 @@ import type { Cue } from './srt.ts'
 import { presetById, wordFxById } from './presets.ts'
 import {
   autoWords, centerOf, DEFAULT_HIGHLIGHT, DEFAULT_LOOK, DEFAULT_MOTION, layout, letters as lettersOf, outlineOf,
-  type FontHeight, type Highlight, type ImagePlace, type Look, type Measure, type Motion, type Rgb, type WordLook,
+  type Deco, type FontHeight, type Highlight, type ImagePlace, type Look, type Measure, type Motion, type Rgb, type WordLook,
 } from './look.ts'
 
 export type { Rgb } from './look.ts'
@@ -45,6 +45,7 @@ export interface TextLook {
   gradient?: { color: Rgb; angle: number }
   image?: { src: string; size: number; place: ImagePlace }
   count?: { from: number; ms: number }
+  deco?: readonly Deco[]
 }
 
 export interface CompiledWord {
@@ -432,6 +433,7 @@ export function compileCue(cue: Cue, presetId: string, opts: Partial<CompileOpts
       ...(look.gradient.on ? { gradient: { color: look.gradient.color, angle: look.gradient.angle } } : {}),
       ...(look.image.on && look.image.src ? { image: { src: look.image.src, size: look.image.size, place: look.image.place } } : {}),
       ...(look.count.on ? { count: { from: look.count.from, ms: look.count.ms } } : {}),
+      ...(look.deco?.length ? { deco: look.deco } : {}),
     },
     preset: preset.id,
     tracks,
