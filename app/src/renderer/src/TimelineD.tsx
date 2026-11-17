@@ -1,11 +1,11 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent, type RefObject } from 'react'
 
 import type { Cue } from '@core/srt'
 import type { TimelineData } from '../../preload'
 import { lanesOf, retime, type Grip, type Span } from '@core/retime'
 import { clock, useClock } from './clock'
 import { Icon } from './Icon'
-import { TEMPLATES } from './templates'
+import { TemplateGallery } from './TemplateGallery'
 import { isTextSrc, layersIn, srcChoices, srcTrackOf, timecode, type SrcTrack, type Target } from './model'
 import { Dropdown } from './Dropdown'
 
@@ -55,6 +55,7 @@ const KEYS = [
   'Captions that overlap go on rows below; in Resolve each row is its own track.',
   '',
   'S or Ctrl+B: cut at the playhead (a subtitle\'s words are shared out)',
+  'Ctrl+A: select every caption on the timeline',
   'Ctrl+J: join the selected captions, or this one and the next',
   'Delete: delete the selected (subtitles are left out, never changed in Resolve)',
   'Ctrl+C / Ctrl+V: copy, and paste at the playhead',
@@ -72,6 +73,10 @@ const KEYS = [
 /** Zoom limits, in pixels per second */
 const PPS_MIN = 1
 const PPS_MAX = 400
+/** The zoom slider runs on a log scale (0–1), so every bit of it zooms by the same factor */
+const LOG_SPAN = Math.log(PPS_MAX / PPS_MIN)
+const ppsToSlider = (v: number) => Math.log(v / PPS_MIN) / LOG_SPAN
+const sliderToPps = (t: number) => PPS_MIN * Math.exp(t * LOG_SPAN)
 
 /** Heights of the two lanes and their rows: one row as before, more when captions overlap */
 function rows(count: number) {
@@ -260,12 +265,7 @@ export function TimelineD(p: Props) {
         ) : <b className="ro">{p.srcName}</b>}
         {p.onAddSuper && <button className="mini addsuper" onClick={p.onAddSuper} title="A new super at the playhead, 3 s long. Write it, time it and animate it here; Send places it in Resolve.">
           <Icon name="plus" />Add super</button>}
-        {p.onTemplate && (
-          <Dropdown className="sl tmpl" value="" onChange={(v) => { if (v) p.onTemplate!(v) }} title="A ready-made super at the playhead; change anything after">
-            <option value="">Template…</option>
-            {TEMPLATES.map((t) => <option key={t.id} value={t.id} title={t.desc}>{t.name}</option>)}
-          </Dropdown>
-        )}
+        {p.onTemplate && <TemplateGallery onPick={p.onTemplate} />}
         {p.onRetime && <span className="khint" title={KEYS}>Shortcuts</span>}
         <span className="arrow">→</span>
         <span>Put on</span>
@@ -281,9 +281,15 @@ export function TimelineD(p: Props) {
         )}
         <button className={'tg' + (p.target.replace ? ' on' : '')} onClick={() => p.onTarget({ replace: !p.target.replace })}
           title="On: sending again only makes the captions you changed again; the others stay as they are in Resolve. Off: every send adds another copy on a new track."><i>✓</i>Update last send</button>
-        <span className="zoom" title="Zoom">
-          <button onClick={() => zoomTo(pps / 1.5)} title="Zoom out (Alt+wheel; Shift+Z fits the timeline)"><Icon name="minus" /></button>
-          <button onClick={() => zoomTo(pps * 1.5)} title="Zoom in (Alt+wheel)"><Icon name="plus" /></button>
+        <span className="zoom">
+          <button className="zb" onClick={() => zoomTo(pps / 1.4)} title="Zoom out (Alt+wheel)"><Icon name="minus" /></button>
+          <input type="range" className="zslider" min={0} max={1000} step={1} value={Math.round(ppsToSlider(pps) * 1000)}
+            style={{ '--p': `${ppsToSlider(pps) * 100}%` } as CSSProperties}
+            onChange={(e) => zoomTo(sliderToPps(Number(e.target.value) / 1000))}
+            onPointerUp={(e) => e.currentTarget.blur()}
+            onDoubleClick={() => fit.current()}
+            title="Zoom (Alt+wheel). Double-click or Shift+Z: the whole timeline" aria-label="Timeline zoom" />
+          <button className="zb" onClick={() => zoomTo(pps * 1.4)} title="Zoom in (Alt+wheel)"><Icon name="plus" /></button>
         </span>
       </div>
       <div className="tracks">
