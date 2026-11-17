@@ -10,11 +10,12 @@ import { parseSrt } from '@core/srt'
 import type { Cue } from '@core/srt'
 import type { LinkStatus, RenderProgress, TimelineData } from '../../preload'
 import { fontHeight, hasGlyphs, loadFonts, measure, type FontFamily } from './fonts'
-import { clock, media } from './clock'
+import { clock, media, nextTime } from './clock'
+import { WorkHistory } from './history'
 import { CaptionCard } from './CaptionCard'
 import { BUILT_IN_STYLES, Inspector, type Tab } from './Inspector'
 import { Icon } from './Icon'
-import { LibraryD, type MyAnimation } from './LibraryD'
+import { LibraryD, type LibView, type MyAnimation } from './LibraryD'
 import { usableLayers } from '@core/layers'
 import {
   cuesOf, editedCues, editsByStart, editsOf, editsOnto, EXTRA_N, FRAMES, isSupersSrc, isTextSrc, layersIn, layersOf, lookOf, lookPart, norm,
@@ -24,6 +25,7 @@ import {
 import { SendDialog } from './SendDialog'
 import { TimelineD } from './TimelineD'
 import { useTimelineVideo } from './TimelineVideo'
+import { TemplateLibrary } from './TemplateLibrary'
 import { TEMPLATES } from './templates'
 import { Viewer } from './Viewer'
 import { Dropdown } from './Dropdown'
@@ -101,6 +103,8 @@ export function App() {
   const [selWord, setSelWord] = useState<number | null>(null)
   const [everywhere, setEverywhere] = useState(false)
   const [tab, setTab] = useState<Tab>('Look')
+  /** The library shows animations or super templates */
+  const [libView, setLibView] = useState<LibView>('anim')
   const [target, setTarget] = useState<Target>(DEFAULT_TARGET)
   const [safe, setSafe] = useState<SafeArea>('off')
   const [playing, setPlaying] = useState(false)
@@ -275,28 +279,47 @@ export function App() {
   // their new times, texts and deletions are caption edits, and the captions a cut or a
   // copy adds are kept apart (extra), numbered from EXTRA_N.
 
-  // Undo and redo for that work: times, texts, own looks, added and left-out captions
-  type WorkState = { supers?: Cue[]; extra?: Cue[]; edits: Edits }
-  const history = useRef<{ undo: WorkState[]; redo: WorkState[] }>({ undo: [], redo: [] })
-  const workNow = (): WorkState => ({ supers: source?.kind === 'timeline' ? source.supers : undefined, extra: source?.extra, edits })
-  function remember() {
-    const h = history.current
-    h.undo.push(workNow())
-    if (h.undo.length > 60) h.undo.shift()
-    h.redo = []
+  // Undo and redo for all the work on this source (history.ts): times, texts, added and
+  // left-out captions, and every look, animation, highlight, motion, pattern and style
+  // change, for all captions or one's own. A drag is one step.
+  type WorkState = {
+    supers?: Cue[]; extra?: Cue[]; edits: Edits; look: Look; highlight: Highlight; motion: Motion; preset: string
+    pattern: Pattern; patternOn: boolean; smart: Smart; styleBase: StyleBase
   }
+  const history = useRef(new WorkHistory<WorkState>())
+  const work: WorkState = {
+    supers: source?.kind === 'timeline' ? source.supers : undefined, extra: source?.extra, edits,
+    look, highlight, motion, preset: defaultPreset, pattern, patternOn, smart, styleBase,
+  }
+  // Not the user's: a new read from Resolve (or another SRT), the other kit's settings coming in
+  const origin = source?.kind === 'timeline' ? source.data : source?.kind === 'srt' ? source.cues : null
+  useEffect(() => { history.current.see(work, sourceKey(source), [stateKit, origin], performance.now()) })
+  useEffect(() => {
+    const down = () => history.current.press()
+    const up = () => history.current.release()
+    window.addEventListener('pointerdown', down, true)
+    window.addEventListener('pointerup', up, true)
+    window.addEventListener('pointercancel', up, true)
+    return () => {
+      window.removeEventListener('pointerdown', down, true)
+      window.removeEventListener('pointerup', up, true)
+      window.removeEventListener('pointercancel', up, true)
+    }
+  }, [])
+  /** What follows is a step of its own */
+  function remember() { history.current.cut() }
   function undoWork(redo: boolean) {
-    const h = history.current
-    const s = (redo ? h.redo : h.undo).pop()
+    const s = history.current.restore(redo)
     if (!s) return
-    ;(redo ? h.undo : h.redo).push(workNow())
+    setTimeout(() => history.current.settle())
+    // Captions added or taken out: the selection may name ones no longer there
+    if (s.supers !== work.supers || s.extra !== work.extra) setSel(new Set())
     if (source?.kind === 'timeline') setSupers(() => s.supers ?? [])
     setExtras(() => s.extra ?? [])
-    setEdits(s.edits); setSel(new Set()); setPlaying(false)
+    setEdits(s.edits); setLook(s.look); setHighlight(s.highlight); setMotion(s.motion); setDefaultPreset(s.preset)
+    setPattern(s.pattern); setPatternOn(s.patternOn); setSmart(s.smart); setStyleBase(s.styleBase)
+    setPlaying(false)
   }
-  // Another source: its own history
-  const workKey = sourceKey(source)
-  useEffect(() => { history.current = { undo: [], redo: [] } }, [workKey])
 
   /** The next free number for a caption added to this source */
   const freshN = () => {
@@ -635,9 +658,16 @@ export function App() {
     if (clock.get() >= live.current.endMs - 1) clock.set(0)
     let last = performance.now()
     let raf = 0
+    // When the video's time last moved: one that stands still (loading) holds the playhead
+    // (from the start until it first moves, and when it stops for a while)
+    let seen: number | null = null
+    let seenAt = last
+    let moved = false
     const tick = (now: number) => {
-      // The timeline video, while it plays, sets the time; otherwise the wall clock does
-      const t = media.now() ?? clock.get() + (now - last)
+      // The wall clock moves the playhead; the timeline video, while it plays, steers it (clock.ts)
+      const v = media.now()
+      if (v !== seen) { if (seen !== null && v !== null) moved = true; seen = v; seenAt = now }
+      const t = nextTime(clock.get(), now - last, v, !moved || now - seenAt > 120)
       last = now
       if (t >= live.current.endMs) { clock.set(live.current.endMs); setPlaying(false); return }
       clock.set(t)
@@ -735,6 +765,15 @@ export function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement
+      // Undo and redo work from a slider, a list or a tick box just used too; in a text
+      // box they are the box's own (its typing)
+      const ctrl = e.ctrlKey || e.metaKey
+      const k = e.key.toLowerCase()
+      if (ctrl && !e.altKey && (k === 'z' || k === 'y')) {
+        const typing = t.closest('textarea, [contenteditable="true"]')
+          || (t instanceof HTMLInputElement && !['range', 'checkbox', 'radio', 'button', 'color'].includes(t.type))
+        if (!typing) { undoWork(k === 'y' || e.shiftKey); e.preventDefault(); return }
+      }
       if (t.closest('input, textarea, select')) return
       if (e.key === 'ArrowRight') { step(1); e.preventDefault() }
       else if (e.key === 'ArrowLeft') { step(-1); e.preventDefault() }
@@ -865,7 +904,9 @@ export function App() {
             favs={favs} onFav={(id) => setFavs((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]))}
             mine={mine} onMine={(m) => { pickPreset(m.preset); setMotion({ ...DEFAULT_MOTION, ...m.motion }) }}
             onRemoveMine={(name) => setMine((l) => l.filter((x) => x.name !== name))}
-            adding={patternPick} onPick={patternPick ? (id) => setPattern((x) => ({ ...x, ids: [...x.ids, id] })) : pickPreset} />
+            adding={patternPick} onPick={patternPick ? (id) => setPattern((x) => ({ ...x, ids: [...x.ids, id] })) : pickPreset}
+            view={libView} onView={setLibView}
+            templates={<TemplateLibrary onPick={supersOn && source?.kind === 'timeline' ? addTemplate : null} base={supersOn ? look : DEFAULT_LOOK} />} />
           <Inspector
             tab={tab} onTab={setTab} scope={scope} onScope={setScope} selected={sel.size} total={cues.length}
             look={effLook} onLook={changeLook} styles={[...BUILT_IN_STYLES, ...userStyles]}
@@ -914,7 +955,7 @@ export function App() {
             active={cue?.n ?? 0} sel={sel} onCue={pickCue} playing={playing} onSeek={seek} reveal={reveal}
             target={target} onTarget={(t) => setTarget((x) => ({ ...x, ...t }))} fps={fps} lengthMs={tlLength}
             supers={source.kind === 'timeline' ? (source.supers ?? []).length : 0} onAddSuper={supersOn ? addSuper : null}
-            onRetime={retimeCues} onTemplate={supersOn ? addTemplate : null}
+            onRetime={retimeCues} onTemplates={supersOn ? () => setLibView('tmpl') : null}
           />
         </div>
       )}

@@ -16,10 +16,10 @@ describe('preset library', () => {
     expect(presetById('nope')).toBeUndefined()
   })
 
-  it('has 147 presets with unique ids and names', () => {
-    expect(PRESETS).toHaveLength(147)
-    expect(new Set(PRESETS.map((p) => p.id)).size).toBe(147)
-    expect(new Set(PRESETS.map((p) => p.name)).size).toBe(147)
+  it('has 156 presets with unique ids and names', () => {
+    expect(PRESETS).toHaveLength(156)
+    expect(new Set(PRESETS.map((p) => p.id)).size).toBe(156)
+    expect(new Set(PRESETS.map((p) => p.name)).size).toBe(156)
   })
 
   it('uses only known families, each with presets', () => {

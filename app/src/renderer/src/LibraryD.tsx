@@ -1,7 +1,11 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { FAMILIES, PRESETS, presetById, type Family } from '@core/presets'
 import type { Motion } from '@core/look'
 import { PresetTile } from './PresetTile'
+import { TEMPLATES } from './templates'
+
+/** The library's two tabs: animations, and super templates */
+export type LibView = 'anim' | 'tmpl'
 
 type Bin = Family | 'All' | 'Recent' | 'Favourites' | 'Mine'
 
@@ -24,10 +28,14 @@ interface Props {
   mine: MyAnimation[]
   onMine: (m: MyAnimation) => void
   onRemoveMine: (name: string) => void
+  view: LibView
+  onView: (v: LibView) => void
+  /** The Templates tab's content (TemplateLibrary) */
+  templates: ReactNode
 }
 
 /** The big middle area of Pro: search, groups as chips, and a wide grid of tiles */
-export function LibraryD({ current, target, recent, onPick, onHover, adding, favs, onFav, mine, onMine, onRemoveMine }: Props) {
+export function LibraryD({ current, target, recent, onPick, onHover, adding, favs, onFav, mine, onMine, onRemoveMine, view, onView, templates }: Props) {
   const [bin, setBin] = useState<Bin>('All')
   const [q, setQ] = useState('')
   const query = q.trim().toLowerCase()
@@ -40,7 +48,15 @@ export function LibraryD({ current, target, recent, onPick, onHover, adding, fav
 
   return (
     <section className="lib2">
-      <div className="phead"><b>Animations</b><span className="r">{PRESETS.length} presets · {adding ? <>click to <b>add to the pattern</b></> : <>click to use on <b>{target}</b></>}</span></div>
+      <div className="phead">
+        <div className="libtabs" role="tablist">
+          <button role="tab" aria-selected={view === 'anim'} className={view === 'anim' ? 'on' : ''} onClick={() => onView('anim')}>Animations<i>{PRESETS.length}</i></button>
+          <button role="tab" aria-selected={view === 'tmpl'} className={view === 'tmpl' ? 'on' : ''} onClick={() => onView('tmpl')}>Templates<i>{TEMPLATES.length}</i></button>
+        </div>
+        <span className="r">{view === 'tmpl' ? <>click to add a super at the playhead · everything stays editable</>
+          : adding ? <>click to <b>add to the pattern</b></> : <>click to use on <b>{target}</b></>}</span>
+      </div>
+      {view === 'tmpl' ? templates : <>
       <div className="libtop">
         <input className="search" type="search" placeholder={`Search ${PRESETS.length} animations`} value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="chips">
@@ -61,6 +77,7 @@ export function LibraryD({ current, target, recent, onPick, onHover, adding, fav
             : bin === 'Recent' ? 'Animations you use show here.'
               : bin === 'Favourites' && !query ? 'Click ☆ on an animation to keep it here.' : 'No animation matches.'}</p>}
       </div>
+      </>}
     </section>
   )
 }

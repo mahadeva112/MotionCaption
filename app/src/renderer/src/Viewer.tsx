@@ -4,6 +4,7 @@ import { BOX_EXTEND, countUp, LINE_OF_SIZE, OUTLINE_REACH, SHADOW_OFFSET, SHADOW
 import { num, pt, valueAt } from '@core/sample'
 import { clock, media, useClock } from './clock'
 import { cssFace, fontDescent, fontHeight } from './fonts'
+import { decoBack, letterbox, sweepStyle } from './Deco'
 import { Icon } from './Icon'
 import { css, SAFE, timecode, type SafeArea } from './model'
 
@@ -275,7 +276,7 @@ export function Viewer(p: Props) {
     <div className={'vframe' + (p.path?.draw ? ' drawing' : '')} ref={frame} style={{ width: W, height: H }} onPointerDown={addPoint}>
       {url ? <video ref={vid} className="vvid" src={url} preload="auto" playsInline disablePictureInPicture /> : <div className="vbg" />}
       {cue && onScreen && <Caption cue={cue} ms={ms} W={W} H={H} aspect={aspect} selWord={p.selWord} blockRef={block} onDown={down} onMove={move} onUp={up}
-        handles={!p.playing && !p.loop} />}
+        handles={!p.playing && !p.loop} moving={p.playing || !!p.loop} />}
       {pathPts && (
         <svg className="vpath" viewBox={`0 0 ${W} ${H}`} width={W} height={H}>
           <polyline points={pathPts.map((q) => q.join(',')).join(' ')} />
@@ -339,9 +340,12 @@ export interface CapProps {
   onUp: (e: PointerEvent) => void
   /** Show the resize and turn handles (the preview while it stands still; never in drawn frames) */
   handles?: boolean
+  /** Playing: the caption and its moving letters are drawn as layers the screen moves whole,
+   *  so they glide by fractions of a pixel instead of stepping a pixel at a time */
+  moving?: boolean
 }
 
-export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMove, onUp, handles }: CapProps) {
+export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMove, onUp, handles, moving }: CapProps) {
   const L = cue.look
   // Sizes as Text+ makes them (core/look.ts textPx), so drawn clips and Text+ match
   const fh = fontHeight(L.font, L.style)
@@ -353,13 +357,38 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
   const lettersT = cue.tracks.filter((t) => t.target === 'letters')
   const [cx, cy] = pt(at(moveT, 'Center', ms), [0.5, 0.5])
   const opacity = num(at(text, 'Opacity1', ms), 1)
-  const spacing = num(at(text, 'CharacterSpacing', ms), L.tracking)
+  // Letter space is laid out once, at where its animation ends: laying the line out again
+  // each frame lands every letter on a whole pixel, so letters jitter as the space changes.
+  // The change is drawn as each letter moving instead (spreadOf), smooth to the pixel.
+  const spaceT = text.find((t) => t.input === 'CharacterSpacing')
+  const spacing = spaceT ? num(spaceT.keys[spaceT.keys.length - 1]?.v, L.tracking) : L.tracking
+  const spaceNow = num(at(text, 'CharacterSpacing', ms), spacing)
   const blur = num(at(text, 'SoftnessX1', ms), 0)
   const step = cue.letters?.stepMs ?? 0
   // Numbers counting up keep their width in letters, so every letter keeps its place
   const counted = (t: string) => (L.count ? countUp(t, 1 - (1 - Math.min(1, Math.max(0, ms / L.count.ms))) ** 3, L.count.from) : t)
   const chars = Array.from(graphemes.segment(counted(cue.text)), (s) => s.segment)
   const turn = (i: number) => (cue.letters?.order === 'rtl' ? chars.length - 1 - i : i)
+  // Each letter's place in its line, and the line's length, for the letter space as it changes
+  const inLine: number[] = []
+  const lineLen: number[] = []
+  {
+    let start = 0
+    chars.forEach((ch, i) => {
+      if (ch === '\n') { for (let j = start; j < i; j++) lineLen[j] = i - start; start = i + 1; return }
+      inLine[i] = i - start
+    })
+    for (let j = start; j < chars.length; j++) lineLen[j] = chars.length - start
+  }
+  const anchor = L.align === 0 ? 0 : L.align === 1 ? 0.5 : 1
+  /** The extra letter space now (em per gap), over the space the line is laid out with */
+  const spreadEm = (spaceNow - spacing) * fh / LINE_OF_SIZE
+  /** How far letter k of a line of n moves for that extra space, the line keeping its alignment */
+  const spreadOf = (k: number, n: number, a = anchor) => (spreadEm ? `translateX(${spreadEm * (k - a * (n - 1))}em)` : '')
+  const longest = Math.max(0, ...lineLen.filter((n) => n !== undefined))
+  const join = (...ts: (string | undefined)[]) => ts.filter(Boolean).join(' ') || undefined
+  /** Letters move on their own: letter animations, word effects or a changing letter space */
+  const lettersMove = !!cue.letters || !!spaceT || cue.words.some((w) => w.tracks.length > 0)
 
   // Which word (and which styled word) each letter belongs to
   const wordOf: (number | null)[] = chars.map(() => null)
@@ -442,6 +471,8 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
     color: 'transparent', textShadow: 'none',
   } : null
   const img = L.image
+  const deco = L.deco ?? []
+  const sweep = deco.length ? sweepStyle(deco, ms) : null
   // Boxes as Text+ draws them (core/look.ts): the line box, wider by the font's descent at each end
   const descent = fontDescent(L.font, L.style)
   const boxPad = L.box ? `${L.box.pad * BOX_EXTEND.y * U}px ${descent * fontPx + L.box.pad * BOX_EXTEND.x * U}px` : 0
@@ -458,19 +489,20 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
     const lit = w ? num(at(w.tracks, 'Opacity1', ms), 1) > 0.5 : false
     const wi = wordOf[i]
     const end = lineEnd(i, chars)
+    const tf = join(spreadOf(inLine[i] ?? 0, lineLen[i] ?? 1), fx.transform ?? own.transform)
     if (back) {
       // A letter fading in would show its outline's colour through it; the copy behind
       // fades in later, so the outline arrives as the letter firms up
       const bt: CSSProperties = {
         ...own, ...(own.opacity !== undefined ? { opacity: own.opacity ** 3 } : {}),
-        ...(fx.transform ? { transform: fx.transform } : {}), ...(w?.box ? { visibility: 'hidden' } : {}), ...end,
+        transform: tf, ...(w?.box ? { visibility: 'hidden' } : {}), ...end,
       }
       return <span key={back + i} className="ch" style={bt}>{ch}</span>
     }
     const st: CSSProperties = {
       ...own,
       ...(w && lit ? { color: css(w.color) } : {}),
-      ...(fx.transform ? { transform: fx.transform } : {}),
+      transform: tf,
       ...(w?.glow ? { textShadow: `0 0 .35em ${css(w.color)}, 0 0 .8em ${css(w.color)}` } : {}),
       ...(w?.box ? { background: css(w.box) } : {}),
       ...end,
@@ -485,7 +517,9 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
   }
 
   return (
-    <div className="vgroup" style={group}>
+    <>
+    {deco.length > 0 && letterbox(deco, ms, cue.endMs - cue.startMs, H)}
+    <div className={'vgroup' + (moving ? ' moving' : '') + (moving && lettersMove ? ' chmove' : '')} style={group}>
       {roundDefs.length > 0 && (
         <svg className="vdefs" width="0" height="0" aria-hidden>
           {roundDefs.map((r) => {
@@ -525,13 +559,23 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
           ...(L.box ? { padding: boxPad } : {}),
         }}
       >
+        {deco.length > 0 && decoBack(deco, ms, L.align, cue.endMs - cue.startMs)}
         {shade(fontPx, boxPad, (k) => chars.map((ch, i) => (ch === '\n' ? <br key={k + i} /> : charEl(i, k))))}
-        {L.box && <span className="vback" aria-hidden style={{ background: css(L.box.color, L.box.opacity), borderRadius: L.box.round * U }} />}
+        {L.box && <span className="vback" aria-hidden style={{
+          background: css(L.box.color, L.box.opacity), borderRadius: L.box.round * U,
+          // The box grows and shrinks with the letter space, as Text+'s does
+          ...(spreadEm && longest > 1 ? { left: `${-anchor * (longest - 1) * spreadEm}em`, right: `${-(1 - anchor) * (longest - 1) * spreadEm}em` } : {}),
+        }} />}
         {img && <img className={'vimg ' + img.place} src={img.src} alt="" draggable={false} style={{ height: img.size * fontPx }} />}
         {behind(fontPx, boxPad, (k) => chars.map((ch, i) => (ch === '\n' ? <br key={k + i} /> : charEl(i, k))))}
         <span className={G ? 'vtext grad' : 'vtext'} style={gradLayer ?? undefined}>
           {chars.map((ch, i) => (ch === '\n' ? <br key={i} /> : charEl(i)))}
         </span>
+        {sweep && (
+          <span className="vback" aria-hidden>
+            <span className="vline clip" style={{ padding: boxPad, ...sweep }}>{chars.map((ch, i) => (ch === '\n' ? <br key={'sw' + i} /> : charEl(i, 'sw')))}</span>
+          </span>
+        )}
         {handles && <>
           {['c1', 'c2', 'c3', 'c4'].map((c) => <span key={c} className={'vh ' + c} data-grip="size" title="Drag to make it bigger or smaller" />)}
           <span className="vh turn" data-grip="turn" title="Drag to turn it (Shift: 15° steps)" />
@@ -545,7 +589,7 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
         const px = sizePx(s.size)
         const letters = (k?: string) => sc.map((c, j) => {
           const f = cue.letters ? follower(lettersT, ms - turn(w.first + j) * step, W) : undefined
-          const st = { ...(k && f?.opacity !== undefined ? { ...f, opacity: f.opacity ** 3 } : f), ...lineEnd(j, sc) }
+          const st = { ...(k && f?.opacity !== undefined ? { ...f, opacity: f.opacity ** 3 } : f), transform: join(spreadOf(j, sc.length, 0.5), f?.transform), ...lineEnd(j, sc) }
           return <span key={(k ?? '') + j} className="ch" style={st}>{c}</span>
         })
         const inner = fx.transform ? { transform: fx.transform } : undefined
@@ -564,5 +608,6 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
         )
       })}
     </div>
+    </>
   )
 }

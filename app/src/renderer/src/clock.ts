@@ -29,3 +29,20 @@ export const media = {
   set(f: (() => number | null) | null) { mediaNow = f },
   now: (): number | null => (mediaNow ? mediaNow() : null),
 }
+
+/** How far the video may drift from the playhead before the playhead jumps to it (a seek) */
+const JUMP_MS = 250
+/** Share of the drift taken back each frame */
+const PULL = 0.1
+
+/** The playhead's next time while playing, dt ms after prev. The video's own time moves in
+ *  uneven steps (it follows the sound card), and captions drawn from it judder; so the wall
+ *  clock moves the playhead and the video only steers it. A big gap (a seek) jumps; a video
+ *  that has stopped moving (still loading) holds it; no video, the wall clock alone. */
+export function nextTime(prev: number, dt: number, video: number | null, stalled: boolean): number {
+  if (video === null) return prev + dt
+  if (stalled) return video
+  const t = prev + dt
+  const drift = video - t
+  return Math.abs(drift) > JUMP_MS ? video : Math.max(prev, t + drift * PULL)
+}

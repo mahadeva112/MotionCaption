@@ -48,6 +48,52 @@ export interface Look {
   /** A way the caption travels while it is on screen: points as offsets from its place,
    *  shares of the frame (x right, y up), reached one after another over its time */
   path: readonly (readonly [number, number])[]
+  /** Shapes drawn with the text, e.g. an accent bar or a corner frame (Finished clips) */
+  deco: readonly Deco[]
+}
+
+/**
+ * A shape drawn with the text by the app (Finished clips only; Text+ leaves it out). It is
+ * placed around the text block, so it follows the text's size, place and animation, and
+ * comes in on its own after `delay` ms, over `ms`. Lengths are in letter heights (em).
+ *  - bar        a thick line beside the text (side left/right), as tall as the block
+ *  - line       a thin line under or over it (side below/above), amount = share of its width
+ *  - panel      a plate behind it, gap = padding (gapX across), with corners, skew and a border
+ *  - frame      four corners around it, amount = corner length
+ *  - dot        a round dot beside it (side left/right), size = its width
+ *  - meter      a bar under it that fills to amount (0–1)
+ *  - sweep      a light that runs across the letters once
+ *  - letterbox  black bars at the top and bottom of the frame, amount = each one's share of the height
+ */
+export type DecoKind = 'bar' | 'line' | 'panel' | 'frame' | 'dot' | 'meter' | 'sweep' | 'letterbox'
+export type DecoIn = 'none' | 'fade' | 'grow' | 'wipe' | 'pop' | 'slide'
+export type DecoSide = 'left' | 'right' | 'above' | 'below'
+
+export interface Deco {
+  kind: DecoKind
+  color: Rgb
+  opacity?: number
+  side?: DecoSide
+  size?: number
+  gap?: number
+  gapX?: number
+  amount?: number
+  round?: number
+  /** Degrees the panel leans */
+  skew?: number
+  border?: Rgb
+  borderWidth?: number
+  /** Moved from its place, in em (x right, y down) */
+  dx?: number
+  dy?: number
+  in?: DecoIn
+  delay?: number
+  ms?: number
+}
+
+/** What a shape is called in the Inspector */
+export const DECO_NAMES: Record<DecoKind, string> = {
+  bar: 'Accent bar', line: 'Line', panel: 'Panel', frame: 'Corner frame', dot: 'Dot', meter: 'Meter', sweep: 'Light sweep', letterbox: 'Cinema bars',
 }
 
 export type ImagePlace = 'left' | 'right' | 'above'
@@ -81,6 +127,7 @@ export const DEFAULT_LOOK: Look = {
   image: { on: false, src: '', size: 1.6, place: 'left' },
   count: { on: false, from: 0, ms: 1200 },
   path: [],
+  deco: [],
 }
 
 export type WordEffect = 'none' | 'pop' | 'shake' | 'glow' | 'bounce'

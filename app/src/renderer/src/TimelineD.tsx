@@ -5,7 +5,6 @@ import type { TimelineData } from '../../preload'
 import { lanesOf, retime, type Grip, type Span } from '@core/retime'
 import { clock, useClock } from './clock'
 import { Icon } from './Icon'
-import { TemplateGallery } from './TemplateGallery'
 import { isTextSrc, layersIn, srcChoices, srcTrackOf, timecode, type SrcTrack, type Target } from './model'
 import { Dropdown } from './Dropdown'
 
@@ -36,7 +35,8 @@ interface Props {
   /** Adds a super at the playhead; set while the supers are shown */
   onAddSuper: (() => void) | null
   /** Adds a ready-made super (templates.ts) at the playhead; set while the supers are shown */
-  onTemplate: ((id: string) => void) | null
+  /** Opens the library's Templates tab */
+  onTemplates: (() => void) | null
   /** Move or trim blocks by dragging them or their edges: the dragged one first, then the
    *  other selected ones moving with it; end: the drag is over */
   onRetime: ((list: { n: number; span: Span }[], end: boolean) => void) | null
@@ -265,7 +265,8 @@ export function TimelineD(p: Props) {
         ) : <b className="ro">{p.srcName}</b>}
         {p.onAddSuper && <button className="mini addsuper" onClick={p.onAddSuper} title="A new super at the playhead, 3 s long. Write it, time it and animate it here; Send places it in Resolve.">
           <Icon name="plus" />Add super</button>}
-        {p.onTemplate && <TemplateGallery onPick={p.onTemplate} />}
+        {p.onTemplates && <button type="button" className="mini tmplbtn" onClick={p.onTemplates}
+          title="Ready-made supers, simple and advanced: opens the Templates tab of the library"><Icon name="grid" />Templates</button>}
         {p.onRetime && <span className="khint" title={KEYS}>Shortcuts</span>}
         <span className="arrow">→</span>
         <span>Put on</span>
