@@ -1,4 +1,5 @@
 import type { CompiledCue } from './compile.ts'
+import { WAVE_N, type WaveClip } from './wave.ts'
 
 // The job is how the app hands work to Resolve. Resolve Free cannot be driven from
 // outside, so the app writes this file and the bridge script (run from
@@ -48,6 +49,20 @@ export interface Job {
   test?: JobTest
   /** Instead of placing captions: render the timeline as a small video for the app's preview */
   preview?: JobPreview
+  /** The audio wave, drawn by the app; it goes to the bridge as the first caption, so it
+   *  takes the lowest of the new tracks and the captions sit above it */
+  wave?: SentWave
+}
+
+/** The audio wave in a job: a drawn clip like a drawn caption, with nothing to build */
+export interface SentWave {
+  n: number
+  index: number
+  startMs: number
+  endMs: number
+  text: string
+  sig: string
+  render: Rendered
 }
 
 /** A timeline video for the preview: picture and sound, without what the app draws itself */
@@ -60,6 +75,8 @@ export interface JobPreview {
   maxSide: number
   /** Text+ layers the captions come from, left out of the video (by track and first frame) */
   hideClips: { track: number; at: number }[]
+  /** Only this audio track is heard (the others are turned off for the render): the audio wave's sound */
+  audioTrack?: number
 }
 
 /** A job that only renders the timeline video (no captions are placed) */
@@ -92,7 +109,7 @@ export type SentCue = CompiledCue & { sig: string; render?: Rendered }
 const BUILD = 2
 
 /** 64-bit string hash (cyrb53's two halves), as 16 hex digits */
-function hash(s: string): string {
+export function hash(s: string): string {
   let a = 0xdeadbeef
   let b = 0x41c6ce57
   for (let i = 0; i < s.length; i++) {
@@ -136,10 +153,21 @@ export const RENDER_VERSION = 3
 export const renderKey = (cue: CompiledCue, width: number, height: number, fps: number): string =>
   hash(JSON.stringify([RENDER_VERSION, sigOf(cue), cue.endMs - cue.startMs, width, height, fps]))
 
+/** Bump when the app draws the wave differently, so the next Send draws and places it again */
+export const WAVE_VERSION = 1
+
+/** Signature of the wave clip: its look, its sound and where it sits; the same, the same clip */
+export const waveSig = (w: WaveClip, mov: boolean): string =>
+  'w' + hash(JSON.stringify([WAVE_VERSION, w.look, w.env, w.startMs, w.endMs])) + (mov ? 'm' : 'r')
+
+/** Names the wave's frames at one frame size and rate */
+export const waveKey = (w: WaveClip, width: number, height: number, fps: number): string =>
+  'wave_' + hash(JSON.stringify([WAVE_VERSION, w.look, w.env, w.startMs, w.endMs, width, height, fps]))
+
 export function makeJob(source: string, cues: CompiledCue[], test?: JobTest, now = new Date(),
-  extra: { project?: string; timeline?: string; target?: JobTarget; renders?: (Rendered | undefined)[] } = {}): Job {
+  extra: { project?: string; timeline?: string; target?: JobTarget; renders?: (Rendered | undefined)[]; wave?: { clip: WaveClip; render: Rendered } } = {}): Job {
   const stamp = now.toISOString()
-  const { renders, ...rest } = extra
+  const { renders, wave, ...rest } = extra
   return {
     version: 1,
     id: `${stamp.replace(/\D/g, '').slice(0, 14)}-${Math.random().toString(36).slice(2, 8)}`,
@@ -153,6 +181,12 @@ export function makeJob(source: string, cues: CompiledCue[], test?: JobTest, now
       return { ...c, look, sig: sendSig(c, !!render, !!render?.file), ...(render ? { render } : {}) }
     }),
     ...(test ? { test } : {}),
+    ...(wave ? {
+      wave: {
+        n: WAVE_N, index: WAVE_N, startMs: wave.clip.startMs, endMs: wave.clip.endMs, text: 'Audio wave',
+        sig: waveSig(wave.clip, !!wave.render.file), render: wave.render,
+      },
+    } : {}),
   }
 }
 
@@ -201,5 +235,8 @@ export function toLua(v: unknown, indent = ''): string {
 }
 
 export function jobToLua(job: Job): string {
-  return '-- MotionCaption job. Written by the app; read by Workspace → Scripts → MotionCaption.\nreturn ' + toLua(job) + '\n'
+  // The bridge places what is in cues: the wave goes in first
+  const { wave, ...rest } = job
+  const out = wave ? { ...rest, cues: [wave, ...job.cues] } : rest
+  return '-- MotionCaption job. Written by the app; read by Workspace → Scripts → MotionCaption.\nreturn ' + toLua(out) + '\n'
 }

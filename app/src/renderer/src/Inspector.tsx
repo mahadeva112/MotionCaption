@@ -107,7 +107,7 @@ function Rst({ r }: { r?: R }) {
 function Row({ label, children, wide, r }: { label: string; children: ReactNode; wide?: boolean; r?: R }) {
   return <div className={'irow' + (wide ? ' wide' : '')}><span>{label}</span>{children}<Rst r={r} /></div>
 }
-function Slider({ label, value, min, max, step = 0.01, fmt, onChange, r }: {
+export function Slider({ label, value, min, max, step = 0.01, fmt, onChange, r }: {
   label: string; value: number; min: number; max: number; step?: number; fmt?: (v: number) => string; onChange: (v: number) => void; r?: R
 }) {
   return (
@@ -166,7 +166,7 @@ function NumBox({ value, min, max, step, onChange, title }: {
       onBlur={() => setTxt(null)} />
   )
 }
-function Seg<T extends string>({ label, value, opts, onChange, r }: { label: string; value: T; opts: [T, string][]; onChange: (v: T) => void; r?: R }) {
+export function Seg<T extends string>({ label, value, opts, onChange, r }: { label: string; value: T; opts: [T, string][]; onChange: (v: T) => void; r?: R }) {
   return (
     <Row label={label} wide r={r}>
       <div className="seg">{opts.map(([v, t]) => <button key={v} className={v === value ? 'on' : ''} onClick={() => onChange(v)}>{t}</button>)}</div>
@@ -191,17 +191,17 @@ function Swatches({ value, onChange }: { value: Rgb; onChange: (c: Rgb) => void 
     </>
   )
 }
-function Color({ label, value, onChange, r }: { label: string; value: Rgb; onChange: (c: Rgb) => void; r?: R }) {
+export function Color({ label, value, onChange, r }: { label: string; value: Rgb; onChange: (c: Rgb) => void; r?: R }) {
   return (
     <Row label={label} wide r={r}>
       <div className="colrow"><Swatches value={value} onChange={onChange} /></div>
     </Row>
   )
 }
-function Toggle({ on, onChange, children }: { on: boolean; onChange: (b: boolean) => void; children: ReactNode }) {
+export function Toggle({ on, onChange, children }: { on: boolean; onChange: (b: boolean) => void; children: ReactNode }) {
   return <button className={'tg' + (on ? ' on' : '')} onClick={() => onChange(!on)}><i>✓</i>{children}</button>
 }
-function Section({ title, right, off, r, children }: { title: ReactNode; right?: ReactNode; off?: boolean; r?: R; children: ReactNode }) {
+export function Section({ title, right, off, r, children }: { title: ReactNode; right?: ReactNode; off?: boolean; r?: R; children: ReactNode }) {
   return <section className={'isec' + (off ? ' off' : '')}><h6>{title}{right && <span>{right}</span>}{r && <Rst r={r} />}</h6>{children}</section>
 }
 

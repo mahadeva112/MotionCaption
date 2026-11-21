@@ -20,6 +20,9 @@ const PATHS = {
   full: 'M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5',
   unfull: 'M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5',
   download: 'M12 4v11M7.5 10.5 12 15l4.5-4.5M5 20h14',
+  wave: 'M3 12h2M7 9v6M11 5v14M15 8v8M19 10.5v3M21 12h0',
+  music: 'M9 18V6l11-2v12M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z',
+  trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3',
 } as const
 
 export type IconName = keyof typeof PATHS

@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { CompiledCue } from '../core/compile.ts'
 import type { Rendered } from '../core/job.ts'
+import type { WaveClip } from '../core/wave.ts'
 
 export interface OpenedFile {
   path: string
@@ -57,6 +58,8 @@ export interface TimelineData {
   timeline: false | { name: string; fps: string; rate: number; dropFrame: boolean; width: number; height: number; length?: number }
   video?: { index: number; name: string; enabled: boolean; clips: { start: number; end: number; name: string }[] }[]
   subtitle?: { index: number; name: string; enabled: boolean; cues: { start: number; end: number; text: string }[] }[]
+  /** Audio tracks (missing in reads by an older script) */
+  audio?: { index: number; name: string; enabled: boolean; clips: { start: number; end: number; name: string }[] }[]
   /** Text+ layers already on the video tracks */
   texts?: TextLayer[]
 }
@@ -127,7 +130,8 @@ const api = {
   jobResult: (jobId: string): Promise<JobResult | null> => ipcRenderer.invoke('job:result', jobId),
   jobProgress: (jobId: string): Promise<JobProgress | null> => ipcRenderer.invoke('job:progress', jobId),
   /** Draws captions as PNG frames with transparency, for Resolve to place as plain clips */
-  renderCues: (req: { width: number; height: number; fps: number; cues: CompiledCue[]; mov?: boolean }): Promise<Rendered[]> =>
+  /** Draws captions (and the audio wave, last) as frames for Resolve */
+  renderCues: (req: { width: number; height: number; fps: number; cues: CompiledCue[]; mov?: boolean; wave?: WaveClip }): Promise<Rendered[]> =>
     ipcRenderer.invoke('render:cues', req),
   /** Folder the bridge renders timeline videos into */
   previewDir: (): Promise<string> => ipcRenderer.invoke('preview:dir'),

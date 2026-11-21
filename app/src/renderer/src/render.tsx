@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CompiledCue } from '@core/compile'
+import { envFromText, type WaveClip } from '@core/wave'
 import { Caption } from './Viewer'
+import { bandsOf, drawWave, waveSound } from './waveDraw'
 
 // The page the app draws captions with, frame by frame, for Resolve. It runs in a hidden
 // window with a see-through background (main/index.ts, render:cues) and shows one caption
@@ -14,9 +16,20 @@ export interface RenderApi {
   show: (cue: CompiledCue, W: number, H: number, ms: number) => Promise<boolean>
   /** Move the shown caption to another ms */
   seek: (ms: number) => Promise<boolean>
+  /** Get ready to draw the audio wave at this frame size and rate; false if its sound cannot be read */
+  wave: (clip: WaveClip, W: number, H: number, fps: number) => boolean
+  /** Frame i of the wave clip (from its first frame on the timeline) as a PNG data: URL; the
+   *  frame after its last is blank */
+  waveFrame: (i: number, frames: number) => string
 }
 
 const noop = () => {}
+
+/** The wave being drawn in this window */
+let waveRun: {
+  clip: WaveClip; canvas: HTMLCanvasElement; g: CanvasRenderingContext2D; sound: ReturnType<typeof waveSound>
+  first: number; fps: number; W: number; H: number
+} | null = null
 
 export function RenderStage() {
   const [shot, setShot] = useState<Shot | null>(null)
@@ -32,6 +45,29 @@ export function RenderStage() {
     const api: RenderApi = {
       show: (cue, W, H, ms) => new Promise((ok) => { done.current = ok; setShot({ cue, W, H, aspect: W / H, ms }) }),
       seek: (ms) => new Promise((ok) => { done.current = ok; setShot((s) => (s ? { ...s, ms } : s)) }),
+      // The wave is drawn straight onto a canvas of the full frame size: no layout, no picture of the window
+      wave: (clip, W, H, fps) => {
+        const env = envFromText(clip.env)
+        if (!env) return false
+        const canvas = document.createElement('canvas')
+        canvas.width = W
+        canvas.height = H
+        const g = canvas.getContext('2d')
+        if (!g) return false
+        const sound = waveSound(env, clip.look.smooth)
+        const first = Math.floor((clip.startMs * fps) / 1000 + 0.5)
+        waveRun = { clip, canvas, g, sound, first, fps, W, H }
+        return true
+      },
+      waveFrame: (i, frames) => {
+        const r = waveRun
+        if (!r) return ''
+        const ms = ((r.first + i) * 1000) / r.fps
+        if (i >= frames - 1) r.g.clearRect(0, 0, r.W, r.H)
+        else drawWave(r.g, r.W, r.H, (sec) => bandsOf(r.sound, sec * 1000, r.clip.startMs), ms / 1000, r.clip.look,
+          { start: r.clip.startMs / 1000, end: r.clip.endMs / 1000 })
+        return r.canvas.toDataURL('image/png')
+      },
     }
     ;(window as unknown as { __mcRender?: RenderApi }).__mcRender = api
   }, [])

@@ -40,6 +40,29 @@ interface Props {
   /** Move or trim blocks by dragging them or their edges: the dragged one first, then the
    *  other selected ones moving with it; end: the drag is over */
   onRetime: ((list: { n: number; span: Span }[], end: boolean) => void) | null
+  /** The audio wave and its sound, shown on rows of their own; null without one */
+  wave: TimelineWave | null
+}
+
+export interface TimelineWave {
+  startMs: number
+  endMs: number
+  /** Style name, e.g. "Siri glow" */
+  style: string
+  /** Where the sound came from, e.g. "voice.wav" */
+  sound: string
+  /** Loudness along the sound, 0–1 */
+  peaks: number[]
+  /** Goes into Resolve with the next Send */
+  on: boolean
+  picked: boolean
+  onPick: () => void
+}
+
+/** The sound's shape as bars, filling a box 1000 × 100 */
+function peakPath(peaks: number[]): string {
+  const w = 1000 / Math.max(1, peaks.length)
+  return peaks.map((v, i) => { const h = Math.max(1, v * 92); return `M${(i * w).toFixed(1)} ${((100 - h) / 2).toFixed(1)}h${Math.max(0.6, w * 0.7).toFixed(2)}v${h.toFixed(1)}h-${Math.max(0.6, w * 0.7).toFixed(2)}z` }).join('')
 }
 
 /** How near (in pixels) an edge must come to the playhead or another block to stick */
@@ -102,7 +125,8 @@ export function TimelineD(p: Props) {
   // The tracks the Text+ layers sit on, e.g. "V2, V3"
   const layerTracks = [...new Set(layers.map((t) => t.track))].sort((a, b) => a - b).map((t) => 'V' + t).join(', ')
   // As long as the timeline in Resolve; an SRT gets at least 10 s
-  const endMs = Math.max(p.lengthMs || 10000, ...p.cues.map((c) => c.endMs))
+  const endMs = Math.max(p.lengthMs || 10000, ...p.cues.map((c) => c.endMs), p.wave?.endMs ?? 0)
+  const wavePath = useMemo(() => (p.wave ? peakPath(p.wave.peaks) : ''), [p.wave?.peaks])
   const width = (endMs / 1000) * pps + 80
   const x = (ms: number) => (ms / 1000) * pps
   const activeCue = p.cues.find((c) => c.n === p.active)
@@ -296,6 +320,8 @@ export function TimelineD(p: Props) {
       <div className="tracks">
         <div className="heads" style={{ width: HEAD }}>
           <div className="rhead"><Tc fps={p.fps} /></div>
+          {p.wave && <div className={'th wv' + (p.wave.picked ? ' on' : '')} onClick={p.wave.onPick} title="The audio wave: click to change it">
+            <b>WAVE</b><span>Audio wave<small>{p.wave.style} · {p.wave.on ? 'goes with Send' : 'not sent'}</small></span><i className="tag w">{p.wave.on ? 'NEW' : 'OFF'}</i></div>}
           {newTrack
             ? <div className="th tgt" style={{ height: R.cap.h }}><b>V{video.length + 1}</b><span>Text+ captions<small>new track · {placed} clips</small></span><i className="tag t">TARGET</i></div>
             : <div className="th tgt" style={{ height: R.cap.h }}><b>V{p.target.track}</b><span>Text+ on {tgtTrack?.name ?? 'track'}<small>empty spots · {placed} clips</small></span><i className="tag t">TARGET</i></div>}
@@ -306,10 +332,20 @@ export function TimelineD(p: Props) {
             : srcSub
             ? <div className="th st src" style={{ height: R.st.h }} title="Change it under Read from"><b>ST{srcSub.index}</b><span>{srcSub.name}<small>subtitles · {srcSub.cues.length}</small></span><i className="tag s">SOURCE</i></div>
             : <div className="th st src" style={{ height: R.st.h }}><b>SRT</b><span>{p.srcName}<small>{p.cues.length} captions</small></span><i className="tag s">SOURCE</i></div>}
+          {p.wave && <div className="th au" onClick={p.wave.onPick} title="The sound the wave follows"><b>A</b><span>{p.wave.sound}<small>drives the wave</small></span><i className="tag a">AUDIO</i></div>}
         </div>
         <div className="lanes" ref={lanes}>
           <div style={{ width, position: 'relative' }}>
             <div className="ruler" onPointerDown={scrub} onPointerMove={scrub} title="Click or drag to move the playhead">{marks.map((s) => <span key={s} style={{ left: x(s * 1000) }}>{timecode(s * 1000, p.fps).slice(3, 8)}</span>)}</div>
+            {p.wave && (
+              <div className="lane wv">
+                <i className={(p.wave.picked ? 'cur ' : '') + (p.wave.on ? '' : 'off')} style={{ left: x(p.wave.startMs), width: Math.max(2, x(p.wave.endMs - p.wave.startMs) - 1) }}
+                  onClick={p.wave.onPick} title="The audio wave: click to change it">
+                  <svg viewBox="0 0 1000 100" preserveAspectRatio="none"><path d={wavePath} /></svg>
+                  <b><Icon name="wave" size={12} />Audio wave · {p.wave.style}</b>
+                </i>
+              </div>
+            )}
             <div className={'lane cap' + (p.onRetime ? ' edit' : '') + (multi ? ' multi' : '')} style={{ height: R.cap.h }}>
               {tgtTrack?.clips.map((c, i) => <i key={'o' + i} className="occ" style={{ left: x(c.start), width: Math.max(2, x(c.end - c.start) - 1) }} title={`Already on V${tgtTrack.index}: ${c.name}`}>{c.name}</i>)}
               {p.cues.map((c) => (
@@ -324,6 +360,13 @@ export function TimelineD(p: Props) {
                   style={place(c, R.st)} {...handlers(c)} title={c.text}>{c.text}{grips(c)}</i>
               ))}
             </div>
+            {p.wave && (
+              <div className="lane au">
+                <i style={{ left: x(p.wave.startMs), width: Math.max(2, x(p.wave.endMs - p.wave.startMs) - 1) }} onClick={p.wave.onPick} title={p.wave.sound}>
+                  <svg viewBox="0 0 1000 100" preserveAspectRatio="none"><path d={wavePath} /></svg>
+                </i>
+              </div>
+            )}
             {guide !== null && <div className="snapline" style={{ left: x(guide) }} />}
             <Playhead x={x} lanes={lanes} playing={p.playing} />
           </div>

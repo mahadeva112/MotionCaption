@@ -4,7 +4,8 @@ import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { cpus } from 'node:os'
 import { join } from 'node:path'
 import type { CompiledCue } from '../core/compile.ts'
-import { fpsText, renderKey, type Rendered } from '../core/job.ts'
+import { fpsText, renderKey, waveKey, type Rendered } from '../core/job.ts'
+import type { WaveClip } from '../core/wave.ts'
 
 // Draws captions as PNG frames with a see-through background, for Resolve to place as
 // plain clips. A hidden off-screen window shows the app's own preview of one caption
@@ -19,6 +20,8 @@ export interface RenderRequest {
   cues: CompiledCue[]
   /** Also make each caption one MOV file (ProRes 4444 with transparency) from its frames */
   mov?: boolean
+  /** The audio wave to draw as one more clip; its frames come last in the answer */
+  wave?: WaveClip
 }
 
 type Progress = (done: number, total: number, note: 'drawing' | 'encoding' | 'ready') => void
@@ -115,10 +118,20 @@ export async function renderCues(root: string, url: { dev?: string; file: string
     if (!have || have.frames !== j.frames) todo.push(j)
     out.push({ dir, frames: j.frames, width: W, height: H })
   }
-  const total = todo.reduce((s, j) => s + j.frames, 0)
+  // The wave: one long clip, its frames shared out over the drawing windows
+  const wave = req.wave ? { clip: req.wave, key: waveKey(req.wave, W, H, fps), frames: framesFor(req.wave, fps) } : null
+  let waveTodo = false
+  if (wave) {
+    const dir = join(root, wave.key)
+    const have = await readFile(join(dir, 'done.json'), 'utf8').then((s) => JSON.parse(s) as { frames?: number }, () => null)
+    waveTodo = !have || have.frames !== wave.frames
+    out.push({ dir, frames: wave.frames, width: W, height: H })
+  }
+  const total = todo.reduce((s, j) => s + j.frames, 0) + (wave && waveTodo ? wave.frames : 0)
   let done = 0
-  progress(0, total, todo.length ? 'drawing' : 'ready')
+  progress(0, total, todo.length || waveTodo ? 'drawing' : 'ready')
   if (todo.length) await drawAll(todo)
+  if (wave && waveTodo) await drawWave(wave)
   if (req.mov) {
     // Two at a time: ffmpeg already uses several cores for each
     let made = 0
@@ -168,5 +181,37 @@ export async function renderCues(root: string, url: { dev?: string; file: string
       await rename(part, dir)
     }
     await Promise.all(Array.from({ length: Math.min(MAX_STAGES, todo.length) }, (_, i) => worker(i)))
+  }
+
+  /** Draws the wave's frames into its folder: each window draws every n-th frame on a canvas
+   *  of the full frame size and hands it over as a PNG */
+  async function drawWave(w: { clip: WaveClip; key: string; frames: number }) {
+    await mkdir(root, { recursive: true })
+    const dir = join(root, w.key)
+    const part = dir + '.part'
+    await rm(part, { recursive: true, force: true })
+    await mkdir(part, { recursive: true })
+    const n = Math.max(1, Math.min(MAX_STAGES, Math.ceil(w.frames / 50)))
+    const worker = async (k: number) => {
+      const { win } = await openStage(k, url, W, H)
+      const wc = win.webContents
+      const ok = await wc.executeJavaScript(`window.__mcRender.wave(${JSON.stringify(w.clip)}, ${W}, ${H}, ${fps})`)
+      if (!ok) throw new Error('The audio wave could not be drawn: its sound could not be read.')
+      const writes: Promise<void>[] = []
+      for (let i = k; i < w.frames; i += n) {
+        const data = String(await wc.executeJavaScript(`window.__mcRender.waveFrame(${i}, ${w.frames})`))
+        const b64 = data.slice(data.indexOf(',') + 1)
+        if (!b64) throw new Error('The audio wave could not be drawn.')
+        writes.push(writeFile(join(part, `f_${String(i).padStart(5, '0')}.png`), Buffer.from(b64, 'base64')))
+        if (writes.length >= 16) await Promise.all(writes.splice(0))
+        done++
+        if (done % 5 === 0 || done === total) progress(done, total, 'drawing')
+      }
+      await Promise.all(writes)
+    }
+    await Promise.all(Array.from({ length: n }, (_, k) => worker(k)))
+    await writeFile(join(part, 'done.json'), JSON.stringify({ frames: w.frames, width: W, height: H, fps, wave: true }), 'utf8')
+    await rm(dir, { recursive: true, force: true })
+    await rename(part, dir)
   }
 }

@@ -43,6 +43,10 @@ export const DEV_TIMELINE: TimelineData = {
     { index: 1, name: 'English', enabled: true, cues: LINES.map((text, i) => ({ ...cueTimes[i]!, text })) },
     { index: 2, name: 'Hindi', enabled: true, cues: HINDI.map((text, i) => ({ ...cueTimes[i]!, text })) },
   ],
+  audio: [
+    { index: 1, name: 'Voice', enabled: true, clips: [{ start: 0, end: 19500, name: 'Interview.mp4' }] },
+    { index: 2, name: 'Music', enabled: true, clips: [{ start: 0, end: 42000, name: 'calm_piano.wav' }] },
+  ],
   // Text+ titles made by hand in Resolve (V3), plus one of MotionCaption's own captions, which the app leaves out
   texts: [
     { track: 3, at: 86400, start: 0, end: 3500, text: 'HOW TO\nSTART TODAY', name: 'Text+', enabled: true, mc: false, tools: 1,
@@ -115,7 +119,7 @@ export function installDevApi() {
         await new Promise((r) => setTimeout(r, 100))
         renderListeners.forEach((f) => f({ done: Math.round((total * i) / 10), total, note: 'drawing' }))
       }
-      return req.cues.map((c, i) => ({ dir: `C:\\dev\\renders\\${i}`, frames: Math.round(((c.endMs - c.startMs) * req.fps) / 1000) + 1, width: req.width, height: req.height }))
+      return [...req.cues, ...(req.wave ? [req.wave] : [])].map((c, i) => ({ dir: `C:\\dev\\renders\\${i}`, frames: Math.round(((c.endMs - c.startMs) * req.fps) / 1000) + 1, width: req.width, height: req.height }))
     },
     previewDir: async () => 'C:\\dev\\preview\\',
     previewGet: async () => video,
