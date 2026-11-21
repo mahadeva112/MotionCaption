@@ -297,6 +297,87 @@ function glassBars(K: Ctx) {
   }
 }
 
+// ── Dashes: a row of short rounded dashes that is always there, rising with the sound ──
+
+/** Width of one dash and the height it rests at (its length in silence) */
+function dashSize(K: Ctx, n: number) {
+  const bw = K.ww / n
+  // Thickness 2 (the default) gives dashes a little over a third of their spacing
+  const w = Math.max(1.2 * K.u, Math.min(bw * 0.8, bw * 0.19 * Math.max(0.5, K.look.thickness)))
+  return { bw, w, rest: w * 2.6 }
+}
+
+function dash(K: Ctx, x: number, w: number, h: number, col: Rgb) {
+  const [top, len] = span(K, h / (K.look.shape === 'mirror' ? 2 : 1))
+  K.g.fillStyle = css(col)
+  K.g.beginPath()
+  K.g.roundRect(x, top, w, len, w / 2)
+  K.g.fill()
+}
+
+/**
+ * A plain row of dashes with a few tall, thin spikes that jump up in the middle as the voice
+ * speaks: clean and minimal. The spikes change place about ten times a second.
+ */
+function spikes(K: Ctx) {
+  const { t, ww, x0, amp, C } = K
+  const n = 84
+  const { bw, w, rest } = dashSize(K, n)
+  const step = t * 10
+  const slot = Math.floor(step)
+  const f = step - slot
+  const mixT = f * f * (3 - 2 * f)
+  for (let i = 0; i < n; i++) {
+    const q = (i + 0.5) / n
+    const d = (q - 0.5) / 0.5
+    const near = Math.exp(-((d / 0.42) ** 2))
+    const core = Math.exp(-((d / 0.22) ** 2))
+    const v = spec(K.b, Math.abs(d))
+    // The same random number for a bar until its slot changes, then a quick blend to the next
+    const rnd = (s: number) => jitter(i * 7.31 + s * 13.17)
+    const r = lerp(rnd(slot), rnd(slot + 1), mixT)
+    const small = v * near * 0.22 * (0.35 + 0.65 * r)
+    const spike = v * core * Math.pow(r, 7) * 1.9
+    const h = rest + amp * 2 * (small + spike)
+    dash(K, x0 + i * bw + (bw - w) / 2, w, h, mixRgb(C, q))
+  }
+}
+
+/** Dashes that rise together into a smooth hill where the sound is loud */
+function softDashes(K: Ctx) {
+  const { ww, x0, amp, C } = K
+  const n = 64
+  const { bw, w, rest } = dashSize(K, n)
+  for (let i = 0; i < n; i++) {
+    const d = Math.abs(2 * ((i + 0.5) / n) - 1)
+    // A hill in the middle; the ends stay near their resting length
+    dash(K, x0 + i * bw + (bw - w) / 2, w, rest + amp * 2 * voiceBar(K, i, n) * Math.exp(-((d / 0.5) ** 2)), mixRgb(C, (i + 0.5) / n))
+  }
+}
+
+/** Each loud moment leaves the middle and runs out to both ends along the dashes, fading as it goes */
+function echoDashes(K: Ctx) {
+  const { ww, x0, amp, C } = K
+  const n = 84
+  const { bw, w, rest } = dashSize(K, n)
+  const speed = 0.55 // of the half width a second
+  const life = 1 / speed
+  const ages: number[] = []
+  const lv: number[] = []
+  for (let a = 0; a <= life; a += 0.04) { ages.push(a); lv.push(loud(K.past(a))) }
+  for (let i = 0; i < n; i++) {
+    const q = (i + 0.5) / n
+    const d = Math.abs(2 * q - 1)
+    let v = 0
+    for (let k = 0; k < ages.length; k++) {
+      const off = d - ages[k]! * speed
+      if (off > -0.08 && off < 0.08) v = Math.max(v, lv[k]! * Math.exp(-((off / 0.035) ** 2)) * (1 - ages[k]! / life))
+    }
+    v = Math.max(v, K.level * Math.exp(-((d / 0.06) ** 2)))
+    dash(K, x0 + i * bw + (bw - w) / 2, w, rest + amp * 2 * v * (0.75 + 0.25 * jitter(i)), mixRgb(C, q))
+  }
+}
+
 // ── Lines ──
 
 function lines(K: Ctx) {
@@ -757,6 +838,7 @@ function blob(K: Ctx) {
 const DRAW: Record<WaveStyle, (K: Ctx) => void> = {
   siri: glow, soft: glow, aura: glow, aurora,
   bars, pill: bars, thin: thinBars, spectrum, blocks, scroll: scrollBars, glassbars: glassBars,
+  spikes, dashes: softDashes, echo: echoDashes,
   line: lines, multi: lines, smooth: smoothCurve, classic, scope, neon, ribbon,
   ring, pulse, dotring: dotRing, orb, radial: radialBars, ripple,
   dots: dotRow, bounce, particles, matrix,
