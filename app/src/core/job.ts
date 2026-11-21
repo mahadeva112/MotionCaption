@@ -154,7 +154,7 @@ export const renderKey = (cue: CompiledCue, width: number, height: number, fps: 
   hash(JSON.stringify([RENDER_VERSION, sigOf(cue), cue.endMs - cue.startMs, width, height, fps]))
 
 /** Bump when the app draws the wave differently, so the next Send draws and places it again */
-export const WAVE_VERSION = 1
+export const WAVE_VERSION = 2
 
 /** Signature of the wave clip: its look, its sound and where it sits; the same, the same clip */
 export const waveSig = (w: WaveClip, mov: boolean): string =>
