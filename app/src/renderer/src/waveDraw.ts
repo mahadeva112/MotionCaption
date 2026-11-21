@@ -67,6 +67,8 @@ interface Ctx {
   blend: GlobalCompositeOperation
   /** White for bright colours, black for dark ones: cores, rims and unlit dots */
   ink: string
+  /** The colours are mostly dark (black) */
+  dark: boolean
 }
 
 /** Top and length of a bar of height h at the line, for the shape */
@@ -201,97 +203,168 @@ function spectrum(K: Ctx) {
   }
 }
 
-/** A stereo's LED meter: columns of lit blocks, the unlit ones faint */
+/** A column's height (0–1) for meters and glass bars: louder in the middle, each column with its own wobble */
+const columnAt = (b: readonly number[], i: number, n: number, t: number) => {
+  const d = Math.abs(2 * ((i + 0.5) / n) - 1)
+  return Math.min(1, spec(b, d) * 1.2 * (0.35 + 0.65 * Math.cos(d * 1.3)) * (0.78 + 0.22 * Math.sin(t * 3 + i * 1.7)))
+}
+
+/**
+ * A studio meter: wide columns of rounded blocks lit low → high colour with a soft glow, a white
+ * peak cap that holds at the top and then falls, nearly invisible unlit blocks, and a faint
+ * reflection under the line.
+ */
 function blocks(K: Ctx) {
-  const { g, C, ww, x0, amp, cy, look } = K
-  const n = 32
+  const { g, C, t, ww, x0, amp, cy, u, look, ink } = K
+  const n = 18
+  const segs = 9
   const bw = ww / n
-  const segs = Math.max(4, Math.min(14, Math.round(amp / (bw * 0.6))))
-  const sh = amp / segs
   const s = bw * 0.72
-  const bh = sh * 0.7
-  const up = look.shape !== 'bottom'
-  const down = look.shape !== 'top'
+  const total = amp * 1.7
+  const sh = total / segs
+  const bh = sh * 0.72
+  const dir = look.shape === 'bottom' ? 1 : -1
+  const r = Math.min(bh, s) * 0.22
   for (let i = 0; i < n; i++) {
-    const lit = voiceBar(K, i, n) * segs
+    const lit = columnAt(K.b, i, n, t) * segs
+    // The peak cap: the highest the column reached lately, falling faster the longer ago
+    let peak = 0
+    for (let a = 0; a <= 0.9; a += 0.05) peak = Math.max(peak, columnAt(K.past(a), i, n, t - a) - 1.6 * a * a)
     const x = x0 + i * bw + (bw - s) / 2
     for (let k = 0; k < segs; k++) {
-      const on = k < lit
-      g.fillStyle = on ? css(mixRgb(C, k / (segs - 1))) : K.ink
-      alpha(K, on ? Math.min(1, lit - k + 0.35) : 0.08)
-      const d = (sh - bh) / 2 + k * sh
+      const on = clamp01(lit - k)
+      const near = cy + dir * ((sh - bh) / 2 + k * sh)
+      const y = dir < 0 ? near - bh : near
+      const col = mixRgb(C, k / (segs - 1))
+      if (on > 0) {
+        g.globalCompositeOperation = K.blend
+        alpha(K, 0.28 * on)
+        g.fillStyle = css(col)
+        g.beginPath()
+        g.roundRect(x - 2.5 * u, y - 2.5 * u, s + 5 * u, bh + 5 * u, r * 1.6)
+        g.fill()
+        g.globalCompositeOperation = 'source-over'
+        // Reflection under the line (when the meter stands up)
+        if (look.shape === 'mirror') {
+          alpha(K, 0.13 * on * (1 - k / segs))
+          g.beginPath()
+          g.roundRect(x, cy + 4 * u + k * sh * 0.55, s, bh * 0.5, r)
+          g.fill()
+        }
+      }
+      alpha(K, on > 0 ? 0.35 + 0.65 * on : 0.05)
+      g.fillStyle = on > 0 ? css(col) : ink
       g.beginPath()
-      if (up) g.roundRect(x, cy - d - bh, s, bh, bh * 0.25)
-      if (down) g.roundRect(x, cy + d, s, bh, bh * 0.25)
+      g.roundRect(x, y, s, bh, r)
+      g.fill()
+    }
+    const pk = Math.round(Math.max(lit, peak * segs))
+    if (pk > 0) {
+      alpha(K, 0.92)
+      g.fillStyle = ink
+      const near = cy + dir * (pk * sh + 3 * u)
+      g.beginPath()
+      g.roundRect(x, dir < 0 ? near - 2.6 * u : near, s, 2.6 * u, 1.3 * u)
       g.fill()
     }
   }
 }
 
-/** The last few seconds as bars moving left, like a phone's voice recorder */
+/**
+ * A phone's voice recorder: a playhead in the middle, the sound that has played to its left in
+ * colour, the sound still to come to its right in grey. The bars glide left, one slot at a time.
+ */
 function scrollBars(K: Ctx) {
-  const { g, C, ww, x0, amp } = K
+  const { g, t, ww, x0, cx, amp, cy, u, C, dark, ink } = K
   const n = 56
-  const dt = 0.06
+  const gap = ww / n
+  const w = Math.max(1.5 * u, gap * 0.45)
+  const rate = 12.5 // bars a second
+  const now = t * rate
+  const first = Math.floor(now)
+  const off = (now - first) * gap
+  const bar = (x: number, v: number, col: string, a: number) => {
+    if (a <= 0.01) return
+    const [top, len] = span(K, Math.max(w / 2, amp * 1.25 * v))
+    alpha(K, a)
+    g.fillStyle = col
+    g.beginPath()
+    g.roundRect(x - w / 2, top, w, len, w / 2)
+    g.fill()
+  }
+  const edge = (x: number) => clamp01(Math.min(x - x0, x0 + ww - x) / (ww * 0.12))
+  const half = Math.ceil(n / 2) + 1
+  for (let j = 0; j <= half; j++) {
+    // Played: slot first - j sits j slots left of the playhead (and slides with it)
+    const xp = cx - off - j * gap
+    bar(xp, loud(K.past(t - (first - j) / rate)), css(mixRgb(C, 0.5)), 0.95 * edge(xp))
+    // Still to come: grey
+    const xn = cx - off + (j + 1) * gap
+    bar(xn, loud(K.past(t - (first + j + 1) / rate)), dark ? 'rgba(40, 40, 48, 1)' : 'rgba(150, 155, 170, 1)', 0.34 * edge(xn))
+  }
+  // The playhead
+  alpha(K, 0.95)
+  g.fillStyle = ink
+  g.fillRect(cx - 0.9 * u, cy - amp * 1.5, 1.8 * u, amp * 3)
+  circle(g, cx, cy - amp * 1.5, 4 * u)
+}
+
+/** Wide glass capsules: low → high colour inside, a white shine and rim, a soft glow and a reflection */
+function glassBars(K: Ctx) {
+  const { g, C, t, ww, x0, amp, cy, u, look } = K
+  const n = 11
   const bw = ww / n
   const w = bw * 0.5
   for (let i = 0; i < n; i++) {
-    const p = i / (n - 1)
-    const h = Math.max(w / 2, amp * loud(K.past((n - 1 - i) * dt)))
-    const [top, len] = span(K, h)
-    alpha(K, 0.25 + 0.75 * p)
-    g.fillStyle = css(mixRgb(C, p))
-    g.beginPath()
-    g.roundRect(x0 + i * bw + (bw - w) / 2, top, w, len, w / 2)
-    g.fill()
-  }
-}
-
-/** Rounded bars filled low → high colour, a soft glow behind and a shine on the side */
-function glassBars(K: Ctx) {
-  const { g, C, ww, x0, amp, cy, look } = K
-  const n = 26
-  const bw = ww / n
-  const w = bw * 0.62
-  for (let i = 0; i < n; i++) {
-    const h = Math.max(w / 2, amp * voiceBar(K, i, n))
-    const [top, len] = span(K, h)
+    const v = columnAt(K.b, i, n, t) * (0.75 + 0.25 * jitter(i))
+    const h = Math.max(w, amp * 1.9 * v)
     const x = x0 + i * bw + (bw - w) / 2
-    const grad = g.createLinearGradient(0, top, 0, top + len)
+    const top = look.shape === 'mirror' ? cy - h / 2 : look.shape === 'top' ? cy - h : cy
+    const grad = g.createLinearGradient(0, top, 0, top + h)
     if (look.shape === 'mirror') {
-      grad.addColorStop(0, css(C[2]))
-      grad.addColorStop(0.5, css(C[0]))
-      grad.addColorStop(1, css(C[2]))
+      grad.addColorStop(0, css(C[2])); grad.addColorStop(0.5, css(C[0])); grad.addColorStop(1, css(C[2]))
     } else {
       const [a, c] = look.shape === 'top' ? [C[2], C[0]] : [C[0], C[2]]
-      grad.addColorStop(0, css(a))
-      grad.addColorStop(1, css(c))
+      grad.addColorStop(0, css(a)); grad.addColorStop(0.55, css(C[1])); grad.addColorStop(1, css(c))
     }
+    // Soft glow: two wider, fainter capsules behind
     g.globalCompositeOperation = K.blend
-    alpha(K, 0.16)
     g.fillStyle = grad
-    g.beginPath()
-    g.roundRect(x - w * 0.45, top - w * 0.3, w * 1.9, len + w * 0.6, w)
-    g.fill()
+    for (const [grow, a] of [[0.35, 0.12]] as const) {
+      alpha(K, a)
+      g.beginPath()
+      g.roundRect(x - w * grow / 2, top - w * grow / 2, w * (1 + grow), h + w * grow, w)
+      g.fill()
+    }
     g.globalCompositeOperation = 'source-over'
     alpha(K, 1)
     g.beginPath()
-    g.roundRect(x, top, w, len, w / 2)
+    g.roundRect(x, top, w, h, w / 2)
     g.fill()
-    alpha(K, 0.28)
-    g.fillStyle = '#fff'
+    // The shine down the left side, and a thin rim
+    const shine = g.createLinearGradient(x, 0, x + w, 0)
+    shine.addColorStop(0, 'rgba(255, 255, 255, 0.55)')
+    shine.addColorStop(0.35, 'rgba(255, 255, 255, 0.08)')
+    shine.addColorStop(1, 'rgba(255, 255, 255, 0)')
+    g.fillStyle = shine
     g.beginPath()
-    g.roundRect(x + w * 0.16, top + w * 0.25, w * 0.2, Math.max(0, len - w * 0.5), w * 0.1)
+    g.roundRect(x + w * 0.08, top + w * 0.12, w * 0.45, Math.max(0, h - w * 0.24), w / 3)
     g.fill()
-    // A faint reflection under bars that only go up
+    alpha(K, 0.35)
+    g.strokeStyle = '#fff'
+    g.lineWidth = Math.max(1, u)
+    g.beginPath()
+    g.roundRect(x + 0.5, top + 0.5, w - 1, h - 1, w / 2)
+    g.stroke()
+    // Reflection under bars that stand up
     if (look.shape === 'top') {
-      const rg = g.createLinearGradient(0, cy, 0, cy + len * 0.45)
-      rg.addColorStop(0, css(C[0], 0.3))
+      const rg = g.createLinearGradient(0, cy + 4 * u, 0, cy + 4 * u + h * 0.5)
+      rg.addColorStop(0, css(C[0], 0.28))
       rg.addColorStop(1, css(C[0], 0))
       alpha(K, 1)
       g.fillStyle = rg
       g.beginPath()
-      g.roundRect(x, cy + 2 * K.u, w, len * 0.45, w / 2)
+      g.roundRect(x, cy + 4 * u, w, h * 0.5, w / 2)
       g.fill()
     }
   }
@@ -914,6 +987,7 @@ export function drawWave(g: CanvasRenderingContext2D, W: number, H: number, at: 
     A: (info.base ? 1 : fade) * show,
     blend: dark ? 'source-over' : 'lighter',
     ink: dark ? '#000' : '#fff',
+    dark,
   }
   g.save()
   g.lineJoin = 'round'
