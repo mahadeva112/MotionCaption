@@ -143,8 +143,60 @@ export function Viewer(p: Props) {
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  const W = Math.round(Math.max(160, Math.min(box.w * (full ? 0.96 : FILL), Math.min(box.h * (full ? 0.96 : FILL), full ? Infinity : MAX_H) * aspect)))
+  // The whole frame fits the stage (a short panel shows a small frame, never a cut one)
+  const fitW = Math.max(40, Math.min(box.w * (full ? 0.96 : FILL), Math.min(box.h * (full ? 0.96 : FILL), full ? Infinity : MAX_H) * aspect))
+  // Zoom, as in Resolve's viewer: the wheel zooms where the pointer is, a drag moves the zoomed
+  // frame (middle button anywhere, or the left button off the caption), a double-click fits it again.
+  // The frame is drawn larger (not scaled), so the caption's drag and sizes stay right.
+  const [view, setView] = useState({ z: 1, x: 0, y: 0 })
+  const zMax = Math.max(1, Math.min(8, 4000 / fitW))
+  const z = Math.min(view.z, zMax)
+  const W = Math.round(fitW * z)
   const H = Math.round(W / aspect)
+  /** Keeps the zoomed frame from leaving the stage */
+  const clampPan = (x: number, y: number, w: number, h: number) => {
+    const mx = Math.max(0, (w - box.w) / 2) + 40
+    const my = Math.max(0, (h - box.h) / 2) + 40
+    return { x: Math.max(-mx, Math.min(mx, x)), y: Math.max(-my, Math.min(my, y)) }
+  }
+  const fitView = () => setView({ z: 1, x: 0, y: 0 })
+  useEffect(() => {
+    const el = wrap.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      const f = frame.current?.getBoundingClientRect()
+      if (!f) return
+      e.preventDefault()
+      setView((v) => {
+        const z0 = Math.min(v.z, zMax)
+        const z1 = Math.max(1, Math.min(zMax, z0 * Math.exp(-e.deltaY * 0.0015)))
+        if (z1 <= 1.001) return { z: 1, x: 0, y: 0 }
+        const k = z1 / z0
+        // The point under the pointer stays under it
+        const qx = e.clientX - (f.left + f.width / 2)
+        const qy = e.clientY - (f.top + f.height / 2)
+        const w = fitW * z1
+        return { z: z1, ...clampPan(v.x + qx * (1 - k), v.y + qy * (1 - k), w, w / aspect) }
+      })
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  })
+  useEffect(fitView, [aspect, full])
+  const panning = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null)
+  const panDown = (e: PointerEvent<HTMLDivElement>) => {
+    const left = e.button === 0 && z > 1.001 && !p.path?.draw && !(e.target as HTMLElement).closest('.vblock, .vsolo, [data-grip], button')
+    if (e.button !== 1 && !left) return
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    panning.current = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y }
+  }
+  const panMove = (e: PointerEvent<HTMLDivElement>) => {
+    const d = panning.current
+    if (!d) return
+    setView((v) => ({ z: v.z, ...clampPan(d.vx + e.clientX - d.x, d.vy + e.clientY - d.y, W, H) }))
+  }
+  const panUp = () => { panning.current = null }
 
   useEffect(() => {
     const el = wrap.current
@@ -275,7 +327,8 @@ export function Viewer(p: Props) {
   const pathPts = p.path && cue ? [[0, 0] as const, ...p.path.points].map(([dx, dy]) => [(cue.look.center[0] + dx) * W, (1 - cue.look.center[1] - dy) * H] as const) : null
 
   const fr = (
-    <div className={'vframe' + (p.path?.draw ? ' drawing' : '')} ref={frame} style={{ width: W, height: H }} onPointerDown={addPoint}>
+    <div className={'vframe' + (p.path?.draw ? ' drawing' : '')} ref={frame}
+      style={{ width: W, height: H, transform: z > 1.001 ? `translate(${view.x}px, ${view.y}px)` : undefined }} onPointerDown={addPoint}>
       {url ? <video ref={vid} className="vvid" src={url} preload="auto" playsInline disablePictureInPicture /> : <div className="vbg" />}
       {p.under}
       {cue && onScreen && <Caption cue={cue} ms={ms} W={W} H={H} aspect={aspect} selWord={p.selWord} blockRef={block} onDown={down} onMove={move} onUp={up}
@@ -297,7 +350,11 @@ export function Viewer(p: Props) {
     <div className={'viewer' + (p.loop ? ' trying' : '') + (full ? ' full' : '') + (inWindow ? ' inwin' : '')} ref={root}>
       <div className="phead"><b>Preview</b><span className="grow" />{p.videoTools}</div>
       <div className="vlabel" title={p.label}>{p.label}</div>
-      <div className="vstage" ref={wrap}>{fr}</div>
+      <div className={'vstage' + (z > 1.001 ? ' zoomed' : '')} ref={wrap} onPointerDown={panDown} onPointerMove={panMove} onPointerUp={panUp}
+        onPointerCancel={panUp} onDoubleClick={(e) => { if (!(e.target as HTMLElement).closest('.vblock, .vsolo')) fitView() }}>
+        {fr}
+        {z > 1.001 && <button className="vzoom" onClick={fitView} title="Fit the whole frame (double-click the preview)">{Math.round(z * 100)}% · Fit</button>}
+      </div>
       <div className="transport">
         <div className="scrub" onPointerDown={scrub} onPointerMove={scrub} title="Click or drag to move the playhead">
           <i style={{ width: `${pct}%` }} /><b style={{ left: `${pct}%` }} />
