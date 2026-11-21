@@ -117,15 +117,17 @@ export function useTimelineVideo({ project, timeline, hideClips, linked }: Args)
     </span>
   ) : (
     <span className="vtools">
-      <button className={'vt label' + (on ? ' on' : '')} onClick={() => { setOn(!on); keep('mc.video.on', !on) }}
-        title={on ? 'Hide the timeline video' : 'Show the timeline video under the captions'}>
-        <Icon name="film" size={13} />Video
-      </button>
-      {on && <button className="vt" onClick={() => { setMuted(!muted); keep('mc.video.muted', !muted) }} title={muted ? 'Sound on' : 'Sound off'}>
-        <Icon name={muted ? 'mute' : 'sound'} size={13} />
-      </button>}
-      <button className="vt" onClick={make} title={`Made ${made}. Render it again after changing the edit in Resolve`}><Icon name="refresh" size={12} /></button>
       {error && <span className="vhint err" title={error}>{error}</span>}
+      <span className="vseg">
+        <button className={'vt label' + (on ? ' on' : '')} onClick={() => { setOn(!on); keep('mc.video.on', !on) }}
+          title={on ? 'Hide the timeline video' : 'Show the timeline video under the captions'}>
+          <Icon name="film" size={13} />Video
+        </button>
+        {on && <button className="vt" onClick={() => { setMuted(!muted); keep('mc.video.muted', !muted) }} title={muted ? 'Sound on' : 'Sound off'}>
+          <Icon name={muted ? 'mute' : 'sound'} size={13} />
+        </button>}
+        <button className="vt" onClick={make} title={`Made ${made}. Render it again after changing the edit in Resolve`}><Icon name="refresh" size={12} /></button>
+      </span>
     </span>
   )
 

@@ -145,7 +145,10 @@ span.link { text-decoration: none; cursor: default; border: 1px solid var(--seam
 
 /* Viewer */
 .viewer { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
-.viewer .vlabel { margin-left: auto; color: var(--t3); overflow: hidden; text-overflow: ellipsis; }
+.viewer .phead b { flex: none; }
+.viewer .phead .grow { flex: 1; }
+/* What the preview shows, on its own row under the header so the tools never crowd it */
+.viewer .vlabel { flex: none; margin: -4px 14px 6px; padding: 5px 10px; border-radius: 7px; background: var(--r2); color: var(--t3); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .viewer.trying .vlabel { color: var(--sel2); }
 .viewer.full { background: #000; }
 .viewer.full .vstage { background: #000; }
@@ -163,6 +166,11 @@ span.link { text-decoration: none; cursor: default; border: 1px solid var(--seam
 .vtools .vt.label { padding: 0 9px; }
 .vtools .vt:hover { background: var(--r2); color: var(--t); }
 .vtools .vt.on { color: var(--t); border-color: rgba(255, 106, 61, .45); background: rgba(255, 106, 61, .1); }
+/* Video, sound and render again as one joined group */
+.vseg { display: inline-flex; flex: none; border: 1px solid var(--line2); border-radius: 7px; overflow: hidden; }
+.vseg .vt { border: 0; border-radius: 0; height: 24px; }
+.vseg .vt + .vt { border-left: 1px solid var(--line2); }
+.vseg .vt.on { background: rgba(255, 106, 61, .14); color: #ffb48a; }
 .vtools.busy { font-size: 11.5px; gap: 7px; }
 .vtools.busy .vt { border-color: transparent; }
 .vtools .spin { width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--line2); border-top-color: var(--mc); animation: vspin .8s linear infinite; }
