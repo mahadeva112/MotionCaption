@@ -7,7 +7,7 @@ import type { Look, Rgb } from './look.ts'
 
 export type WaveStyle =
   | 'siri' | 'soft' | 'aura' | 'aurora'
-  | 'bars' | 'pill' | 'thin' | 'spectrum' | 'blocks' | 'scroll' | 'glassbars'
+  | 'bars' | 'pill' | 'thin' | 'spectrum' | 'blocks' | 'scroll' | 'glassbars' | 'spikes' | 'dashes' | 'echo'
   | 'line' | 'multi' | 'smooth' | 'classic' | 'scope' | 'neon' | 'ribbon'
   | 'ring' | 'pulse' | 'dotring' | 'orb' | 'radial' | 'ripple'
   | 'dots' | 'bounce' | 'particles' | 'matrix'
@@ -43,6 +43,9 @@ export const WAVE_STYLES: WaveStyleInfo[] = [
   S('blocks', 'LED meter', 'Bars', 'Simple', true, false),
   S('scroll', 'Voice memo', 'Bars', 'Simple', true, true),
   S('glassbars', 'Glass bars', 'Bars', 'Advanced', true, false),
+  S('spikes', 'Minimal spikes', 'Bars', 'Simple', true, false),
+  S('dashes', 'Soft dashes', 'Bars', 'Simple', true, false),
+  S('echo', 'Echo dashes', 'Bars', 'Advanced', true, false),
   S('line', 'Line', 'Line', 'Simple', false, false),
   S('multi', 'Multi line', 'Line', 'Simple', false, false),
   S('smooth', 'Smooth curve', 'Line', 'Simple', false, false),

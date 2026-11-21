@@ -34,8 +34,9 @@ const MAILBOX = join(MC_DIR, 'mc_mailbox.png')
 const writeInbox = () => writeInboxIn(MC_DIR)
 
 // The preview plays timeline videos from mcvideo://file/<name>, only from PREVIEWS. Seeking
-// needs byte ranges, so the handler answers them itself.
-protocol.registerSchemesAsPrivileged([{ scheme: 'mcvideo', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } }])
+// needs byte ranges, so the handler answers them itself. The audio wave reads their sound
+// with fetch from the app's page (another origin), so the answers allow that (CORS).
+protocol.registerSchemesAsPrivileged([{ scheme: 'mcvideo', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true, corsEnabled: true } }])
 
 async function serveVideo(req: Request): Promise<Response> {
   const name = decodeURIComponent(new URL(req.url).pathname.replace(/^\/+/, ''))
@@ -43,7 +44,7 @@ async function serveVideo(req: Request): Promise<Response> {
   const path = join(PREVIEWS, name)
   let size: number
   try { size = (await stat(path)).size } catch { return new Response(null, { status: 404 }) }
-  const head = { 'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes' }
+  const head = { 'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes', 'Access-Control-Allow-Origin': '*' }
   const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.get('range') ?? '')
   if (!m || (!m[1] && !m[2])) {
     return new Response(Readable.toWeb(createReadStream(path)) as ReadableStream, { headers: { ...head, 'Content-Length': String(size) } })
