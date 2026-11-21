@@ -615,3 +615,79 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
 .tthumb { position: relative; flex: none; width: 100%; overflow: hidden; border-radius: 8px; isolation: isolate;
   background: radial-gradient(120% 90% at 70% 20%, #4a5a6e 0%, #2a3442 45%, #161b23 100%); }
 .tthumb * { pointer-events: none !important; cursor: inherit !important; }
+
+/* Audio wave (Wave.tsx): its library tab, the layer over the preview, its settings, its timeline rows */
+.studio2.waved { grid-template-rows: minmax(0, 1fr) 186px 250px; }
+.vwave { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.libtabs button i.new { font-size: 9px; font-weight: 700; letter-spacing: .04em; color: #fff; background: var(--sel); padding: 1px 5px; border-radius: 5px; align-self: center; }
+.libtabs button.on i.new { color: #fff; }
+.wavelib { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+.wsrc { flex: none; display: flex; align-items: center; gap: 12px; margin: 0 14px 12px; padding: 10px 12px; border-radius: 12px; background: var(--r2); border: 1.5px dashed rgba(255, 255, 255, .14); transition: border-color .15s, background .15s; }
+.wsrc.over { border-color: var(--sel); background: var(--sel-soft); }
+.wsrc .bub { flex: none; width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; background: var(--sel-soft); color: var(--sel2); }
+.wsrc .meta { flex: 0 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.wsrc .meta b { font-size: 12.5px; color: var(--t); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wsrc .meta span { font-size: 11px; color: var(--t3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wsrc .meta em.err { font-style: normal; color: var(--err); }
+.wsrc .wpeaks { flex: 1 1 80px; min-width: 40px; height: 34px; }
+.wsrc .wbtns { flex: none; display: flex; flex-direction: column; gap: 5px; }
+.wsrc .wbtns .mini { height: 26px; padding: 0 10px; font-size: 11.5px; }
+.wsrc .wbtns .mini.off { opacity: .45; pointer-events: none; }
+.wtiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; padding: 0 14px 14px; align-content: start; }
+.wtile { position: relative; padding: 0; border-radius: 12px; overflow: hidden; background: var(--r2); border: 1px solid var(--seam); text-align: left; transition: border-color .15s, transform .15s; }
+.wtile:hover { border-color: var(--line2); transform: translateY(-1px); }
+.wtile canvas { display: block; width: 100%; height: 96px; background: #0e1015; }
+.wtile .nm { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 7px 10px; }
+.wtile .nm b { font-size: 12px; font-weight: 600; color: var(--t); }
+.wtile .nm small { font-size: 10.5px; color: var(--t3); }
+.wtile.on { border-color: var(--sel); box-shadow: 0 0 0 1px var(--sel); }
+.wtile.on::after { content: '✓'; position: absolute; top: 7px; right: 7px; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; background: var(--sel); color: #fff; font-size: 11px; }
+.whead { flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--seam); }
+.whead .wic { flex: none; width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: rgba(196, 127, 240, .18); color: #d6a6f5; }
+.whead .wt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.whead .wt b { font-size: 13px; font-weight: 600; color: var(--t); }
+.whead .wt small { font-size: 11px; color: var(--t3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.whead .mini { height: 28px; }
+.wstart { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.wstart b { font-variant-numeric: tabular-nums; color: var(--t); font-weight: 500; margin-right: 4px; }
+.wstart .mini, .ipane .irow .mini { height: 26px; padding: 0 9px; font-size: 11.5px; }
+.th.wv, .th.au { height: 34px; }
+.th.wv b { background: rgba(196, 127, 240, .18); color: #d6a6f5; }
+.th.wv.on { background: rgba(196, 127, 240, .08); }
+.th.au { border-bottom: 0; border-top: 1px solid var(--seam); }
+.th.au b { background: rgba(61, 220, 151, .15); color: #6fe3b0; }
+.tag.w { background: rgba(196, 127, 240, .18); color: #d6a6f5; }
+.tag.a { background: rgba(61, 220, 151, .14); color: #6fe3b0; }
+.lane.wv, .lane.au { height: 34px; }
+.lane.wv { border-bottom: 1px solid var(--seam); }
+.lane.au { border-top: 1px solid var(--seam); }
+.lane.wv i, .lane.au i { top: 4px; bottom: 4px; padding: 0; cursor: pointer; }
+.lane.wv i { background: #3f2550; border: 1px solid #b06fe0; }
+.lane.wv i.off { opacity: .45; border-style: dashed; }
+.lane.wv i svg, .lane.au i svg { position: absolute; inset: 2px 0; width: 100%; height: calc(100% - 4px); }
+.lane.wv i svg path { fill: rgba(226, 184, 255, .35); }
+.lane.wv i b { position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; font-size: 11px; font-weight: 600; color: #f1dcff; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
+.lane.au i { background: #15362a; border: 1px solid #2f7a55; }
+.lane.au i svg path { fill: #3ddc97; }
+
+/* Simple / Advanced and type filters, and the Advanced tag on a card */
+.wavelib .chips .sep { width: 1px; align-self: stretch; margin: 3px 4px; background: var(--seam); }
+.wtile .lv { position: absolute; top: 7px; left: 7px; padding: 1px 6px; border-radius: 6px; font-style: normal; font-size: 9.5px; font-weight: 600; letter-spacing: .02em;
+  color: #fff; background: rgba(255, 255, 255, .12); border: 1px solid rgba(255, 255, 255, .16); pointer-events: none; }
+
+/* All white / All black beside the wave's Colour title */
+.wmono { display: inline-flex; gap: 4px; }
+.wmono .mini { height: 20px; padding: 0 7px; font-size: 10.5px; gap: 5px; text-transform: none; letter-spacing: 0; }
+.wmono .mini i { width: 9px; height: 9px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .45); }
+.wtiles.lite .wtile canvas { background: #d8d5ce; }
+.wmono .mini i.tri { background: linear-gradient(90deg, #ff4f8c, #4fa3ff, #3ddb96); }
+/* Saving the wave's look under a name */
+.wsave { display: flex; gap: 6px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--seam); }
+.wsave input { flex: 1; min-width: 0; height: 26px; padding: 0 8px; border-radius: 7px; background: var(--r2); border: 1px solid var(--line2); color: var(--t); font-size: 12px; }
+/* Favourite star and a saved look's remove on a wave card (top-left has the Advanced tag) */
+.wtile .pfav { top: 7px; left: auto; right: 7px; }
+.wtile.on .pfav { right: 30px; }
+.wtile:hover .pfav { opacity: 1; }
+.wtile.lite canvas { background: #d8d5ce; }
+.wavelib .wfrom { min-width: 0; max-width: 170px; }
+.wtiles .wempty { grid-column: 1 / -1; }

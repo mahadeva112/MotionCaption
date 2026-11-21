@@ -1322,7 +1322,7 @@ local function read_timeline()
             width = tonumber(tl:GetSetting("timelineResolutionWidth")), height = tonumber(tl:GetSetting("timelineResolutionHeight")),
             -- The whole timeline's length in ms, as Resolve shows it
             length = (function() local e = try(function() return tl:GetEndFrame() end); return e and ms(e) or nil end)() },
-        video = {}, subtitle = {}, texts = {},
+        video = {}, subtitle = {}, texts = {}, audio = {},
     }
     local looked, t0 = 0, os.clock()
     for i = 1, (tl:GetTrackCount("video") or 0) do
@@ -1362,8 +1362,19 @@ local function read_timeline()
         T.subtitle[#T.subtitle + 1] = { index = i, name = try(function() return tl:GetTrackName("subtitle", i) end) or ("Subtitle " .. i),
             enabled = try(function() return tl:GetIsTrackEnabled("subtitle", i) end) ~= false, cues = cues }
     end
+    -- Audio tracks, so the app's audio wave can follow one of them on its own
+    for i = 1, (try(function() return tl:GetTrackCount("audio") end) or 0) do
+        local clips = {}
+        for j, it in ipairs(objects(try(function() return tl:GetItemListInTrack("audio", i) end))) do
+            if j > 400 then break end
+            local st, en = try(function() return it:GetStart() end), try(function() return it:GetEnd() end)
+            if st and en then clips[#clips + 1] = { start = ms(st), ["end"] = ms(en), name = try(function() return it:GetName() end) or "" } end
+        end
+        T.audio[#T.audio + 1] = { index = i, name = try(function() return tl:GetTrackName("audio", i) end) or ("Audio " .. i),
+            enabled = try(function() return tl:GetIsTrackEnabled("audio", i) end) ~= false, clips = clips }
+    end
     write_file(TIMELINE, json(T))
-    log("Read timeline " .. T.timeline.name .. ": " .. #T.video .. " video, " .. #T.subtitle .. " subtitle tracks")
+    log("Read timeline " .. T.timeline.name .. ": " .. #T.video .. " video, " .. #T.subtitle .. " subtitle, " .. #T.audio .. " audio tracks")
 end
 
 -- Seconds since the app made this job: its id starts with the UTC time of the Send
@@ -1465,6 +1476,20 @@ local function render_preview(job, project, tl)
         end
     end
     log("OK    Left out of the video: " .. #tracksOff .. " MC tracks, " .. #clipsOff .. " Text+ layers")
+    -- For the audio wave: only one audio track heard (the others turned off, that one on)
+    local audioOff, audioOn = {}, nil
+    local only = tonumber(P.audioTrack)
+    if only then
+        for i = 1, (try(function() return tl:GetTrackCount("audio") end) or 0) do
+            local on = try(function() return tl:GetIsTrackEnabled("audio", i) end) ~= false
+            if i == only then
+                if not on and try(function() return tl:SetTrackEnable("audio", i, true) end) then audioOn = i end
+            elseif on and try(function() return tl:SetTrackEnable("audio", i, false) end) then
+                audioOff[#audioOff + 1] = i
+            end
+        end
+        log("OK    Sound of A" .. only .. " only: " .. #audioOff .. " other audio tracks turned off for the render")
+    end
 
     local file = P.dir .. P.name .. ".mp4"
     if os.remove then os.remove(file) end
@@ -1502,6 +1527,8 @@ local function render_preview(job, project, tl)
     if id then try(function() project:DeleteRenderJob(id) end) end
     for _, it in ipairs(clipsOff) do try(function() it:SetClipEnabled(true) end) end
     for _, i in ipairs(tracksOff) do try(function() tl:SetTrackEnable("video", i, true) end) end
+    for _, i in ipairs(audioOff) do try(function() tl:SetTrackEnable("audio", i, true) end) end
+    if audioOn then try(function() tl:SetTrackEnable("audio", audioOn, false) end) end
     if kept then
         try(function() project:LoadRenderPreset(KEEP) end)
         try(function() project:DeleteRenderPreset(KEEP) end)

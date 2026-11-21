@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { compileCue, type CompileOpts } from '@core/compile'
-import { jobToLua, makeJob, sendSig, type Rendered } from '@core/job'
+import { jobToLua, makeJob, sendSig, waveSig, type Rendered } from '@core/job'
+import { DEFAULT_WAVE, envFromText, envMs, envToText, peaksOf, WAVE_STYLES, waveUnder, type WaveClip, type WaveLook } from '@core/wave'
 import { DEFAULT_HIGHLIGHT, DEFAULT_LOOK, DEFAULT_MOTION, type Highlight, type Look, type Motion, type WordLook } from '@core/look'
 import { EMPTY_PATTERN, patternList, type Pattern } from '@core/pattern'
 import { presetById } from '@core/presets'
@@ -24,10 +25,12 @@ import {
 } from './model'
 import { SendDialog } from './SendDialog'
 import { TimelineD } from './TimelineD'
-import { useTimelineVideo } from './TimelineVideo'
+import { renderTrackSound, useTimelineVideo } from './TimelineVideo'
 import { TemplateLibrary } from './TemplateLibrary'
 import { TEMPLATES } from './templates'
 import { Viewer } from './Viewer'
+import { WaveInspector, WaveLayer, WaveLibrary, type WaveData } from './Wave'
+import { readSound, waveSound } from './waveDraw'
 import { Dropdown } from './Dropdown'
 import { AppMenu, UpdateDialog, UpdateStrip, useUpdates } from './Updates'
 
@@ -70,6 +73,8 @@ const withExtras = (src: Source): Source =>
 /** A timeline's supers as kept on this computer */
 const savedSupers = (d: TimelineData) => saved(supersKey(d), { list: [] as SavedSuper[] }).list.map(superCue)
 const DEFAULT_TARGET: Target = { track: 'new', turnOffSource: true, replace: true }
+/** The wave's signature in the last Send's record (captions go by their times) */
+const WAVE_SENT = 'wave'
 
 type StyleBase = { name: string | null; look: Partial<Look> }
 const NO_STYLE: StyleBase = { name: null, look: {} }
@@ -105,6 +110,19 @@ export function App() {
   const [tab, setTab] = useState<Tab>('Look')
   /** The library shows animations or super templates */
   const [libView, setLibView] = useState<LibView>('anim')
+  /**
+   * The audio wave's look, kept with each timeline ('mc.waveLook.<project>|<timeline>'); 'mc.waveLook'
+   * is the last one used, which a timeline without its own starts from. Also whether its settings
+   * show in place of the Inspector.
+   */
+  const [waveLook, setWaveLook] = useState<WaveLook>(() => saved('mc.waveLook', DEFAULT_WAVE))
+  /** Where the look is kept: set when a timeline's look is loaded, so it is never written to another */
+  const waveLookKey = useRef<string | null>(null)
+  useEffect(() => {
+    store('mc.waveLook', waveLook)
+    if (waveLookKey.current) store(waveLookKey.current, waveLook)
+  }, [waveLook])
+  const [waveSel, setWaveSel] = useState(false)
   const [target, setTarget] = useState<Target>(DEFAULT_TARGET)
   const [safe, setSafe] = useState<SafeArea>('off')
   const [playing, setPlaying] = useState(false)
@@ -274,6 +292,111 @@ export function App() {
     setSupers((l) => l.map((c) => (c.n !== n ? c : superCue({ n, startMs: c.startMs, endMs: c.endMs, text: c.text, ...patch }))))
   }
 
+  // ── The audio wave: a shape that moves with the sound, placed in Resolve as one drawn clip ──
+  // Its sound is read once into an envelope (core/wave.ts) and kept per timeline on this computer.
+  const waveKeyOf = (d: TimelineData) => 'mc.wave.' + (d.project ?? '') + '|' + (d.timeline ? d.timeline.name : '')
+  const waveStore = source?.kind === 'timeline' && source.data.timeline ? waveKeyOf(source.data) : null
+  const [wave, setWave] = useState<WaveData | null>(null)
+  const [waveBusy, setWaveBusy] = useState<string | null>(null)
+  const [waveErr, setWaveErr] = useState<string | null>(null)
+  /** A sound file picked in this session, to hear it with the preview */
+  const [waveAudio, setWaveAudio] = useState<string | null>(null)
+  const waveLoaded = useRef<string | null>(null)
+  // Each timeline's own look (the key comes before the look, so the save above writes it to this timeline)
+  useEffect(() => {
+    const key = waveStore ? 'mc.waveLook.' + waveStore.slice('mc.wave.'.length) : null
+    waveLookKey.current = key
+    if (key) setWaveLook(saved(key, saved('mc.waveLook', DEFAULT_WAVE)))
+  }, [waveStore])
+  useEffect(() => {
+    waveLoaded.current = waveStore
+    setWaveErr(null); setWaveBusy(null)
+    if (!waveStore) { setWave(null); return }
+    const k = saved(waveStore, { on: true, src: { kind: 'file', name: '' }, startMs: 0, env: '' } as Omit<WaveData, 'env'> & { env: string })
+    const env = k.env ? envFromText(k.env) : null
+    setWave(env ? { on: k.on, src: k.src, startMs: k.startMs, env } : null)
+  }, [waveStore])
+  const waveText = useMemo(() => (wave ? envToText(wave.env) : ''), [wave?.env])
+  useEffect(() => {
+    if (!waveStore || waveLoaded.current !== waveStore) return
+    try {
+      if (wave) localStorage.setItem(waveStore, JSON.stringify({ on: wave.on, src: wave.src, startMs: wave.startMs, env: waveText }))
+      else localStorage.removeItem(waveStore)
+    } catch { /* too big to keep: it still works until the app closes */ }
+  }, [wave?.on, wave?.src, wave?.startMs, waveText, waveStore])
+  /** A sound read into the wave (a new one starts where the last one did, else at the timeline's start) */
+  async function takeSound(bytes: ArrayBuffer, src: WaveData['src'], startMs: number | null, note: string) {
+    const was = waveStore
+    setWaveErr(null); setWaveBusy(note)
+    try {
+      const env = await readSound(bytes)
+      if (waveLoaded.current !== was) return
+      remember()
+      setWave((w) => ({ on: true, src, startMs: startMs ?? w?.startMs ?? 0, env }))
+      setWaveSel(true); setLibView('wave')
+    } catch {
+      setWaveErr('That sound could not be read. Try a wav, mp3 or m4a file.')
+    } finally { setWaveBusy(null) }
+  }
+  function pickSoundFile(f: File) {
+    setWaveAudio((old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(f) })
+    f.arrayBuffer().then((b) => takeSound(b, { kind: 'file', name: f.name }, null, `Reading ${f.name}…`), () => setWaveErr('That file could not be opened.'))
+  }
+  /** The timeline's own sound, from its timeline video (Resolve renders one first if there is none) */
+  const wantTlAudio = useRef(false)
+  async function takeTimelineSound(track = 0, fresh = false) {
+    if (track > 0) { takeTrackSound(track, fresh); return }
+    const v = tlVideo.video
+    if (!v) { wantTlAudio.current = true; setWaveErr(null); tlVideo.make(); return }
+    wantTlAudio.current = false
+    setWaveBusy('Reading the timeline’s sound…')
+    try {
+      const bytes = await (await fetch(v.url)).arrayBuffer()
+      setWaveAudio((old) => { if (old) URL.revokeObjectURL(old); return null })
+      await takeSound(bytes, { kind: 'timeline', name: `${tl?.name ?? 'Timeline'} (timeline audio)` }, 0, 'Reading the timeline’s sound…')
+    } catch {
+      setWaveBusy(null)
+      setWaveErr('The timeline video’s sound could not be read. Render it again with the ↻ button in the preview.')
+    }
+  }
+  /** The timeline's audio tracks, for the wave to follow one of them */
+  const waveTracks = source?.kind === 'timeline' ? (source.data.audio ?? []).map((t) => ({ index: t.index, name: t.name })) : []
+  /** One audio track's sound: Resolve renders it with the other tracks off (kept, so only the first time) */
+  async function takeTrackSound(track: number, fresh: boolean) {
+    if (!tl) return
+    const name = waveTracks.find((t) => t.index === track)?.name ?? ''
+    const was = waveStore
+    setWaveErr(null); setWaveBusy(`Resolve is rendering the sound of A${track}…`)
+    try {
+      const v = await renderTrackSound({ project: source?.kind === 'timeline' ? source.data.project : undefined, timeline: tl.name, track,
+        linked: link.alive, fresh, onHint: (h) => setWaveBusy(h) })
+      if (waveLoaded.current !== was) return
+      const bytes = await (await fetch(v.url)).arrayBuffer()
+      setWaveAudio((old) => { if (old) URL.revokeObjectURL(old); return null })
+      await takeSound(bytes, { kind: 'timeline', name: `A${track}${name ? ' · ' + name : ''}`, track }, 0, `Reading the sound of A${track}…`)
+    } catch (e) {
+      setWaveBusy(null)
+      setWaveErr(String((e as Error)?.message ?? e))
+    }
+  }
+  function changeWave(x: Partial<WaveLook>) { setWaveLook((l) => ({ ...l, ...x })) }
+  const waveTlLen = source?.kind === 'timeline' ? timelineLength(source.data) : 0
+  /** Where the wave clip sits: from its sound's start, as long as the sound, inside the timeline */
+  const waveSpan = useMemo(() => {
+    if (!wave) return null
+    const startMs = onFrame(wave.startMs, fps)
+    const end = onFrame(startMs + envMs(wave.env), fps)
+    const endMs = waveTlLen > 0 ? Math.min(end, onFrame(waveTlLen, fps)) : end
+    return endMs - startMs >= 1000 / fps ? { startMs, endMs } : null
+  }, [wave, fps, waveTlLen])
+  const sound = useMemo(() => (wave ? waveSound(wave.env, waveLook.smooth) : null), [wave?.env, waveLook.smooth])
+  /** The wave goes with the next Send: it is on, has a place, and the timeline's size and rate are known */
+  /** The look as drawn: with Under caption, the line follows the captions' place */
+  const waveDrawn = useMemo<WaveLook>(() => (waveLook.snap === 'caption' ? { ...waveLook, y: waveUnder(look, aspect, waveLook) } : waveLook),
+    [waveLook, look.anchor, look.y, look.size, look.lineSpacing, look.lines, aspect])
+  const waveClip: WaveClip | null = wave?.on && waveSpan && tl ? { look: waveDrawn, env: waveText, ...waveSpan } : null
+  const wavePeaks = useMemo(() => (wave ? peaksOf(wave.env, Math.min(1500, Math.max(60, Math.round(envMs(wave.env) / 80)))) : []), [wave?.env])
+
   // ── Timing on the app's timeline, for every source ──
   // Supers change themselves. Subtitles, Text+ layers and SRT captions are never changed:
   // their new times, texts and deletions are caption edits, and the captions a cut or a
@@ -284,12 +407,12 @@ export function App() {
   // change, for all captions or one's own. A drag is one step.
   type WorkState = {
     supers?: Cue[]; extra?: Cue[]; edits: Edits; look: Look; highlight: Highlight; motion: Motion; preset: string
-    pattern: Pattern; patternOn: boolean; smart: Smart; styleBase: StyleBase
+    pattern: Pattern; patternOn: boolean; smart: Smart; styleBase: StyleBase; waveLook: WaveLook; waveOn: boolean
   }
   const history = useRef(new WorkHistory<WorkState>())
   const work: WorkState = {
     supers: source?.kind === 'timeline' ? source.supers : undefined, extra: source?.extra, edits,
-    look, highlight, motion, preset: defaultPreset, pattern, patternOn, smart, styleBase,
+    look, highlight, motion, preset: defaultPreset, pattern, patternOn, smart, styleBase, waveLook, waveOn: wave?.on ?? false,
   }
   // Not the user's: a new read from Resolve (or another SRT), the other kit's settings coming in
   const origin = source?.kind === 'timeline' ? source.data : source?.kind === 'srt' ? source.cues : null
@@ -318,6 +441,7 @@ export function App() {
     setExtras(() => s.extra ?? [])
     setEdits(s.edits); setLook(s.look); setHighlight(s.highlight); setMotion(s.motion); setDefaultPreset(s.preset)
     setPattern(s.pattern); setPatternOn(s.patternOn); setSmart(s.smart); setStyleBase(s.styleBase)
+    setWaveLook(s.waveLook); setWave((w) => (w && w.on !== s.waveOn ? { ...w, on: s.waveOn } : w))
     setPlaying(false)
   }
 
@@ -482,6 +606,8 @@ export function App() {
   }, [srcKey])
   /** How many captions differ from that Send; null while unknown */
   const [changed, setChanged] = useState<number | null>(null)
+  /** The wave differs from that Send (added, changed or taken out) */
+  const [waveDirty, setWaveDirty] = useState(false)
 
   /** A caption's word looks: its own, else (with no highlight rule) the word Smart Auto lights */
   const wordsOf = useCallback((n: number) => {
@@ -512,12 +638,14 @@ export function App() {
         seen.add(sentKey(c))
         try { if (sent[sentKey(c)] !== sendSig(compileCue(c, presetOf(c.n), opts(c.n)), drawn, drawn && movOut)) n++ } catch { n++ }
       }
-      for (const k of Object.keys(sent)) if (!seen.has(k)) n++
+      for (const k of Object.keys(sent)) if (!seen.has(k) && k !== WAVE_SENT) n++
+      // The wave: added, changed or taken out since that Send
+      setWaveDirty((sent[WAVE_SENT] ?? null) !== (waveClip ? waveSig(waveClip, movOut) : null))
       setChanged(n)
     }, 300)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sent, cues, opts, defaultPreset, patterned, drawn, smartPicks])
+  }, [sent, cues, opts, defaultPreset, patterned, drawn, smartPicks, waveClip?.look, waveClip?.env, waveClip?.startMs, waveClip?.endMs, movOut])
 
   // ── Scope-aware changes ──
   const targets = (): number[] => (scope === 'selected' ? [...sel] : cue ? [cue.n] : [])
@@ -718,6 +846,7 @@ export function App() {
   // Nothing selected any more (deleted, joined, undone): changes go to all captions again
   useEffect(() => { if (!sel.size && scope === 'selected') setScope('all') }, [sel, scope])
   function pickCue(n: number, mode: 'set' | 'toggle' | 'range') {
+    setWaveSel(false)
     seekCue(n)
     if (mode === 'range' && anchor.current !== null) {
       const ns = cues.map((c) => c.n)
@@ -780,7 +909,9 @@ export function App() {
       else if (e.key === ' ') { if (!e.repeat) setPlaying((p) => !p); e.preventDefault() }
       else if (e.key === 'Home') { seek(0); setReveal((r) => r + 1); e.preventDefault() }
       else if (e.key === 'End') { seek(endMs); setReveal((r) => r + 1); e.preventDefault() }
-      else if (e.key === 'Escape') { setSel(new Set()); setSelWord(null); if (scope === 'selected') setScope('all') }
+      else if (e.key === 'Escape') { setSel(new Set()); setSelWord(null); setWaveSel(false); if (scope === 'selected') setScope('all') }
+      // With the wave picked, Delete does not take captions out
+      else if (waveSel && (e.key === 'Delete' || e.key === 'Backspace')) e.preventDefault()
       else cueKey(e)
     }
     window.addEventListener('keydown', onKey)
@@ -808,6 +939,11 @@ export function App() {
     project: source?.kind === 'timeline' ? source.data.project : undefined, timeline: tl?.name ?? null, linked: link.alive,
     hideClips: () => (source?.kind === 'timeline' && isTextSrc(source.track) ? layersOf(source).map((t) => ({ track: t.track, at: t.at })) : []),
   })
+  // The timeline video came in after Timeline audio was asked for: read its sound now
+  useEffect(() => {
+    if (wantTlAudio.current && tlVideo.video) takeTimelineSound()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tlVideo.video?.url, tlVideo.video?.at])
   const where = target.track === 'new' ? 'a new track above everything'
     : `V${target.track} · ${timelineInfo?.video?.find((v) => v.index === target.track)?.name ?? ''} (empty spots; the rest on a new track)`
   /** The job last handed to Send: its id and each caption's signature by its time */
@@ -815,12 +951,20 @@ export function App() {
   async function buildJob(onDraw?: (p: RenderProgress) => void) {
     const out = placeable.map((c) => compileCue(c, presetOf(c.n), opts(c.n)))
     let renders: Rendered[] | undefined
-    if (drawn && tl) {
+    let waveRender: Rendered | undefined
+    const wv = waveClip
+    if ((drawn || wv) && tl) {
       const off = onDraw ? window.mc.onRenderProgress(onDraw) : null
-      try { renders = await window.mc.renderCues({ width: tl.width, height: tl.height, fps: tl.rate, cues: out, mov: movOut }) } finally { off?.() }
+      try {
+        // The wave is always drawn (in the Text+ way too); its frames come back last
+        const all = await window.mc.renderCues({ width: tl.width, height: tl.height, fps: tl.rate, cues: drawn ? out : [], mov: movOut, ...(wv ? { wave: wv } : {}) })
+        if (drawn) renders = all.slice(0, out.length)
+        if (wv) waveRender = all[all.length - 1]
+      } finally { off?.() }
     }
     const job = makeJob(srcName || 'Captions', out, undefined, new Date(), {
       renders,
+      ...(wv && waveRender ? { wave: { clip: wv, render: waveRender } } : {}),
       project: source?.kind === 'timeline' ? source.data.project : undefined,
       timeline: tl?.name,
       target: {
@@ -830,7 +974,7 @@ export function App() {
           : {}),
       },
     })
-    built.current = { id: job.id, sigs: Object.fromEntries(job.cues.map((c) => [sentKey(c), c.sig])) }
+    built.current = { id: job.id, sigs: { ...Object.fromEntries(job.cues.map((c) => [sentKey(c), c.sig])), ...(job.wave ? { [WAVE_SENT]: job.wave.sig } : {}) } }
     return { id: job.id, lua: jobToLua(job) }
   }
   /** The job went in: from here on, Send is an update of these captions */
@@ -841,10 +985,10 @@ export function App() {
   }
   const updating = sent !== null && target.replace
   const one = noun.slice(0, -1)
-  const sendLabel = !updating ? `Send ${placeable.length} ${noun} to Resolve`
+  const sendLabel = !updating ? `Send ${placeable.length} ${noun}${waveClip ? ' + wave' : ''} to Resolve`
     : changed === null ? 'Update in Resolve'
-      : changed === 0 ? 'Update · nothing changed'
-        : `Update ${changed} changed ${changed === 1 ? one : noun}`
+      : changed === 0 ? (waveDirty ? 'Update the audio wave' : 'Update · nothing changed')
+        : `Update ${changed} changed ${changed === 1 ? one : noun}${waveDirty ? ' + wave' : ''}`
 
   const ownLook = (n: number) => !!(edits[n]?.look || edits[n]?.preset || Object.keys(edits[n]?.words ?? {}).length)
   const words = cue ? wordsIn(cue.text) : []
@@ -878,16 +1022,18 @@ export function App() {
         <button className="mini" title="Your looks, styles, animation settings and My Animations in one file: save it, or load one" onClick={() => setBranding(true)}>Brand kit</button>
         {source && <button className="mini" title="Put every setting and caption change back to how the app starts" onClick={() => setResetting(true)}><Icon name="undo" />Reset</button>}
         {source && <button className="mini" onClick={openSrt}><Icon name="file" />Open SRT…</button>}
-        {source && <button className="go cta" disabled={!placeable.length} onClick={() => setSending(true)}><Icon name="send" />{sendLabel}</button>}
+        {source && <button className="go cta" disabled={!placeable.length && !waveClip} onClick={() => setSending(true)}><Icon name="send" />{sendLabel}</button>}
       </header>
       <UpdateStrip u={updates} />
 
       {!source ? (
         <Welcome info={timelineInfo} last={last} link={link} onLast={() => showTimeline(last)} onSrt={openSrt} onSrtFile={loadSrt} />
       ) : (
-        <div className={'studio2' + (aspect >= 1 ? ' wide' : '')}>
+        <div className={'studio2' + (aspect >= 1 ? ' wide' : '') + (wave && waveSpan ? ' waved' : '')}>
           <Viewer cue={compiled} aspect={aspect} fps={fps} safe={safe} selWord={selWord} playing={playing} loop={!!hoverPreset}
             endMs={endMs} onSeek={seek} video={tlVideo.shown} videoTools={tlVideo.tools}
+            under={wave && sound && waveSpan ? <WaveLayer look={waveDrawn} sound={sound} startMs={waveSpan.startMs} endMs={waveSpan.endMs}
+              audio={tlVideo.shown && !tlVideo.shown.muted ? null : waveAudio} playing={playing} /> : null}
             label={tryingName !== null ? `Trying ${tryingName} · click to use`
               : cue ? `${supersOn ? 'Super' : 'Caption'} ${cues.indexOf(cue) + 1} of ${cues.length} · ${presetById(presetOf(cue.n))?.name ?? ''}`
                 : supersOn ? 'No supers yet: Add super on the timeline' : 'No captions'}
@@ -906,8 +1052,19 @@ export function App() {
             onRemoveMine={(name) => setMine((l) => l.filter((x) => x.name !== name))}
             adding={patternPick} onPick={patternPick ? (id) => setPattern((x) => ({ ...x, ids: [...x.ids, id] })) : pickPreset}
             view={libView} onView={setLibView}
-            templates={<TemplateLibrary onPick={supersOn && source?.kind === 'timeline' ? addTemplate : null} base={supersOn ? look : DEFAULT_LOOK} />} />
-          <Inspector
+            templates={<TemplateLibrary onPick={supersOn && source?.kind === 'timeline' ? addTemplate : null} base={supersOn ? look : DEFAULT_LOOK} />}
+            wave={<WaveLibrary data={wave} look={waveLook} onStyle={(style) => { remember(); changeWave({ style }) }}
+              onTimeline={tl ? takeTimelineSound : null} tracks={waveTracks} onFile={pickSoundFile}
+              onLook={(l) => { remember(); setWaveLook({ ...DEFAULT_WAVE, ...l }) }}
+              busy={waveBusy ?? (wantTlAudio.current && tlVideo.busy ? 'Resolve is rendering the timeline’s sound…' : null)} error={waveErr}
+              fps={fps} durMs={wave ? envMs(wave.env) : 0} onOpen={() => setWaveSel(true)} />} />
+          {waveSel ? (
+            <WaveInspector look={waveLook} onLook={changeWave} data={wave} fps={fps}
+              onOn={(on) => { remember(); setWave((w) => (w ? { ...w, on } : w)) }}
+              onStart={(ms) => { remember(); setWave((w) => (w ? { ...w, startMs: onFrame(Math.max(0, ms), fps) } : w)) }}
+              onRemove={() => { remember(); setWave(null); setWaveSel(false); setWaveAudio((old) => { if (old) URL.revokeObjectURL(old); return null }) }}
+              onClose={() => setWaveSel(false)} drawnY={waveDrawn.y} />
+          ) : <Inspector
             tab={tab} onTab={setTab} scope={scope} onScope={setScope} selected={sel.size} total={cues.length}
             look={effLook} onLook={changeLook} styles={[...BUILT_IN_STYLES, ...userStyles]}
             base={baseLook} styleName={styleBase.name}
@@ -946,7 +1103,7 @@ export function App() {
             motion={motion} onMotion={(m) => setMotion((x) => ({ ...x, ...m }))}
             safe={safe} onSafe={setSafe}
             drawn={drawn} pathDraw={pathDraw} onPathDraw={setPathDraw}
-          />
+          />}
           <TimelineD
             data={source.kind === 'timeline' ? source.data : null}
             srcTrack={source.kind === 'timeline' ? source.track : null}
@@ -956,6 +1113,10 @@ export function App() {
             target={target} onTarget={(t) => setTarget((x) => ({ ...x, ...t }))} fps={fps} lengthMs={tlLength}
             supers={source.kind === 'timeline' ? (source.supers ?? []).length : 0} onAddSuper={supersOn ? addSuper : null}
             onRetime={retimeCues} onTemplates={supersOn ? () => setLibView('tmpl') : null}
+            wave={wave && waveSpan ? {
+              ...waveSpan, style: WAVE_STYLES.find((x) => x.id === waveLook.style)?.name ?? '', sound: wave.src.name, peaks: wavePeaks,
+              on: wave.on, picked: waveSel, onPick: () => { setWaveSel(true); setLibView('wave') },
+            } : null}
           />
         </div>
       )}
@@ -978,9 +1139,9 @@ export function App() {
           <button className="x" onClick={() => setUndo(null)} title="Close">✕</button>
         </div>
       )}
-      {sending && <SendDialog captions={placeable.length} noun={noun} where={where} timeline={tl?.name ?? null} linked={link.alive} build={buildJob}
+      {sending && <SendDialog captions={placeable.length} noun={noun + (waveClip ? ' and the audio wave' : '')} where={where} timeline={tl?.name ?? null} linked={link.alive} build={buildJob}
         delivery={drawn ? 'drawn' : 'textplus'} canDraw={!!tl} onDelivery={setDelivery} mov={movOut} onMov={setMovOut}
-        update={updating ? { changed } : null} onDone={sentOk} onClose={() => setSending(false)} />}
+        update={updating ? { changed: changed === null ? null : changed + (waveDirty ? 1 : 0) } : null} onDone={sentOk} onClose={() => setSending(false)} />}
     </div>
   )
 }

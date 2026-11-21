@@ -4,8 +4,8 @@ import type { Motion } from '@core/look'
 import { PresetTile } from './PresetTile'
 import { TEMPLATES } from './templates'
 
-/** The library's two tabs: animations, and super templates */
-export type LibView = 'anim' | 'tmpl'
+/** The library's tabs: animations, super templates, and the audio wave */
+export type LibView = 'anim' | 'tmpl' | 'wave'
 
 type Bin = Family | 'All' | 'Recent' | 'Favourites' | 'Mine'
 
@@ -32,10 +32,12 @@ interface Props {
   onView: (v: LibView) => void
   /** The Templates tab's content (TemplateLibrary) */
   templates: ReactNode
+  /** The Audio wave tab's content (Wave.tsx) */
+  wave: ReactNode
 }
 
 /** The big middle area of Pro: search, groups as chips, and a wide grid of tiles */
-export function LibraryD({ current, target, recent, onPick, onHover, adding, favs, onFav, mine, onMine, onRemoveMine, view, onView, templates }: Props) {
+export function LibraryD({ current, target, recent, onPick, onHover, adding, favs, onFav, mine, onMine, onRemoveMine, view, onView, templates, wave }: Props) {
   const [bin, setBin] = useState<Bin>('All')
   const [q, setQ] = useState('')
   const query = q.trim().toLowerCase()
@@ -52,11 +54,13 @@ export function LibraryD({ current, target, recent, onPick, onHover, adding, fav
         <div className="libtabs" role="tablist">
           <button role="tab" aria-selected={view === 'anim'} className={view === 'anim' ? 'on' : ''} onClick={() => onView('anim')}>Animations<i>{PRESETS.length}</i></button>
           <button role="tab" aria-selected={view === 'tmpl'} className={view === 'tmpl' ? 'on' : ''} onClick={() => onView('tmpl')}>Templates<i>{TEMPLATES.length}</i></button>
+          <button role="tab" aria-selected={view === 'wave'} className={view === 'wave' ? 'on' : ''} onClick={() => onView('wave')}>Audio wave<i className="new">NEW</i></button>
         </div>
-        <span className="r">{view === 'tmpl' ? <>click to add a super at the playhead · everything stays editable</>
+        <span className="r">{view === 'wave' ? <>a wave that moves with the sound · click a style to use it</>
+          : view === 'tmpl' ? <>click to add a super at the playhead · everything stays editable</>
           : adding ? <>click to <b>add to the pattern</b></> : <>click to use on <b>{target}</b></>}</span>
       </div>
-      {view === 'tmpl' ? templates : <>
+      {view === 'wave' ? wave : view === 'tmpl' ? templates : <>
       <div className="libtop">
         <input className="search" type="search" placeholder={`Search ${PRESETS.length} animations`} value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="chips">

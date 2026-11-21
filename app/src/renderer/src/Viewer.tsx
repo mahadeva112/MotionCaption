@@ -74,6 +74,8 @@ interface Props {
   video?: { url: string; muted: boolean } | null
   /** Buttons for the timeline video, in the header */
   videoTools?: ReactNode
+  /** Drawn over the video and under the captions (the audio wave) */
+  under?: ReactNode
 }
 
 /** How near (in pixels) the caption's centre must come to the frame's centre lines to stick */
@@ -275,6 +277,7 @@ export function Viewer(p: Props) {
   const fr = (
     <div className={'vframe' + (p.path?.draw ? ' drawing' : '')} ref={frame} style={{ width: W, height: H }} onPointerDown={addPoint}>
       {url ? <video ref={vid} className="vvid" src={url} preload="auto" playsInline disablePictureInPicture /> : <div className="vbg" />}
+      {p.under}
       {cue && onScreen && <Caption cue={cue} ms={ms} W={W} H={H} aspect={aspect} selWord={p.selWord} blockRef={block} onDown={down} onMove={move} onUp={up}
         handles={!p.playing && !p.loop} moving={p.playing || !!p.loop} />}
       {pathPts && (

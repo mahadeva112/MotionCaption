@@ -17,6 +17,12 @@ export interface TimelineVideo {
   /** The video to show under the captions, or null (none yet, or turned off) */
   shown: { url: string; muted: boolean } | null
   tools: React.ReactNode
+  /** This timeline's last video, shown or not (its sound feeds the audio wave) */
+  video: PreviewVideo | null
+  /** Ask Resolve to render it (again) */
+  make: () => void
+  /** Resolve is rendering it */
+  busy: boolean
 }
 
 interface Args {
@@ -123,5 +129,38 @@ export function useTimelineVideo({ project, timeline, hideClips, linked }: Args)
     </span>
   )
 
-  return { shown: video && on ? { url: video.url, muted } : null, tools }
+  return { shown: video && on ? { url: video.url, muted } : null, tools, video, make, busy: !!task }
+}
+
+/**
+ * The sound of one audio track for the audio wave: Resolve renders the timeline small with only
+ * that track heard, and the app keeps it with the timeline (beside its timeline video).
+ */
+export async function renderTrackSound(a: {
+  project?: string; timeline: string; track: number; linked: boolean; onHint: (h: string) => void; fresh: boolean
+}): Promise<PreviewVideo> {
+  const key = `${a.project ?? ''}/${a.timeline}|A${a.track}`
+  if (!a.fresh) {
+    const had = await window.mc.previewGet(key)
+    if (had) return had
+  }
+  const dir = await window.mc.previewDir()
+  const job = makePreviewJob({ dir, maxSide: 320, hideClips: [], audioTrack: a.track }, { project: a.project, timeline: a.timeline })
+  await window.mc.sendJob(jobToLua(job))
+  if (!a.linked) {
+    const r = await window.mc.runInResolve()
+    if (r !== 'OK') a.onHint(r === 'NO_RESOLVE' ? 'Open DaVinci Resolve, then click Workspace → Scripts → MotionCaption.' : 'Click Workspace → Scripts → MotionCaption in Resolve.')
+  }
+  const t0 = Date.now()
+  for (;;) {
+    await new Promise((r) => setTimeout(r, 500))
+    const r = await window.mc.jobResult(job.id)
+    if (r) {
+      if (!r.ok || !r.preview) throw new Error(r.errors[0] ?? 'Resolve could not render the track’s sound.')
+      const v = await window.mc.previewKeep(key, r.preview.file)
+      if (!v) throw new Error('The track’s sound could not be kept.')
+      return v
+    }
+    if (Date.now() - t0 > 15 * 60_000) throw new Error('Resolve did not answer. Try again.')
+  }
 }
