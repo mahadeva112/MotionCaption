@@ -699,3 +699,10 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
 .wtile.lite canvas { background: #d8d5ce; }
 .wavelib .wfrom { min-width: 0; max-width: 170px; }
 .wtiles .wempty { grid-column: 1 / -1; }
+/* Zoomed preview: the frame can be dragged; the badge fits it again */
+.vstage { position: relative; }
+.vstage.zoomed { cursor: grab; }
+.vstage.zoomed:active { cursor: grabbing; }
+.vzoom { position: absolute; left: 22px; bottom: 8px; z-index: 5; height: 22px; padding: 0 9px; border-radius: 11px; border: 1px solid rgba(255, 255, 255, .14);
+  background: rgba(10, 11, 15, .72); color: #fff; font-size: 11px; font-variant-numeric: tabular-nums; }
+.vzoom:hover { background: rgba(10, 11, 15, .9); }
