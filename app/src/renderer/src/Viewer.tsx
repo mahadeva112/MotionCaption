@@ -107,8 +107,8 @@ export function Viewer(p: Props) {
   const [box, setBox] = useState({ w: 560, h: 600 })
   const [warn, setWarn] = useState(false)
 
-  // Full screen (Ctrl+F, as Resolve's Cinema Viewer): the preview fills the monitor, its
-  // buttons stay; Esc or Ctrl+F again comes back. The frame then grows past MAX_H.
+  // Full screen (Ctrl+F, as Resolve's Cinema Viewer; no button, the shortcut list names it): the
+  // preview fills the monitor, its buttons stay; Esc or Ctrl+F again comes back. The frame then grows past MAX_H.
   // Where real full screen is refused (a browser that blocks it), it fills the window instead.
   const [real, setReal] = useState(false)
   const [inWindow, setInWindow] = useState(false)
@@ -295,10 +295,8 @@ export function Viewer(p: Props) {
 
   return (
     <div className={'viewer' + (p.loop ? ' trying' : '') + (full ? ' full' : '') + (inWindow ? ' inwin' : '')} ref={root}>
-      <div className="phead"><b>Preview</b>{p.videoTools}<span className="vlabel">{p.label}</span>
-        <span className="vtools"><button className="vt" onClick={toggleFull} title={full ? 'Leave full screen (Esc or Ctrl+F)' : 'Full screen (Ctrl+F)'}>
-          <Icon name={full ? 'unfull' : 'full'} /></button></span>
-      </div>
+      <div className="phead"><b>Preview</b><span className="grow" />{p.videoTools}</div>
+      <div className="vlabel" title={p.label}>{p.label}</div>
       <div className="vstage" ref={wrap}>{fr}</div>
       <div className="transport">
         <div className="scrub" onPointerDown={scrub} onPointerMove={scrub} title="Click or drag to move the playhead">
