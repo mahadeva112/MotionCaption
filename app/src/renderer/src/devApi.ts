@@ -61,6 +61,15 @@ export const DEV_TIMELINE: TimelineData = {
   ],
 }
 
+// A timeline made just for an audio wave: a video and its sound, no subtitles, no Text+ (?wavetl)
+export const DEV_WAVE_TIMELINE: TimelineData = {
+  ...DEV_TIMELINE,
+  timeline: { ...DEV_TIMELINE.timeline as Exclude<TimelineData['timeline'], false | undefined>, name: 'Wave_Reel' },
+  video: [{ index: 1, name: 'Video 1', enabled: true, clips: [{ start: 0, end: 42000, name: 'Reel_Final.mp4' }] }],
+  subtitle: [], texts: [],
+  audio: [{ index: 1, name: 'Audio 1', enabled: true, clips: [{ start: 0, end: 42000, name: 'Reel_Final.mp4' }] }],
+}
+
 const renderListeners = new Set<(p: RenderProgress) => void>()
 const updListeners = new Set<(s: UpdateState) => void>()
 let upd: UpdateState = { state: 'idle', current: '1.2.0' }
@@ -79,7 +88,8 @@ export function installDevApi() {
   const api: Api = {
     // ?empty in the address shows the first-run screen
     // ?stale: read two days ago, as when the app is opened from the Start menu (with ?nolink: not opened)
-    timeline: async () => (location.search.includes('empty') ? null
+    // ?wavetl: a timeline with no captions at all, which opens as Audio wave only
+    timeline: async () => (location.search.includes('empty') ? null : location.search.includes('wavetl') ? DEV_WAVE_TIMELINE
       : location.search.includes('stale') ? { ...DEV_TIMELINE, readAt: new Date(Date.now() - 2 * 864e5).toISOString() } : DEV_TIMELINE),
     // ?nolink in the address shows the app as if the Link window were closed
     linkStatus: async () => (location.search.includes('nolink') ? { alive: false, timeline: null } : { alive: true, timeline: 'Reel_Final' }),

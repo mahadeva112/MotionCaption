@@ -27,21 +27,24 @@ export type Edits = Record<number, CueEdit>
 
 /** Which captions of a timeline: a subtitle track (its number), every Text+ layer on its
  *  video tracks ('text'), only the Text+ on one video track ('text:2' for V2, e.g. a super),
- *  or the supers made in this app for this timeline ('supers') */
-export type SrcTrack = number | 'text' | `text:${number}` | 'supers'
+ *  the supers made in this app for this timeline ('supers'), or no captions at all, only the
+ *  audio wave ('wave'): a timeline made just for a wave, with no subtitles on it */
+export type SrcTrack = number | 'text' | `text:${number}` | 'supers' | 'wave'
 
 /** Where captions come from: a timeline read from Resolve (see SrcTrack), or an SRT file */
 export type Source =
   | { kind: 'timeline'; data: TimelineData; track: SrcTrack; supers?: Cue[]; extra?: Cue[] }
   | { kind: 'srt'; name: string; cues: Cue[]; notes: string[]; extra?: Cue[] }
 
-export const isTextSrc = (t: SrcTrack | null | undefined): t is 'text' | `text:${number}` => typeof t === 'string' && t !== 'supers'
+export const isTextSrc = (t: SrcTrack | null | undefined): t is 'text' | `text:${number}` => typeof t === 'string' && t !== 'supers' && t !== 'wave'
 /** Supers made in the app: text, timing, look and animation all live here, not in Resolve */
 export const isSupersSrc = (src: Source | null | undefined): boolean => src?.kind === 'timeline' && src.track === 'supers'
+/** No captions: only the audio wave goes to Resolve */
+export const isWaveOnly = (src: Source | null | undefined): boolean => src?.kind === 'timeline' && src.track === 'wave'
 /** The video track a 'text:N' source reads, or null for every track */
 export const textTrackOf = (t: SrcTrack): number | null => (typeof t === 'string' && t.startsWith('text:') ? Number(t.slice(5)) : null)
 /** A Read from value back from a <select> */
-export const srcTrackOf = (v: string): SrcTrack => (v === 'text' || v === 'supers' || v.startsWith('text:') ? (v as SrcTrack) : Number(v))
+export const srcTrackOf = (v: string): SrcTrack => (v === 'text' || v === 'supers' || v === 'wave' || v.startsWith('text:') ? (v as SrcTrack) : Number(v))
 
 
 /** Text+ layers a source reads, from a timeline's layers */
@@ -65,13 +68,15 @@ export function srcChoices(data: TimelineData | null | undefined, current?: SrcT
   const one = tracks.map((i) => ({ value: `text:${i}` as SrcTrack, label: `Text+ on V${i} · ${name(i)} · ${layers.filter((t) => t.track === i).length}` }))
   const all = tracks.length > 1 || (current === 'text' && tracks.length) ? [{ value: 'text' as SrcTrack, label: `Text+ on ${tracks.map((i) => 'V' + i).join(', ')} · ${layers.length}` }] : []
   const made = data?.timeline ? [{ value: 'supers' as SrcTrack, label: `Supers made here · ${supers}` }] : []
-  return [...subs, ...one, ...all, ...made]
+  const wave = data?.timeline ? [{ value: 'wave' as SrcTrack, label: 'Audio wave only · no captions' }] : []
+  return [...subs, ...one, ...all, ...made, ...wave]
 }
 
 /** What a timeline source is called: the subtitle track's name, or which Text+ layers.
  *  Captions made from it go on a track named after it ("MC Text+ V2"). */
 export function srcNameOf(data: TimelineData, t: SrcTrack): string {
   if (t === 'supers') return 'Supers'
+  if (t === 'wave') return 'Audio wave'
   if (!isTextSrc(t)) return data.subtitle?.find((s) => s.index === t)?.name ?? 'Subtitles'
   const only = textTrackOf(t)
   return only === null ? 'Text+ layers' : `Text+ V${only}`
@@ -134,6 +139,7 @@ export function cuesOf(src: Source | null): Cue[] {
   if (!src) return []
   if (src.kind === 'srt') return [...src.cues, ...(src.extra ?? [])]
   if (src.track === 'supers') return src.supers ?? []
+  if (src.track === 'wave') return []
   if (isTextSrc(src.track)) return [...cuesOfLayers(layersOf(src)), ...(src.extra ?? [])]
   const t = src.data.subtitle?.find((x) => x.index === src.track)
   return [...(t?.cues ?? []).map((c, i) => ({

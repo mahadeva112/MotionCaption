@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent } from 'react'
-import { DEFAULT_WAVE, styleInfo, WAVE_GROUPS, WAVE_STYLES, type Envelope, type WaveGroup, type WaveLook, type WaveStyle } from '@core/wave'
+import { DEFAULT_WAVE, styleInfo, WAVE_GROUPS, WAVE_STYLES, type Envelope, type WaveClip, type WaveGroup, type WaveLook, type WaveStyle } from '@core/wave'
 import { clock } from './clock'
 import { Dropdown } from './Dropdown'
 import { Icon } from './Icon'
@@ -302,9 +302,12 @@ export function WaveInspector(p: {
   fps: number
   onStart: (ms: number) => void
   onRemove: () => void
-  onClose: () => void
+  /** Back to the captions' settings; null with no captions (Audio wave only) */
+  onClose: (() => void) | null
   /** Where the line is drawn (with Under caption, it follows the captions) */
   drawnY: number
+  /** Audio wave only: no captions for the wave to sit under */
+  noCaptions?: boolean
 }) {
   const L = p.look
   const [saving, setSaving] = useState<string | null>(null)
@@ -324,7 +327,7 @@ export function WaveInspector(p: {
         <span className="wt"><b>Audio wave</b><small>{name}{p.data ? ` · follows ${p.data.src.name}` : ' · no sound yet'}</small></span>
         <button className="mini" onClick={() => setSaving(saving === null ? name : null)}
           title="Keep this look (style, colours, size, reaction) under a name; it shows in the library's Saved"><Icon name="download" />Save style</button>
-        <button className="mini" onClick={p.onClose} title="Back to the captions' settings (Esc)">Captions</button>
+        {p.onClose && <button className="mini" onClick={p.onClose} title="Back to the captions' settings (Esc)">Captions</button>}
       </div>
       {saving !== null && (
         <div className="wsave">
@@ -337,7 +340,7 @@ export function WaveInspector(p: {
       <div className="ipane">
         {!p.data && <p className="hint2 pad">Add the sound in the library's Audio wave tab: the timeline's own sound, or a file.</p>}
         {p.data && (
-          <Section title="In Resolve" right={<Toggle on={p.data.on} onChange={p.onOn}>Send with the captions</Toggle>}>
+          <Section title="In Resolve" right={<Toggle on={p.data.on} onChange={p.onOn}>{p.noCaptions ? 'Send to Resolve' : 'Send with the captions'}</Toggle>}>
             <div className="irow wide"><span>Starts at</span>
               <span className="wstart"><b>{timecode(p.data.startMs, p.fps)}</b>
                 <button className="mini" onClick={() => p.onStart(clock.get())} title="The sound starts where the playhead is">At playhead</button>
@@ -382,10 +385,10 @@ export function WaveInspector(p: {
         </Section>
         <Section title="Position">
           <Slider label="Y" value={p.drawnY} min={0.03} max={0.97} step={0.005} fmt={pct} onChange={(v) => p.onLook({ y: v, snap: 'free' })} />
-          <Seg label="Place" value={L.snap === 'caption' ? 'cap' : L.y < 0.3 ? 'top' : L.y > 0.62 ? 'low' : 'mid'}
-            opts={[['top', 'Top'], ['mid', 'Middle'], ['low', 'Lower'], ['cap', 'Under caption']]}
+          <Seg label="Place" value={L.snap === 'caption' && !p.noCaptions ? 'cap' : L.y < 0.3 ? 'top' : L.y > 0.62 ? 'low' : 'mid'}
+            opts={[['top', 'Top'], ['mid', 'Middle'], ['low', 'Lower'], ...(p.noCaptions ? [] : [['cap', 'Under caption'] as [string, string]])]}
             onChange={(v) => p.onLook(v === 'cap' ? { snap: 'caption' } : { snap: 'free', y: v === 'top' ? 0.2 : v === 'mid' ? 0.5 : 0.72 })} />
-          {L.snap === 'caption' && <p className="hint2 pad">The wave sits just under the captions and moves with them when you change their place or size.</p>}
+          {L.snap === 'caption' && !p.noCaptions && <p className="hint2 pad">The wave sits just under the captions and moves with them when you change their place or size.</p>}
         </Section>
         <Section title="Start and end">
           <Slider label="Fade" value={L.fade} min={0} max={2} step={0.05} fmt={(v) => (v < 0.01 ? 'Off' : `${v.toFixed(2)} s`)} onChange={(v) => p.onLook({ fade: v })} />
@@ -399,5 +402,24 @@ export function WaveInspector(p: {
         </Section>
       </div>
     </aside>
+  )
+}
+
+/** Audio wave only: what one Send puts in Resolve, in place of the caption card */
+export function WaveGoes(p: { clip: WaveClip | null; style: string; sound: string | null; on: boolean; where: string }) {
+  const len = p.clip ? `${((p.clip.endMs - p.clip.startMs) / 1000).toFixed(1)} s` : null
+  return (
+    <section className="capcard wgoes">
+      <div className="phead"><b>Goes to Resolve</b><span className="r">{p.clip ? '1 clip' : 'nothing yet'}</span></div>
+      <div className="wgrows">
+        <div><span>Audio wave</span><b>{p.style}{len ? ` · ${len}` : ''}</b></div>
+        <div><span>Track</span><b>{p.where}</b></div>
+        <div><span>Follows</span><b>{p.sound ?? 'no sound yet'}</b></div>
+        <div><span>Captions</span><b>none</b></div>
+      </div>
+      <p className="hint2 pad">{!p.sound ? 'Pick the sound in the library: the timeline’s own, one audio track, or a file.'
+        : !p.on ? 'The wave is turned off in its settings, so Send has nothing to place.'
+        : 'No caption track is made and nothing in Resolve is turned off. Send again later and the same wave clip is updated.'}</p>
+    </section>
   )
 }

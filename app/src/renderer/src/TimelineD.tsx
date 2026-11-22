@@ -122,6 +122,9 @@ export function TimelineD(p: Props) {
   const layers = fromText ? layersIn(p.data?.texts, p.srcTrack!) : []
   const choices = srcChoices(p.data, p.srcTrack, p.supers)
   const supersOn = p.srcTrack === 'supers'
+  /** No captions: the wave, then the timeline's own video tracks (top first) and its sound */
+  const waveOnly = p.srcTrack === 'wave'
+  const vids = waveOnly ? [...video].sort((a, b) => b.index - a.index) : []
   // The tracks the Text+ layers sit on, e.g. "V2, V3"
   const layerTracks = [...new Set(layers.map((t) => t.track))].sort((a, b) => a - b).map((t) => 'V' + t).join(', ')
   // As long as the timeline in Resolve; an SRT gets at least 10 s
@@ -298,7 +301,7 @@ export function TimelineD(p: Props) {
           <option value="new">New track above everything</option>
           {video.map((v) => <option key={v.index} value={v.index}>V{v.index} · {v.name} (empty spots only)</option>)}
         </Dropdown>
-        {p.srcTrack !== null && !supersOn && (
+        {p.srcTrack !== null && !supersOn && !waveOnly && (
           <button className={'tg' + (p.target.turnOffSource ? ' on' : '')} onClick={() => p.onTarget({ turnOffSource: !p.target.turnOffSource })}
             title={fromText ? 'Your Text+ layers are turned off in Resolve, never deleted, so the words do not show twice' : undefined}>
             <i>✓</i>{fromText ? 'Turn off the original Text+ after' : `Turn off ST${p.srcTrack} after`}
@@ -322,6 +325,10 @@ export function TimelineD(p: Props) {
           <div className="rhead"><Tc fps={p.fps} /></div>
           {p.wave && <div className={'th wv' + (p.wave.picked ? ' on' : '')} onClick={p.wave.onPick} title="The audio wave: click to change it">
             <b>WAVE</b><span>Audio wave<small>{p.wave.style} · {p.wave.on ? 'goes with Send' : 'not sent'}</small></span><i className="tag w">{p.wave.on ? 'NEW' : 'OFF'}</i></div>}
+          {waveOnly ? <>
+            {!p.wave && <div className="th wv"><b>WAVE</b><span>Audio wave<small>no sound yet</small></span></div>}
+            {vids.map((v) => <div key={v.index} className="th vd"><b>V{v.index}</b><span>{v.name}<small>video · left as it is</small></span></div>)}
+          </> : <>
           {newTrack
             ? <div className="th tgt" style={{ height: R.cap.h }}><b>V{video.length + 1}</b><span>Text+ captions<small>new track · {placed} clips</small></span><i className="tag t">TARGET</i></div>
             : <div className="th tgt" style={{ height: R.cap.h }}><b>V{p.target.track}</b><span>Text+ on {tgtTrack?.name ?? 'track'}<small>empty spots · {placed} clips</small></span><i className="tag t">TARGET</i></div>}
@@ -332,6 +339,7 @@ export function TimelineD(p: Props) {
             : srcSub
             ? <div className="th st src" style={{ height: R.st.h }} title="Change it under Read from"><b>ST{srcSub.index}</b><span>{srcSub.name}<small>subtitles · {srcSub.cues.length}</small></span><i className="tag s">SOURCE</i></div>
             : <div className="th st src" style={{ height: R.st.h }}><b>SRT</b><span>{p.srcName}<small>{p.cues.length} captions</small></span><i className="tag s">SOURCE</i></div>}
+          </>}
           {p.wave && <div className="th au" onClick={p.wave.onPick} title="The sound the wave follows"><b>A</b><span>{p.wave.sound}<small>drives the wave</small></span><i className="tag a">AUDIO</i></div>}
         </div>
         <div className="lanes" ref={lanes}>
@@ -346,6 +354,14 @@ export function TimelineD(p: Props) {
                 </i>
               </div>
             )}
+            {waveOnly ? <>
+              {!p.wave && <div className="lane wv"><span className="wempty2">Pick a sound in the library’s Audio wave tab</span></div>}
+              {vids.map((v) => (
+                <div key={v.index} className="lane vd">
+                  {v.clips.map((c, i) => <i key={i} style={{ left: x(c.start), width: Math.max(2, x(c.end - c.start) - 1) }} title={c.name}>{c.name}</i>)}
+                </div>
+              ))}
+            </> : <>
             <div className={'lane cap' + (p.onRetime ? ' edit' : '') + (multi ? ' multi' : '')} style={{ height: R.cap.h }}>
               {tgtTrack?.clips.map((c, i) => <i key={'o' + i} className="occ" style={{ left: x(c.start), width: Math.max(2, x(c.end - c.start) - 1) }} title={`Already on V${tgtTrack.index}: ${c.name}`}>{c.name}</i>)}
               {p.cues.map((c) => (
@@ -360,6 +376,7 @@ export function TimelineD(p: Props) {
                   style={place(c, R.st)} {...handlers(c)} title={c.text}>{c.text}{grips(c)}</i>
               ))}
             </div>
+            </>}
             {p.wave && (
               <div className="lane au">
                 <i style={{ left: x(p.wave.startMs), width: Math.max(2, x(p.wave.endMs - p.wave.startMs) - 1) }} onClick={p.wave.onPick} title={p.wave.sound}>
