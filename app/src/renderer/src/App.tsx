@@ -19,7 +19,7 @@ import { Icon } from './Icon'
 import { LibraryD, type LibView, type MyAnimation } from './LibraryD'
 import { usableLayers } from '@core/layers'
 import {
-  cuesOf, editedCues, editsByStart, editsOf, editsOnto, EXTRA_N, FRAMES, isSupersSrc, isTextSrc, layersIn, layersOf, lookOf, lookPart, norm,
+  cuesOf, editedCues, editsByStart, editsOf, editsOnto, EXTRA_N, FRAMES, isSupersSrc, isTextSrc, isWaveOnly, layersIn, layersOf, lookOf, lookPart, norm,
   sentKey, sourceKey, srcNameOf, superCue, supersKey, timelineLength, wordsIn,
   type CueEdit, type Edits, type EditsByStart, type SafeArea, type SavedSuper, type Scope, type Source, type SrcTrack, type Target,
 } from './model'
@@ -29,7 +29,7 @@ import { renderTrackSound, useTimelineVideo } from './TimelineVideo'
 import { TemplateLibrary } from './TemplateLibrary'
 import { TEMPLATES } from './templates'
 import { Viewer } from './Viewer'
-import { WaveInspector, WaveLayer, WaveLibrary, type WaveData } from './Wave'
+import { WaveGoes, WaveInspector, WaveLayer, WaveLibrary, type WaveData } from './Wave'
 import { readSound, waveSound } from './waveDraw'
 import { Dropdown } from './Dropdown'
 import { AppMenu, UpdateDialog, UpdateStrip, useUpdates } from './Updates'
@@ -180,12 +180,13 @@ export function App() {
     const tlName = d.timeline.name
     setSource((prev) => {
       const same = prev?.kind === 'timeline' && prev.data.timeline && prev.data.timeline.name === tlName
-      const valid = (t: SrcTrack) => (t === 'supers' || (isTextSrc(t) ? layersIn(d.texts, t).length > 0 : subs.some((s) => s.index === t)))
+      const valid = (t: SrcTrack) => (t === 'supers' || t === 'wave' || (isTextSrc(t) ? layersIn(d.texts, t).length > 0 : subs.some((s) => s.index === t)))
       const keep = same && valid(prev.track) ? prev.track : null
       // Subtitles first (the usual case); a timeline with only Text+ layers opens on those,
-      // and one with neither on the supers made here
+      // one with neither on the supers made here, or with none of those either (a timeline
+      // made just for a wave) on the audio wave alone
       const track: SrcTrack = keep ?? (subs.find((s) => s.cues.length) ?? subs[0])?.index
-        ?? (usableLayers(d.texts).length ? 'text' : 'supers')
+        ?? (usableLayers(d.texts).length ? 'text' : savedSupers(d).length ? 'supers' : 'wave')
       const next: Source = withExtras({ kind: 'timeline', data: d, track, supers: same && prev.supers ? prev.supers : savedSupers(d) })
       if (!same || keep === null) { setEdits(keptEdits(next)); setSel(new Set()); setSelWord(null); setActive(1) }
       // The same captions read again: each change stays with its caption, by start time,
@@ -229,6 +230,8 @@ export function App() {
   const aspect = tl && tl.width && tl.height ? tl.width / tl.height : FRAMES.find((f) => f.label === frame)!.aspect
   const fps = tl?.rate ?? 24
   const supersOn = isSupersSrc(source)
+  /** No captions: only the audio wave is worked on and sent */
+  const waveOnly = isWaveOnly(source)
   const noun = supersOn ? 'supers' : 'captions'
   /** Drawing needs the timeline's own size and rate, so only a timeline read from Resolve is drawn */
   const drawn = delivery === 'drawn' && !!tl
@@ -379,6 +382,18 @@ export function App() {
       setWaveErr(String((e as Error)?.message ?? e))
     }
   }
+  // Audio wave only: the wave's library tab and settings are all there is; back to the
+  // captions' when a caption source is picked again
+  const wasWaveOnly = useRef(false)
+  useEffect(() => {
+    if (waveOnly) { setLibView('wave'); setWaveSel(true) }
+    else if (wasWaveOnly.current) { setLibView('anim'); setWaveSel(false) }
+    wasWaveOnly.current = waveOnly
+  }, [waveOnly])
+  /** A timeline with nothing to caption (no subtitles, no Text+): told once why it opened on the wave */
+  const noCaptions = source?.kind === 'timeline' && !source.data.subtitle?.length && !usableLayers(source.data.texts).length
+  const [waveNoteSeen, setWaveNoteSeen] = useState(() => saved('mc.waveOnlyNote', { seen: false }).seen)
+  const closeWaveNote = () => { setWaveNoteSeen(true); store('mc.waveOnlyNote', { seen: true }) }
   function changeWave(x: Partial<WaveLook>) { setWaveLook((l) => ({ ...l, ...x })) }
   const waveTlLen = source?.kind === 'timeline' ? timelineLength(source.data) : 0
   /** Where the wave clip sits: from its sound's start, as long as the sound, inside the timeline */
@@ -391,9 +406,10 @@ export function App() {
   }, [wave, fps, waveTlLen])
   const sound = useMemo(() => (wave ? waveSound(wave.env, waveLook.smooth) : null), [wave?.env, waveLook.smooth])
   /** The wave goes with the next Send: it is on, has a place, and the timeline's size and rate are known */
-  /** The look as drawn: with Under caption, the line follows the captions' place */
-  const waveDrawn = useMemo<WaveLook>(() => (waveLook.snap === 'caption' ? { ...waveLook, y: waveUnder(look, aspect, waveLook) } : waveLook),
-    [waveLook, look.anchor, look.y, look.size, look.lineSpacing, look.lines, aspect])
+  /** The look as drawn: with Under caption, the line follows the captions' place (with no
+   *  captions, Audio wave only, it stays where its Y is) */
+  const waveDrawn = useMemo<WaveLook>(() => (waveLook.snap === 'caption' && !waveOnly ? { ...waveLook, y: waveUnder(look, aspect, waveLook) } : waveLook),
+    [waveLook, look.anchor, look.y, look.size, look.lineSpacing, look.lines, aspect, waveOnly])
   const waveClip: WaveClip | null = wave?.on && waveSpan && tl ? { look: waveDrawn, env: waveText, ...waveSpan } : null
   const wavePeaks = useMemo(() => (wave ? peaksOf(wave.env, Math.min(1500, Math.max(60, Math.round(envMs(wave.env) / 80)))) : []), [wave?.env])
 
@@ -909,7 +925,7 @@ export function App() {
       else if (e.key === ' ') { if (!e.repeat) setPlaying((p) => !p); e.preventDefault() }
       else if (e.key === 'Home') { seek(0); setReveal((r) => r + 1); e.preventDefault() }
       else if (e.key === 'End') { seek(endMs); setReveal((r) => r + 1); e.preventDefault() }
-      else if (e.key === 'Escape') { setSel(new Set()); setSelWord(null); setWaveSel(false); if (scope === 'selected') setScope('all') }
+      else if (e.key === 'Escape') { setSel(new Set()); setSelWord(null); setWaveSel(waveOnly); if (scope === 'selected') setScope('all') }
       // With the wave picked, Delete does not take captions out
       else if (waveSel && (e.key === 'Delete' || e.key === 'Backspace')) e.preventDefault()
       else cueKey(e)
@@ -985,7 +1001,8 @@ export function App() {
   }
   const updating = sent !== null && target.replace
   const one = noun.slice(0, -1)
-  const sendLabel = !updating ? `Send ${placeable.length} ${noun}${waveClip ? ' + wave' : ''} to Resolve`
+  const sendLabel = waveOnly ? (!updating ? 'Send audio wave to Resolve' : changed === null || waveDirty ? 'Update the audio wave' : 'Update · nothing changed')
+    : !updating ? `Send ${placeable.length} ${noun}${waveClip ? ' + wave' : ''} to Resolve`
     : changed === null ? 'Update in Resolve'
       : changed === 0 ? (waveDirty ? 'Update the audio wave' : 'Update · nothing changed')
         : `Update ${changed} changed ${changed === 1 ? one : noun}${waveDirty ? ' + wave' : ''}`
@@ -1022,9 +1039,16 @@ export function App() {
         <button className="mini" title="Your looks, styles, animation settings and My Animations in one file: save it, or load one" onClick={() => setBranding(true)}>Brand kit</button>
         {source && <button className="mini" title="Put every setting and caption change back to how the app starts" onClick={() => setResetting(true)}><Icon name="undo" />Reset</button>}
         {source && <button className="mini" onClick={openSrt}><Icon name="file" />Open SRT…</button>}
-        {source && <button className="go cta" disabled={!placeable.length && !waveClip} onClick={() => setSending(true)}><Icon name="send" />{sendLabel}</button>}
+        {source && <button className="go cta" disabled={waveOnly ? !waveClip : !placeable.length && !waveClip} onClick={() => setSending(true)}><Icon name="send" />{sendLabel}</button>}
       </header>
       <UpdateStrip u={updates} />
+      {waveOnly && noCaptions && !waveNoteSeen && source?.kind === 'timeline' && (
+        <div className="wonote"><Icon name="wave" size={16} />
+          <span><b>“{tl?.name}” has no captions</b>, so it opened as <b>Audio wave only</b>. Send puts just the wave on a new track.
+            Want captions too? Add subtitles in Resolve, or pick a track under <b>Read from</b>.</span>
+          <button className="x" onClick={closeWaveNote} title="Close">✕</button>
+        </div>
+      )}
 
       {!source ? (
         <Welcome info={timelineInfo} last={last} link={link} onLast={() => showTimeline(last)} onSrt={openSrt} onSrtFile={loadSrt} />
@@ -1036,7 +1060,7 @@ export function App() {
               audio={tlVideo.shown && !tlVideo.shown.muted ? null : waveAudio} playing={playing} /> : null}
             label={tryingName !== null ? `Trying ${tryingName} · click to use`
               : cue ? `${supersOn ? 'Super' : 'Caption'} ${cues.indexOf(cue) + 1} of ${cues.length} · ${presetById(presetOf(cue.n))?.name ?? ''}`
-                : supersOn ? 'No supers yet: Add super on the timeline' : 'No captions'}
+                : waveOnly ? 'Audio wave only' : supersOn ? 'No supers yet: Add super on the timeline' : 'No captions'}
             onPlaying={setPlaying} onPrev={() => step(-1)} onNext={() => step(1)}
             onPickWord={(i) => { setSelWord(i); setTab('Words'); setPlaying(false) }} onDrag={drag}
             onSize={(size) => { changeLook({ size }); setPlaying(false) }} onTurn={(rotation) => { changeLook({ rotation }); setPlaying(false) }}
@@ -1044,14 +1068,16 @@ export function App() {
               points: effLook.path, draw: pathDraw,
               onAdd: (dx, dy) => { const r = (v: number) => Math.round(v * 1000) / 1000; changeLook({ path: [...effLook.path, [r(dx), r(dy)]] }); setPlaying(false) },
             } : null} />
-          <CaptionCard caption={cue} total={cues.length} words={words} selWord={selWord} styled={styledWords} fps={fps}
-            onWord={(i) => { setSelWord(i); setTab('Words'); setPlaying(false) }} />
+          {waveOnly ? <WaveGoes clip={waveClip} style={WAVE_STYLES.find((x) => x.id === waveLook.style)?.name ?? ''} sound={wave?.src.name ?? null}
+            on={wave?.on ?? false} where={where} />
+            : <CaptionCard caption={cue} total={cues.length} words={words} selWord={selWord} styled={styledWords} fps={fps}
+            onWord={(i) => { setSelWord(i); setTab('Words'); setPlaying(false) }} />}
           <LibraryD current={cue ? presetOf(cue.n) : defaultPreset} target={scopeTarget} recent={recent} onHover={tryPreset}
             favs={favs} onFav={(id) => setFavs((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]))}
             mine={mine} onMine={(m) => { pickPreset(m.preset); setMotion({ ...DEFAULT_MOTION, ...m.motion }) }}
             onRemoveMine={(name) => setMine((l) => l.filter((x) => x.name !== name))}
             adding={patternPick} onPick={patternPick ? (id) => setPattern((x) => ({ ...x, ids: [...x.ids, id] })) : pickPreset}
-            view={libView} onView={setLibView}
+            view={libView} onView={setLibView} waveOnly={waveOnly}
             templates={<TemplateLibrary onPick={supersOn && source?.kind === 'timeline' ? addTemplate : null} base={supersOn ? look : DEFAULT_LOOK} />}
             wave={<WaveLibrary data={wave} look={waveLook} onStyle={(style) => { remember(); changeWave({ style }) }}
               onTimeline={tl ? takeTimelineSound : null} tracks={waveTracks} onFile={pickSoundFile}
@@ -1063,7 +1089,7 @@ export function App() {
               onOn={(on) => { remember(); setWave((w) => (w ? { ...w, on } : w)) }}
               onStart={(ms) => { remember(); setWave((w) => (w ? { ...w, startMs: onFrame(Math.max(0, ms), fps) } : w)) }}
               onRemove={() => { remember(); setWave(null); setWaveSel(false); setWaveAudio((old) => { if (old) URL.revokeObjectURL(old); return null }) }}
-              onClose={() => setWaveSel(false)} drawnY={waveDrawn.y} />
+              onClose={waveOnly ? null : () => setWaveSel(false)} drawnY={waveDrawn.y} noCaptions={waveOnly} />
           ) : <Inspector
             tab={tab} onTab={setTab} scope={scope} onScope={setScope} selected={sel.size} total={cues.length}
             look={effLook} onLook={changeLook} styles={[...BUILT_IN_STYLES, ...userStyles]}
@@ -1112,7 +1138,7 @@ export function App() {
             active={cue?.n ?? 0} sel={sel} onCue={pickCue} playing={playing} onSeek={seek} reveal={reveal}
             target={target} onTarget={(t) => setTarget((x) => ({ ...x, ...t }))} fps={fps} lengthMs={tlLength}
             supers={source.kind === 'timeline' ? (source.supers ?? []).length : 0} onAddSuper={supersOn ? addSuper : null}
-            onRetime={retimeCues} onTemplates={supersOn ? () => setLibView('tmpl') : null}
+            onRetime={waveOnly ? null : retimeCues} onTemplates={supersOn ? () => setLibView('tmpl') : null}
             wave={wave && waveSpan ? {
               ...waveSpan, style: WAVE_STYLES.find((x) => x.id === waveLook.style)?.name ?? '', sound: wave.src.name, peaks: wavePeaks,
               on: wave.on, picked: waveSel, onPick: () => { setWaveSel(true); setLibView('wave') },
@@ -1139,7 +1165,7 @@ export function App() {
           <button className="x" onClick={() => setUndo(null)} title="Close">✕</button>
         </div>
       )}
-      {sending && <SendDialog captions={placeable.length} noun={noun + (waveClip ? ' and the audio wave' : '')} where={where} timeline={tl?.name ?? null} linked={link.alive} build={buildJob}
+      {sending && <SendDialog captions={placeable.length} noun={noun + (waveClip ? ' and the audio wave' : '')} waveOnly={waveOnly} where={where} timeline={tl?.name ?? null} linked={link.alive} build={buildJob}
         delivery={drawn ? 'drawn' : 'textplus'} canDraw={!!tl} onDelivery={setDelivery} mov={movOut} onMov={setMovOut}
         update={updating ? { changed: changed === null ? null : changed + (waveDirty ? 1 : 0) } : null} onDone={sentOk} onClose={() => setSending(false)} />}
     </div>

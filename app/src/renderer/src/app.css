@@ -678,6 +678,25 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
 .lane.au i { background: #15362a; border: 1px solid #2f7a55; }
 .lane.au i svg path { fill: #3ddc97; }
 
+/* Audio wave only: the timeline's own video tracks under the wave, a note on why it opened so,
+   and what Send places in place of the caption card */
+.th.vd { height: 34px; cursor: default; }
+.th.vd b { background: rgba(90, 140, 230, .18); color: #8fb3f5; }
+.lane.vd { height: 34px; border-bottom: 1px solid var(--seam); }
+.lane.vd i { background: #1d2a44; border-color: #3a5a96; color: #c9d8f5; cursor: default; }
+.wempty2 { position: absolute; left: 10px; top: 0; bottom: 0; display: flex; align-items: center; color: var(--t3); font-size: 11px; white-space: nowrap; }
+.wonote { flex: none; display: flex; align-items: flex-start; gap: 10px; margin: 0 10px 10px; padding: 9px 12px; border-radius: 11px; background: rgba(143, 79, 176, .14); border: 1px solid rgba(196, 127, 240, .35); color: #e2c4f5; font-size: 12px; line-height: 1.45; }
+.wonote > svg { flex: none; margin-top: 1px; }
+.wonote b { color: var(--t); }
+.wonote span { flex: 1; min-width: 0; }
+.wonote .x { flex: none; background: none; border: 0; color: var(--t2); }
+.wgrows { padding: 0 14px; }
+.wgrows > div { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--seam); color: var(--t2); font-size: 12px; }
+.wgrows > div b { color: var(--t); font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wgoes > .hint2 { margin-top: 10px; }
+.libtabs button:disabled { opacity: .38; cursor: not-allowed; }
+.libtabs button:disabled:hover { color: var(--t2); }
+
 /* Simple / Advanced and type filters, and the Advanced tag on a card */
 .wavelib .chips .sep { width: 1px; align-self: stretch; margin: 3px 4px; background: var(--seam); }
 .wtile .lv { position: absolute; top: 7px; left: 7px; padding: 1px 6px; border-radius: 6px; font-style: normal; font-size: 9.5px; font-weight: 600; letter-spacing: .02em;

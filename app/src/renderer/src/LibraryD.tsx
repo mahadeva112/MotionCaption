@@ -34,10 +34,12 @@ interface Props {
   templates: ReactNode
   /** The Audio wave tab's content (Wave.tsx) */
   wave: ReactNode
+  /** Audio wave only: no captions, so only the wave's tab can be opened */
+  waveOnly?: boolean
 }
 
 /** The big middle area of Pro: search, groups as chips, and a wide grid of tiles */
-export function LibraryD({ current, target, recent, onPick, onHover, adding, favs, onFav, mine, onMine, onRemoveMine, view, onView, templates, wave }: Props) {
+export function LibraryD({ current, target, recent, onPick, onHover, adding, favs, onFav, mine, onMine, onRemoveMine, view, onView, templates, wave, waveOnly }: Props) {
   const [bin, setBin] = useState<Bin>('All')
   const [q, setQ] = useState('')
   const query = q.trim().toLowerCase()
@@ -52,8 +54,10 @@ export function LibraryD({ current, target, recent, onPick, onHover, adding, fav
     <section className="lib2">
       <div className="phead">
         <div className="libtabs" role="tablist">
-          <button role="tab" aria-selected={view === 'anim'} className={view === 'anim' ? 'on' : ''} onClick={() => onView('anim')}>Animations<i>{PRESETS.length}</i></button>
-          <button role="tab" aria-selected={view === 'tmpl'} className={view === 'tmpl' ? 'on' : ''} onClick={() => onView('tmpl')}>Templates<i>{TEMPLATES.length}</i></button>
+          <button role="tab" aria-selected={view === 'anim'} className={view === 'anim' ? 'on' : ''} onClick={() => onView('anim')} disabled={waveOnly}
+            title={waveOnly ? 'No captions here: pick a caption track under Read from to animate captions' : undefined}>Animations<i>{PRESETS.length}</i></button>
+          <button role="tab" aria-selected={view === 'tmpl'} className={view === 'tmpl' ? 'on' : ''} onClick={() => onView('tmpl')} disabled={waveOnly}
+            title={waveOnly ? 'No captions here: pick Supers made here under Read from to add supers' : undefined}>Templates<i>{TEMPLATES.length}</i></button>
           <button role="tab" aria-selected={view === 'wave'} className={view === 'wave' ? 'on' : ''} onClick={() => onView('wave')}>Audio wave<i className="new">NEW</i></button>
         </div>
         <span className="r">{view === 'wave' ? <>a wave that moves with the sound · click a style to use it</>

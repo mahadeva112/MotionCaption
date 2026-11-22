@@ -25,6 +25,8 @@ interface Props {
   /** The job went in with no problems */
   onDone: (jobId: string) => void
   onClose: () => void
+  /** No captions: only the audio wave goes (always a finished clip) */
+  waveOnly?: boolean
 }
 
 type Phase = 'ready' | 'drawing' | 'sending' | 'waiting' | 'done'
@@ -37,7 +39,7 @@ function percent(p: JobProgress | null, r: JobResult | null): number | null {
   return p.phase === 'placing' ? 5 : 2
 }
 
-export function SendDialog({ captions, noun, where, timeline, linked, build, delivery, canDraw, onDelivery, mov, onMov, update: updateNow, onDone, onClose }: Props) {
+export function SendDialog({ captions, noun, where, timeline, linked, build, delivery, canDraw, onDelivery, mov, onMov, update: updateNow, onDone, onClose, waveOnly }: Props) {
   // What this dialog was opened for: a first send stays worded as one after it has gone in
   const [update] = useState(updateNow)
   const [status, setStatus] = useState<ResolveStatus | null>(null)
@@ -66,7 +68,7 @@ export function SendDialog({ captions, noun, where, timeline, linked, build, del
   }, [phase, jobId])
 
   async function send() {
-    setPhase(delivery === 'drawn' ? 'drawing' : 'sending'); setError(null); setResult(null); setProgress(null); setDraw(null)
+    setPhase(delivery === 'drawn' || waveOnly ? 'drawing' : 'sending'); setError(null); setResult(null); setProgress(null); setDraw(null)
     try {
       const job = await build(setDraw)
       setPhase('sending')
@@ -98,7 +100,7 @@ export function SendDialog({ captions, noun, where, timeline, linked, build, del
       : progress.phase === 'animating'
         ? `Animating caption ${Math.min(progress.done + 1, progress.total)} of ${progress.total}`
         : progress.phase === 'placing'
-          ? (progress.total > 0 ? `Placing ${progress.total} captions on the timeline` : 'Checking the captions in Resolve')
+          ? (waveOnly ? 'Placing the audio wave' : progress.total > 0 ? `Placing ${progress.total} captions on the timeline` : 'Checking the captions in Resolve')
           : 'Starting in Resolve'
   const s = (n: number) => (n === 1 ? '' : 's')
   const kept = result?.kept ?? 0
@@ -108,7 +110,10 @@ export function SendDialog({ captions, noun, where, timeline, linked, build, del
       <div className="dlg2">
         <div className="dlg2-t"><b>{update ? 'Update in Resolve' : 'Send to Resolve'}</b><button className="x" onClick={onClose} title="Close">✕</button></div>
         <div className="dlg2-b">
-          {!update ? (
+          {waveOnly ? (
+            <p className="lead">{!update ? <>The audio wave goes on <b>{where}</b></> : update.changed === 0 ? <>Nothing has changed since the last send. Update checks the audio wave</> : <>The audio wave is made again</>}
+              {timeline ? <> in <b>{timeline}</b></> : ''}. No caption track is made, and nothing else on the timeline is moved, replaced or turned off.</p>
+          ) : !update ? (
             <p className="lead">{captions} {noun} go on <b>{where}</b>{timeline ? <> in <b>{timeline}</b></> : ''}. Clips already on the timeline are not moved or replaced.</p>
           ) : update.changed === 0 ? (
             <p className="lead">Nothing has changed since the last send. Update checks {timeline ? <b>{timeline}</b> : 'the timeline'} and puts back any caption that is missing there; the others are not touched.</p>
@@ -117,6 +122,7 @@ export function SendDialog({ captions, noun, where, timeline, linked, build, del
               again{timeline ? <> in <b>{timeline}</b></> : ''}. Every other caption stays in Resolve exactly as it is, with anything you adjusted there.</p>
           )}
           <div className="howgo">
+            {!waveOnly && <>
             <button className={'opt2' + (delivery === 'drawn' ? ' on' : '')} disabled={!canDraw || phase === 'drawing' || phase === 'sending'} onClick={() => onDelivery('drawn')}>
               <b>Finished clips <em>works every time in Resolve Free</em></b>
               <span>The app draws each one exactly as the preview shows it and Resolve only places it. Change them here and Send again.</span>
@@ -126,14 +132,16 @@ export function SendDialog({ captions, noun, where, timeline, linked, build, del
               <span>Text and look stay editable in Resolve. Letter and word animations go through Fusion, and may not show in Resolve Free.</span>
             </button>
             {!canDraw && <p className="hint2">Finished clips need the timeline read from Resolve: click MotionCaption in Resolve first.</p>}
-            {delivery === 'drawn' && (
+            </>}
+            {(delivery === 'drawn' || waveOnly) && (
               <div className="movrow">
                 <span>Clips as</span>
                 <div className="seg">
                   <button className={!mov ? 'on' : ''} disabled={phase === 'drawing' || phase === 'sending'} onClick={() => onMov(false)}>PNG frames</button>
                   <button className={mov ? 'on' : ''} disabled={phase === 'drawing' || phase === 'sending'} onClick={() => onMov(true)}>MOV video</button>
                 </div>
-                <small>{mov ? 'One ProRes 4444 file per caption, with transparency: tidy in the Media Pool, easy to use in other projects.'
+                <small>{waveOnly ? (mov ? 'One ProRes 4444 file with transparency: tidy in the Media Pool, easy to use in other projects.' : 'A folder of PNG frames: the quickest to make.')
+                  : mov ? 'One ProRes 4444 file per caption, with transparency: tidy in the Media Pool, easy to use in other projects.'
                   : 'A folder of PNG frames per caption: the quickest to make.'}</small>
               </div>
             )}
@@ -142,7 +150,7 @@ export function SendDialog({ captions, noun, where, timeline, linked, build, del
           {direct === false ? (
             <p className="warn">{why} Open Resolve with {timeline ? <b>{timeline}</b> : 'the timeline'}'s project, then click <kbd>Workspace → Scripts → MotionCaption</kbd> there, or press Send again.</p>
           ) : (
-            <p className="how1"><i className="dot" /> Press {update ? 'Update' : 'Send'} and the captions go straight onto {timeline ? <b>{timeline}</b> : 'the open timeline'} in Resolve. Keep Resolve open.</p>
+            <p className="how1"><i className="dot" /> Press {update ? 'Update' : 'Send'} and the {waveOnly ? 'wave goes' : 'captions go'} straight onto {timeline ? <b>{timeline}</b> : 'the open timeline'} in Resolve. Keep Resolve open.</p>
           )}
           <div className="btnrow">
             <button className="go big" disabled={phase === 'drawing' || phase === 'sending' || (status !== null && !status.resolveFound)} onClick={send}>
@@ -159,7 +167,11 @@ export function SendDialog({ captions, noun, where, timeline, linked, build, del
           )}
           {result && (
             <div className={'result ' + (result.ok ? 'ok' : 'bad')}>
-              {result.ok && kept > 0 && result.placed === 0
+              {waveOnly && result.ok
+                ? (result.placed === 0 && kept > 0
+                  ? <p><b>Up to date.</b> The audio wave in “{result.timeline}” was already as it is here. Nothing was changed.</p>
+                  : <p><b>Done.</b> The audio wave is on {result.tracks?.join(', ')} in “{result.timeline}” ({result.fps} fps).</p>)
+                : result.ok && kept > 0 && result.placed === 0
                 ? <p><b>Up to date.</b> All {kept} caption{s(kept)} in “{result.timeline}” were already as they are here. Nothing was changed.</p>
                 : result.ok && kept > 0
                 ? <p><b>Done.</b> {result.placed} caption{s(result.placed)} made again on {result.tracks?.join(', ')} in “{result.timeline}”. The other {kept} {kept === 1 ? 'was' : 'were'} left as {kept === 1 ? 'it was' : 'they were'}.</p>
