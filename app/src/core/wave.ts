@@ -12,6 +12,7 @@ export type WaveStyle =
   | 'ring' | 'pulse' | 'dotring' | 'orb' | 'radial' | 'ripple'
   | 'dots' | 'bounce' | 'particles' | 'matrix'
   | 'hills' | 'history' | 'blob'
+  | 'beam' | 'capsule' | 'mirroreq' | 'mesh' | 'horizon' | 'bokeh' | 'orbit' | 'burst'
 
 export type WaveGroup = 'Glow' | 'Bars' | 'Line' | 'Circle' | 'Dots' | 'Shape'
 export const WAVE_GROUPS: WaveGroup[] = ['Glow', 'Bars', 'Line', 'Circle', 'Dots', 'Shape']
@@ -36,6 +37,7 @@ export const WAVE_STYLES: WaveStyleInfo[] = [
   S('soft', 'Soft glow', 'Glow', 'Simple', true, true),
   S('aura', 'Aura', 'Glow', 'Advanced', true, true),
   S('aurora', 'Aurora', 'Glow', 'Advanced', true, true),
+  S('beam', 'Light beam', 'Glow', 'Advanced', false, false),
   S('bars', 'Bars', 'Bars', 'Simple', true, true),
   S('pill', 'Pill bars', 'Bars', 'Simple', true, true),
   S('thin', 'Thin bars', 'Bars', 'Simple', true, true),
@@ -46,6 +48,8 @@ export const WAVE_STYLES: WaveStyleInfo[] = [
   S('spikes', 'Minimal spikes', 'Bars', 'Simple', true, false),
   S('dashes', 'Soft dashes', 'Bars', 'Simple', true, false),
   S('echo', 'Echo dashes', 'Bars', 'Advanced', true, false),
+  S('mirroreq', 'Mirror EQ', 'Bars', 'Advanced', false, false),
+  S('capsule', 'Frosted pill', 'Bars', 'Advanced', false, false),
   S('line', 'Line', 'Line', 'Simple', false, false),
   S('multi', 'Multi line', 'Line', 'Simple', false, false),
   S('smooth', 'Smooth curve', 'Line', 'Simple', false, false),
@@ -53,19 +57,24 @@ export const WAVE_STYLES: WaveStyleInfo[] = [
   S('scope', 'Heartbeat', 'Line', 'Simple', false, false),
   S('neon', 'Neon', 'Line', 'Advanced', false, false),
   S('ribbon', 'Silk ribbon', 'Line', 'Advanced', false, false),
+  S('mesh', 'Silk mesh', 'Line', 'Advanced', false, false),
   S('ring', 'Ring', 'Circle', 'Simple', false, false),
   S('pulse', 'Pulse', 'Circle', 'Simple', false, false),
   S('dotring', 'Dot circle', 'Circle', 'Simple', false, false),
   S('orb', 'Orb', 'Circle', 'Advanced', false, false),
   S('radial', 'Radial bars', 'Circle', 'Advanced', false, false),
   S('ripple', 'Ripples', 'Circle', 'Advanced', false, false),
+  S('orbit', 'Orbit', 'Circle', 'Advanced', false, false),
+  S('burst', 'Sunburst', 'Circle', 'Advanced', false, false),
   S('dots', 'Dot row', 'Dots', 'Simple', false, false),
   S('bounce', 'Four dots', 'Dots', 'Simple', true, false),
   S('particles', 'Particles', 'Dots', 'Advanced', true, true),
   S('matrix', 'Dot matrix', 'Dots', 'Advanced', true, false),
+  S('bokeh', 'Bokeh', 'Dots', 'Advanced', false, false),
   S('hills', 'Sound hills', 'Shape', 'Simple', true, true),
   S('history', 'Sound shape', 'Shape', 'Advanced', true, true),
   S('blob', 'Liquid blob', 'Shape', 'Advanced', false, false),
+  S('horizon', 'Glow horizon', 'Shape', 'Advanced', true, true),
 ]
 
 export const styleInfo = (id: WaveStyle): WaveStyleInfo => WAVE_STYLES.find((s) => s.id === id) ?? WAVE_STYLES[0]!
