@@ -72,7 +72,11 @@ const withExtras = (src: Source): Source =>
 
 /** A timeline's supers as kept on this computer */
 const savedSupers = (d: TimelineData) => saved(supersKey(d), { list: [] as SavedSuper[] }).list.map(superCue)
-const DEFAULT_TARGET: Target = { track: 'new', turnOffSource: true, replace: true }
+/** At start: the read whose project was closed (it does not open by itself) and the read whose
+ *  "Continue" card was put away, each by its readAt */
+const START = 'mc.start'
+const NO_START = { closed: '', hidden: '' }
+const DEFAULT_TARGET: Target ={ track: 'new', turnOffSource: true, replace: true }
 /** The wave's signature in the last Send's record (captions go by their times) */
 const WAVE_SENT = 'wave'
 
@@ -174,6 +178,7 @@ export function App() {
   // The timeline the Resolve script read; again whenever it writes a new one
   const showTimeline = useCallback((d: TimelineData | null) => {
     setLast(null)
+    if (d?.timeline && saved(START, NO_START).closed) store(START, { ...saved(START, NO_START), closed: '' })
     setTimelineInfo(d)
     const subs = d?.subtitle ?? []
     if (!d || !d.timeline) return
@@ -198,12 +203,35 @@ export function App() {
   useEffect(() => {
     // At start (Start menu, desktop) the file may be days old: open it only if it is
     // what Resolve has now. A new read after that is always a click in Resolve.
+    // A timeline closed with Close project stays closed until it is read again; one whose
+    // card was put away with ✕ is not offered again either.
     window.mc.timeline().then(async (d) => {
-      if (!d || (await isCurrent(d))) showTimeline(d)
-      else setLast(d)
+      const st = saved(START, NO_START)
+      if (!d) showTimeline(d)
+      else if (d.readAt !== st.closed && (await isCurrent(d))) showTimeline(d)
+      else if (d.readAt !== st.hidden) setLast(d)
     })
-    return window.mc.onTimeline(() => { window.mc.timeline().then(showTimeline) })
+    return window.mc.onTimeline(() => {
+      window.mc.timeline().then((d) => { if (!d || d.readAt !== saved(START, NO_START).closed) showTimeline(d) })
+    })
   }, [showTimeline])
+
+  /** Back to the start page. Looks, changes and supers stay kept on this computer; the
+   *  timeline is offered under "Continue where you left off" and does not open by itself. */
+  function closeProject() {
+    const d = source?.kind === 'timeline' ? source.data : timelineInfo
+    setPlaying(false); setSending(false); setWaveSel(false); setUndo(null); setHoverPreset(null)
+    setSource(null); setTimelineInfo(null); setEdits({}); setSel(new Set()); setSelWord(null); setActive(1)
+    if (d?.timeline) {
+      store(START, { ...saved(START, NO_START), closed: d.readAt, hidden: '' })
+      setLast(d)
+    }
+  }
+  /** ✕ on the "Continue where you left off" card */
+  function forgetLast() {
+    if (last) store(START, { ...saved(START, NO_START), hidden: last.readAt })
+    setLast(null)
+  }
 
   // Is the Link window open in Resolve? Then a Send goes straight in.
   useEffect(() => {
@@ -1017,7 +1045,7 @@ export function App() {
   return (
     <div className="app2">
       <header className="menubar2">
-        <AppMenu u={updates} />
+        <AppMenu u={updates} onClose={source ? closeProject : null} />
         <b>MotionCaption <em>Studio</em></b>
         {source?.kind === 'timeline' && tl && (
           <span className="link" title={`Linked to this Resolve timeline · ${tl.width}×${tl.height} · ${tl.fps} fps`
@@ -1051,7 +1079,7 @@ export function App() {
       )}
 
       {!source ? (
-        <Welcome info={timelineInfo} last={last} link={link} onLast={() => showTimeline(last)} onSrt={openSrt} onSrtFile={loadSrt} />
+        <Welcome info={timelineInfo} last={last} link={link} onLast={() => showTimeline(last)} onForget={forgetLast} onSrt={openSrt} onSrtFile={loadSrt} />
       ) : (
         <div className={'studio2' + (aspect >= 1 ? ' wide' : '') + (wave && waveSpan ? ' waved' : '')}>
           <Viewer cue={compiled} aspect={aspect} fps={fps} safe={safe} selWord={selWord} playing={playing} loop={!!hoverPreset}
@@ -1306,9 +1334,9 @@ function whenRead(iso: string): string | null {
     : `${at.toLocaleDateString([], { day: 'numeric', month: 'short' })}, ${time}`
 }
 
-function Welcome({ info, last, link, onLast, onSrt, onSrtFile }: {
+function Welcome({ info, last, link, onLast, onForget, onSrt, onSrtFile }: {
   info: TimelineData | null; last: TimelineData | null; link: LinkStatus
-  onLast: () => void; onSrt: () => void; onSrtFile: (f: { name: string; bytes: Uint8Array }) => void
+  onLast: () => void; onForget: () => void; onSrt: () => void; onSrtFile: (f: { name: string; bytes: Uint8Array }) => void
 }) {
   const [over, setOver] = useState(false)
   const [asking, setAsking] = useState(false)
@@ -1401,6 +1429,7 @@ function Welcome({ info, last, link, onLast, onSrt, onSrtFile }: {
                 <em>{lastWhen ? `${lastWhen} · ` : ''}Resolve may have another timeline open now</em>
               </span>
               <button className="mini" onClick={onLast}>Open it</button>
+              <button className="x" onClick={onForget} title="Remove from here (the timeline in Resolve is not touched)"><Icon name="close" size={13} /></button>
             </div>
           </>
         )}

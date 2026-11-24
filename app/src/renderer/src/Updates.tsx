@@ -127,7 +127,7 @@ export function UpdateDialog({ u }: { u: Updates }) {
 }
 
 /** The top-bar logo: a menu with the version, a check by hand and "Update automatically" */
-export function AppMenu({ u }: { u: Updates }) {
+export function AppMenu({ u, onClose }: { u: Updates; onClose: (() => void) | null }) {
   const [open, setOpen] = useState(false)
   const btn = useRef<HTMLButtonElement>(null)
   const menu = useRef<HTMLDivElement>(null)
@@ -160,6 +160,9 @@ export function AppMenu({ u }: { u: Updates }) {
             title="Download a new version as soon as it is out. Installing still waits for you.">
             <Icon name="check" />Update automatically<span className={'tg' + (u.prefs.auto ? ' on' : '')}><i>✓</i></span>
           </div>
+          {onClose && <div className="ddo" role="menuitem" onClick={() => { setOpen(false); onClose() }}
+            title="Back to the start page. Your looks, changes and supers stay; it does not open by itself next time.">
+            <Icon name="close" />Close project</div>}
         </div>,
         document.body,
       )}
