@@ -1096,8 +1096,8 @@ export function App() {
             base={baseLook} styleName={styleBase.name}
             onPickStyle={(s) => { changeLook(s.look); setStyleBase({ name: s.name, look: s.look }) }}
             onSaveStyle={(name) => {
-              const { font, style, size, tracking, lineSpacing, textCase, fill, outline, shadow, box, gradient, image } = effLook
-              const list = [...userStyles.filter((s) => s.name !== name), { name, look: { font, style, size, tracking, lineSpacing, textCase, fill, outline, shadow, box, gradient, image } }]
+              const { font, style, size, tracking, lineSpacing, textCase, fill, outline, shadow, box, backdrop, gradient, image } = effLook
+              const list = [...userStyles.filter((s) => s.name !== name), { name, look: { font, style, size, tracking, lineSpacing, textCase, fill, outline, shadow, box, backdrop, gradient, image } }]
               setUserStyles(list); store('mc.styles', { list })
             }}
             fonts={fonts} fontUsed={compiled && compiled.look.font !== effLook.font ? compiled.look.font : null}

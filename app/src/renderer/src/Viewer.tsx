@@ -530,6 +530,7 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
   } : null
   const img = L.image
   const deco = L.deco ?? []
+  const backdrop = L.backdrop
   const sweep = deco.length ? sweepStyle(deco, ms) : null
   // Boxes as Text+ draws them (core/look.ts): the line box, wider by the font's descent at each end
   const descent = fontDescent(L.font, L.style)
@@ -576,6 +577,13 @@ export function Caption({ cue, ms, W, H, aspect, selWord, blockRef, onDown, onMo
 
   return (
     <>
+    {backdrop && <div className="vbackdrop" style={{
+      opacity: opacity * backdrop.opacity,
+      ...(backdrop.mode === 'solid' ? { backgroundColor: css(backdrop.color) } : {}),
+      ...(backdrop.mode === 'gradient' ? { backgroundImage: `linear-gradient(${backdrop.angle}deg, ${css(backdrop.color)}, ${css(backdrop.color2)})` } : {}),
+    }}>
+      {backdrop.mode === 'image' && backdrop.src && <img src={backdrop.src} alt="" draggable={false} style={{ objectFit: backdrop.fit }} />}
+    </div>}
     {deco.length > 0 && letterbox(deco, ms, cue.endMs - cue.startMs, H)}
     <div className={'vgroup' + (moving ? ' moving' : '') + (moving && lettersMove ? ' chmove' : '')} style={group}>
       {roundDefs.length > 0 && (

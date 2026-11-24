@@ -10,6 +10,8 @@ import type { Bezier } from './anim.ts'
 export type Rgb = readonly [number, number, number]
 export type TextCase = 'as' | 'upper' | 'lower' | 'title'
 export type Align = 'left' | 'center' | 'right'
+export type BackdropMode = 'solid' | 'gradient' | 'image'
+export type BackdropFit = 'cover' | 'contain'
 /** keep: line breaks as in the subtitles; 1: never break; 2: up to two, balanced; auto: as many as needed */
 export type Lines = 'keep' | '1' | '2' | 'auto'
 
@@ -29,6 +31,8 @@ export interface Look {
   outline: Outline
   shadow: { on: boolean; blur: number; distance: number; opacity: number; color: Rgb }
   box: { on: boolean; color: Rgb; opacity: number; round: number; pad: number }
+  /** Optional full-frame backing for finished clips and template previews. */
+  backdrop: { on: boolean; mode: BackdropMode; color: Rgb; color2: Rgb; angle: number; opacity: number; src: string; fit: BackdropFit }
   /** 0–8, rows top to bottom: 0 top-left … 4 middle … 7 bottom-centre */
   anchor: number
   /** Nudge from the anchor, as a share of the frame (x right, y up) */
@@ -122,6 +126,7 @@ export const DEFAULT_LOOK: Look = {
   outline: { on: false, width: 0.05, color: [0, 0, 0], outside: true, opacity: 1, soft: 0, second: false, width2: 0.05, color2: [1, 1, 1] },
   shadow: { on: true, blur: 0.5, distance: 0.3, opacity: 0.6, color: [0, 0, 0] },
   box: { on: false, color: [0, 0, 0], opacity: 0.55, round: 0.3, pad: 0.3 },
+  backdrop: { on: false, mode: 'gradient', color: [0.035, 0.045, 0.075], color2: [0.24, 0.12, 0.09], angle: 135, opacity: 0.96, src: '', fit: 'cover' },
   anchor: 7, x: 0, y: 0, rotation: 0, maxWidth: 0.8, lines: '2',
   gradient: { on: false, color: [1, 0.55, 0.2], angle: 90 },
   image: { on: false, src: '', size: 1.6, place: 'left' },

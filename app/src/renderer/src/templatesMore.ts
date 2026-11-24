@@ -5,7 +5,7 @@ import {
   type SuperTemplate, type TemplateGroup, type TemplateLevel,
 } from './templateKit'
 
-// The other 75 templates: 25 simple (the text's own look) and all 50 advanced, which draw
+// The other 156 templates: 70 simple (the text's own look) and 86 advanced, which draw
 // shapes around the text (bars, plates, frames, meters, a light sweep, cinema bars) that
 // come in on their own timing. Shapes show in Resolve with Finished clips (see Deco.tsx).
 
@@ -21,7 +21,53 @@ const MID = { anchor: 4, align: 'center' } as const
 const LOW = { anchor: 7, align: 'center' } as const
 const SILVER: Rgb = [0.8, 0.82, 0.86]
 const BRONZE: Rgb = [0.8, 0.52, 0.3]
+const bg = (color: Rgb, color2: Rgb, angle = 135): NonNullable<Look['backdrop']> => ({
+  on: true, mode: 'gradient', color, color2, angle, opacity: 1, src: '', fit: 'cover',
+})
+const solidBg = (color: Rgb): NonNullable<Look['backdrop']> => ({
+  on: true, mode: 'solid', color, color2: color, angle: 135, opacity: 1, src: '', fit: 'cover',
+})
 const ticks: Words = (t) => merge(matching(t, /^✓$/, { color: GREEN }), matching(t, /^✕$/, { color: RED }))
+
+const LOWER_THIRD_PALETTES: { id: string; name: string; base: Rgb; accent: Rgb; detail: Rgb }[] = [
+  { id: 'midnight-teal', name: 'Midnight Teal', base: [0.035, 0.07, 0.1], accent: [0.15, 0.8, 0.72], detail: [0.64, 0.92, 0.88] },
+  { id: 'navy-gold', name: 'Navy Gold', base: [0.035, 0.05, 0.14], accent: [1, 0.76, 0.3], detail: [0.96, 0.83, 0.53] },
+  { id: 'plum-rose', name: 'Plum Rose', base: [0.13, 0.045, 0.12], accent: [1, 0.42, 0.62], detail: [1, 0.74, 0.82] },
+  { id: 'forest-mint', name: 'Forest Mint', base: [0.025, 0.09, 0.075], accent: [0.38, 0.92, 0.68], detail: [0.71, 0.91, 0.8] },
+  { id: 'burgundy-cream', name: 'Burgundy Cream', base: [0.15, 0.025, 0.055], accent: [1, 0.82, 0.62], detail: [1, 0.89, 0.74] },
+  { id: 'indigo-cyan', name: 'Indigo Cyan', base: [0.055, 0.045, 0.16], accent: [0.28, 0.82, 1], detail: [0.68, 0.9, 1] },
+  { id: 'charcoal-lime', name: 'Charcoal Lime', base: [0.055, 0.06, 0.065], accent: [0.72, 0.96, 0.24], detail: [0.81, 0.86, 0.7] },
+  { id: 'cobalt-ice', name: 'Cobalt Ice', base: [0.025, 0.075, 0.2], accent: [0.55, 0.83, 1], detail: [0.78, 0.9, 1] },
+  { id: 'aubergine-peach', name: 'Aubergine Peach', base: [0.12, 0.045, 0.13], accent: [1, 0.62, 0.42], detail: [1, 0.8, 0.7] },
+  { id: 'olive-champagne', name: 'Olive Champagne', base: [0.09, 0.09, 0.035], accent: [0.94, 0.82, 0.43], detail: [0.9, 0.86, 0.67] },
+  { id: 'brick-ivory', name: 'Brick Ivory', base: [0.16, 0.045, 0.035], accent: [1, 0.9, 0.76], detail: [1, 0.77, 0.62] },
+  { id: 'ocean-coral', name: 'Ocean Coral', base: [0.02, 0.09, 0.13], accent: [1, 0.43, 0.37], detail: [0.75, 0.87, 0.92] },
+  { id: 'graphite-violet', name: 'Graphite Violet', base: [0.055, 0.055, 0.09], accent: [0.72, 0.58, 1], detail: [0.84, 0.8, 0.94] },
+  { id: 'pine-copper', name: 'Pine Copper', base: [0.035, 0.08, 0.07], accent: [0.91, 0.5, 0.27], detail: [0.81, 0.88, 0.82] },
+  { id: 'sapphire-silver', name: 'Sapphire Silver', base: [0.025, 0.045, 0.13], accent: [0.78, 0.84, 0.94], detail: [0.64, 0.76, 0.91] },
+  { id: 'magenta-slate', name: 'Magenta Slate', base: [0.075, 0.045, 0.09], accent: [1, 0.35, 0.77], detail: [0.92, 0.72, 0.88] },
+  { id: 'espresso-sand', name: 'Espresso Sand', base: [0.1, 0.055, 0.035], accent: [0.96, 0.75, 0.48], detail: [0.91, 0.82, 0.69] },
+  { id: 'steel-blue', name: 'Steel Blue', base: [0.045, 0.075, 0.11], accent: [0.42, 0.71, 0.89], detail: [0.73, 0.84, 0.92] },
+  { id: 'ruby-white', name: 'Ruby White', base: [0.15, 0.025, 0.045], accent: [1, 1, 1], detail: [1, 0.7, 0.75] },
+  { id: 'petrol-orange', name: 'Petrol Orange', base: [0.025, 0.09, 0.1], accent: [1, 0.55, 0.2], detail: [0.72, 0.88, 0.84] },
+  { id: 'moss-gold', name: 'Moss Gold', base: [0.055, 0.075, 0.045], accent: [0.95, 0.78, 0.25], detail: [0.82, 0.88, 0.67] },
+  { id: 'ink-lavender', name: 'Ink Lavender', base: [0.045, 0.04, 0.1], accent: [0.78, 0.72, 1], detail: [0.86, 0.83, 0.96] },
+  { id: 'cocoa-blush', name: 'Cocoa Blush', base: [0.1, 0.045, 0.05], accent: [1, 0.63, 0.62], detail: [0.94, 0.79, 0.74] },
+  { id: 'twilight-aqua', name: 'Twilight Aqua', base: [0.035, 0.055, 0.11], accent: [0.37, 0.94, 0.88], detail: [0.72, 0.88, 0.93] },
+  { id: 'onyx-amber', name: 'Onyx Amber', base: [0.045, 0.045, 0.05], accent: [1, 0.64, 0.14], detail: [0.92, 0.83, 0.67] },
+]
+const PAPER_ORANGE_PALETTES: { id: string; name: string; accent: Rgb; round: number; pad: number }[] = [
+  { id: 'paper-tangerine', name: 'Paper Tangerine', accent: [1, 0.36, 0.12], round: 0.08, pad: 0.52 },
+  { id: 'porcelain-amber', name: 'Porcelain Amber', accent: [0.93, 0.39, 0.12], round: 0.12, pad: 0.58 },
+  { id: 'gallery-orange', name: 'Gallery Orange', accent: [0.96, 0.3, 0.08], round: 0.04, pad: 0.5 },
+  { id: 'editorial-orange', name: 'Editorial Orange', accent: [0.88, 0.31, 0.1], round: 0.16, pad: 0.54 },
+  { id: 'studio-orange', name: 'Studio Orange', accent: [1, 0.42, 0.16], round: 0.1, pad: 0.62 },
+  { id: 'soft-saffron', name: 'Soft Saffron', accent: [0.88, 0.43, 0.12], round: 0.2, pad: 0.55 },
+  { id: 'modern-persimmon', name: 'Modern Persimmon', accent: [0.94, 0.32, 0.14], round: 0.03, pad: 0.58 },
+  { id: 'minimal-tangerine', name: 'Minimal Tangerine', accent: [1, 0.38, 0.1], round: 0.06, pad: 0.48 },
+  { id: 'signature-orange', name: 'Signature Orange', accent: [0.91, 0.35, 0.11], round: 0.14, pad: 0.6 },
+  { id: 'white-and-flame', name: 'White & Flame', accent: [0.86, 0.25, 0.08], round: 0.1, pad: 0.56 },
+]
 
 export const MORE_TEMPLATES: SuperTemplate[] = [
   // ── Names ──
@@ -61,6 +107,81 @@ export const MORE_TEMPLATES: SuperTemplate[] = [
       anchor: 8, align: 'right', lines: 'keep', size: 0.06, x: -0.06, y: 0.13, box: NO_BOX, shadow: SOFT_SHADOW,
       deco: [bar(TEAL, { side: 'right' }), line(TEAL, { amount: 0.5, delay: 350 })],
     }, 'glideRightIn', 4000, (t) => secondLine(t, TEAL, 0.66)),
+
+  // ── Lower thirds ──
+  s('lowerThirdSlate', 'Slate lower third', 'Lower thirds', 'A compact charcoal name card that glides in from the left.', NAME,
+    { ...LEFT, size: 0.058, x: 0.055, y: 0.14, box: BOX, shadow: NO_SHADOW }, 'quietPush', 4600,
+    (t) => secondLine(t, SOFT_WHITE, 0.68)),
+  s('lowerThirdRightTag', 'Right tag lower third', 'Lower thirds', 'A right-aligned name with a saffron title tag, sliding in from the right.', NAME,
+    { anchor: 8, align: 'right', lines: 'keep', size: 0.058, x: -0.055, y: 0.14, box: NO_BOX, shadow: SOFT_SHADOW }, 'quietPush', 4600,
+    (t) => merge(firstLine(t, { color: WHITE }), lineWords(t, 1, { color: WHITE, box: ORANGE, scale: 0.68 }))),
+  s('lowerThirdCenterStack', 'Centered lower third', 'Lower thirds', 'A centred two-line name card that rises gently from the bottom.', NAME,
+    { ...LOW, lines: 'keep', size: 0.058, y: 0.04, box: { ...BOX, opacity: 0.76, round: 0.35 }, shadow: NO_SHADOW }, 'quietPush', 4600,
+    (t) => secondLine(t, SOFT_WHITE, 0.7)),
+  s('lowerThirdMinimalTag', 'Minimal lower third', 'Lower thirds', 'A clean name and small gold role with no panel.', NAME,
+    { ...LEFT, size: 0.06, x: 0.05, y: 0.12, box: NO_BOX, shadow: SOFT_SHADOW }, 'quietPush', 4600,
+    (t) => secondLine(t, GOLD, 0.62)),
+  s('lowerThirdLive', 'Live lower third', 'Lower thirds', 'A crisp broadcast name bar with a red LIVE label.', 'LIVE  Name Surname\nTitle or role',
+    { ...LEFT, size: 0.056, x: 0.05, y: 0.14, textCase: 'upper', box: BOX, shadow: NO_SHADOW }, 'quietPush', 4600,
+    (t) => merge(firstLine(t, { box: RED }), secondLine(t, SOFT_WHITE, 0.65))),
+  a('lowerThirdNeonLine', 'Neon line lower third', 'Lower thirds', 'A teal side bar and underline draw around the name and role.', NAME,
+    { ...LEFT, size: 0.06, x: 0.065, y: 0.13, box: NO_BOX, shadow: SOFT_SHADOW, deco: [bar(TEAL, { ms: 950 }), line(TEAL, { amount: 0.5, delay: 300, ms: 1000 })] },
+    'quietPush', 4600, (t) => secondLine(t, TEAL, 0.66)),
+  a('lowerThirdGlass', 'Glass lower third', 'Lower thirds', 'A translucent glass name card settles into the lower left.', NAME,
+    { ...LEFT, size: 0.056, x: 0.075, y: 0.13, box: NO_BOX, shadow: SOFT_SHADOW, deco: [glass({ gapX: 1.1, ms: 1000 }), dot(GOLD, { size: 0.28, gap: 0.28, delay: 250, ms: 900, in: 'fade' })] },
+    'quietPush', 4600, (t) => secondLine(t, SOFT_WHITE, 0.68)),
+  a('lowerThirdDoubleWipe', 'Double wipe lower third', 'Lower thirds', 'Two offset plates wipe in under a bold name and softer title.', NAME,
+    { ...LEFT, size: 0.058, x: 0.065, y: 0.14, box: NO_BOX, shadow: NO_SHADOW,
+      deco: [panel(ORANGE, { gap: 0.28, gapX: 0.7, dx: -0.15, dy: 0.16, round: 0, ms: 950 }), panel(DARK, { gap: 0.28, gapX: 0.7, round: 0, delay: 140, opacity: 0.94, ms: 1000 })] },
+    'quietPush', 4600, (t) => secondLine(t, SOFT_WHITE, 0.68)),
+  a('lowerThirdCornerFrame', 'Corner frame lower third', 'Lower thirds', 'Fine yellow corners close around a low centred name and role.', NAME,
+    { ...LOW, lines: 'keep', size: 0.056, y: 0.035, box: NO_BOX, shadow: SOFT_SHADOW, deco: [frame(YELLOW, { size: 0.04, gap: 0.48, amount: 0.65, ms: 1050, in: 'fade' })] },
+    'quietPush', 4600, (t) => secondLine(t, YELLOW, 0.65)),
+  a('lowerThirdGoldPlate', 'Gold plate lower third', 'Lower thirds', 'A warm gold plate wipes in behind a dark name and white role.', NAME,
+    { ...LEFT, size: 0.058, x: 0.06, y: 0.13, fill: DARK, box: NO_BOX, shadow: NO_SHADOW,
+      deco: [panel(GOLD, { gap: 0.3, gapX: 0.75, round: 0.08, opacity: 0.96, ms: 1000 }), bar(WHITE, { size: 0.07, gap: 0.25, delay: 220, ms: 950 })] },
+    'quietPush', 4600, (t) => secondLine(t, WHITE, 0.68)),
+
+  // Fifty coordinated colour variants: 25 clean cards and 25 animated designs.
+  ...LOWER_THIRD_PALETTES.map((p, i) => {
+    const anchor = i % 3 === 1 ? 8 : i % 3 === 2 ? 7 : 6
+    const align = anchor === 8 ? 'right' : anchor === 7 ? 'center' : 'left'
+    const x = anchor === 8 ? -0.055 : anchor === 6 ? 0.055 : 0
+    const y = anchor === 7 ? 0.04 : 0.13
+    return s(`lt-${p.id}-card`, `${p.name} Card`, 'Lower thirds', `A ${p.name.toLowerCase()} name card with a coordinated accent and role colour.`, NAME,
+      { anchor, align, lines: 'keep', size: 0.056, tracking: 1.03, x, y, fill: WHITE, box: box(p.base, 0.16, 0.52, 0.96), shadow: SOFT_SHADOW },
+      'quietPush', 4600,
+      (t) => merge(firstLine(t, { color: p.accent }), secondLine(t, p.detail, 0.68)))
+  }),
+  ...LOWER_THIRD_PALETTES.map((p, i) => {
+    const anchor = i % 3 === 1 ? 8 : i % 3 === 2 ? 7 : 6
+    const align = anchor === 8 ? 'right' : anchor === 7 ? 'center' : 'left'
+    const x = anchor === 8 ? -0.06 : anchor === 6 ? 0.06 : 0
+    const y = anchor === 7 ? 0.035 : 0.13
+    const deco = i % 5 === 0
+      ? [panel(p.base, { opacity: 0.94, border: p.accent, borderWidth: 0.025, round: 0.12, gap: 0.35, gapX: 0.72, ms: 1000 }), bar(p.accent, { size: 0.07, ms: 950 })]
+      : i % 5 === 1
+        ? [bar(p.accent, { side: 'right', size: 0.07, ms: 950 }), line(p.accent, { amount: 0.48, size: 0.04, delay: 300, ms: 1000 })]
+        : i % 5 === 2
+          ? [frame(p.accent, { size: 0.035, gap: 0.48, amount: 0.72, ms: 1050 })]
+          : i % 5 === 3
+            ? [glass({ gap: 0.35, gapX: 0.74, border: p.accent, borderWidth: 0.025, ms: 1050 }), line(p.accent, { amount: 0.4, size: 0.035, delay: 300, ms: 1000 })]
+            : [panel(p.base, { opacity: 0.96, round: 0.06, gap: 0.3, gapX: 0.65, in: 'slide', ms: 1000 }), bar(p.accent, { size: 0.055, side: 'right', delay: 180, ms: 950 })]
+    return a(`lt-${p.id}-motion`, `${p.name} Motion`, 'Lower thirds', `A ${p.name.toLowerCase()} lower third with animated colour accents.`, NAME,
+      { anchor, align, lines: 'keep', size: 0.056, tracking: 1.03, x, y, fill: WHITE, box: NO_BOX, shadow: SOFT_SHADOW, deco },
+      'quietPush', 4800,
+      (t) => merge(firstLine(t, { color: p.accent }), secondLine(t, p.detail, 0.68)))
+  }),
+  ...PAPER_ORANGE_PALETTES.map((p, i) => {
+    const anchor = i % 3 === 1 ? 8 : i % 3 === 2 ? 7 : 6
+    const align = anchor === 8 ? 'right' : anchor === 7 ? 'center' : 'left'
+    const x = anchor === 8 ? -0.055 : anchor === 6 ? 0.055 : 0
+    const y = anchor === 7 ? 0.035 : 0.13
+    return s(`lt-paper-${p.id}`, p.name, 'Lower thirds', 'A premium orange name on a clean white lower third.', NAME,
+      { anchor, align, lines: 'keep', size: 0.058, tracking: 1.02, x, y, fill: DARK, box: box(WHITE, p.round, p.pad, 0.98), shadow: SOFT_SHADOW },
+      'quietPush', 4800,
+      (t) => merge(firstLine(t, { color: p.accent }), secondLine(t, [0.18, 0.2, 0.23], 0.68)))
+  }),
 
   // ── Titles ──
   s('stackedTitle', 'Stacked title', 'Titles', 'A small line over a big yellow one.', 'The Art of\nLETTING GO',
@@ -254,6 +375,52 @@ export const MORE_TEMPLATES: SuperTemplate[] = [
       ...MID, size: 0.09, lines: '1', font: 'Bahnschrift', style: 'Regular', tracking: 1.5, box: NO_BOX, shadow: SOFT_SHADOW,
       deco: [line(TEAL, { side: 'above', amount: 1, size: 0.025, gap: 0.3, delay: 400, ms: 900 }), line(TEAL, { amount: 1, size: 0.025, gap: 0.3, delay: 400, ms: 900 })],
     }, 'anamorphic', 5000),
+
+  // Full-frame backdrops for clean cards and cinematic title treatments.
+  s('duskChapter', 'Dusk chapter', 'Cinematic', 'A warm dusk gradient behind a quiet chapter title.', 'CHAPTER TWO\nA new beginning',
+    { ...MID, size: 0.075, lines: 'keep', font: 'Georgia', style: 'Regular', tracking: 1.12, box: NO_BOX, shadow: SOFT_SHADOW,
+      backdrop: bg([0.035, 0.055, 0.11], [0.34, 0.13, 0.07], 135) }, 'cineReveal', 5000,
+    (t) => secondLine(t, GOLD, 0.62)),
+  s('noirQuote', 'Noir quote', 'Cinematic', 'An ivory serif quote over a subtle charcoal wash.', '“The night is long.\nThe road is ours.”',
+    { ...MID, size: 0.068, lines: 'keep', font: 'Georgia', style: 'Italic', maxWidth: 0.72, fill: SOFT_WHITE, box: NO_BOX, shadow: SOFT_SHADOW,
+      backdrop: bg([0.025, 0.03, 0.045], [0.13, 0.15, 0.18], 90) }, 'dream', 5000),
+  s('auroraTitle', 'Aurora title', 'Cinematic', 'A teal-to-indigo wash behind a wide, minimal title.', 'AFTER THE RAIN',
+    { ...MID, size: 0.072, lines: '1', textCase: 'upper', tracking: 1.28, fill: SOFT_WHITE, box: NO_BOX, shadow: SOFT_SHADOW,
+      backdrop: bg([0.025, 0.16, 0.2], [0.075, 0.045, 0.2], 25) }, 'slowRise', 4500),
+  s('warmEndSlate', 'Warm end slate', 'Cinematic', 'A warm, simple closing card with a small second line.', 'Thank you\nFor being here',
+    { ...MID, size: 0.09, lines: 'keep', font: 'Georgia', style: 'Regular', fill: [1, 0.94, 0.84], box: NO_BOX, shadow: SOFT_SHADOW,
+      backdrop: bg([0.16, 0.045, 0.035], [0.38, 0.2, 0.09], 155) }, 'titleCard', 5000,
+    (t) => secondLine(t, [0.94, 0.75, 0.55], 0.55)),
+  s('blueHour', 'Blue hour', 'Cinematic', 'Cool blue full-frame colour with a gentle title reveal.', 'BLUE HOUR',
+    { ...MID, size: 0.105, lines: '1', font: 'Bahnschrift', style: 'Regular', tracking: 1.2, fill: WHITE, box: NO_BOX, shadow: SOFT_SHADOW,
+      backdrop: bg([0.018, 0.07, 0.17], [0.08, 0.19, 0.31], 100) }, 'velvet', 4500),
+  a('velvetOpener', 'Velvet opener', 'Cinematic', 'A deep blue title card with letterbox bars and a gliding light sweep.', 'THE LONG WAY HOME',
+    { ...MID, size: 0.095, lines: '1', font: 'Georgia', style: 'Regular', tracking: 1.16, box: NO_BOX, shadow: SOFT_SHADOW,
+      backdrop: bg([0.012, 0.026, 0.07], [0.12, 0.1, 0.2], 135),
+      deco: [letterbox({ amount: 0.095, opacity: 0.88 }), sweep({ color: GOLD, delay: 900, ms: 1350, opacity: 0.72 })] }, 'trailerFade', 5600),
+  a('emberFrame', 'Ember frame', 'Cinematic', 'Warm full-frame gradient, fine corner frame and a slow title rise.', 'A FILM BY\nNAME SURNAME',
+    { ...MID, size: 0.076, lines: 'keep', font: 'Georgia', style: 'Regular', tracking: 1.1, box: NO_BOX, shadow: SOFT_SHADOW,
+      backdrop: bg([0.055, 0.025, 0.025], [0.28, 0.09, 0.035], 160),
+      deco: [frame(GOLD, { size: 0.035, amount: 1.05, gap: 0.8, delay: 250, ms: 1100, in: 'fade' }), line(GOLD, { amount: 0.3, size: 0.025, gap: 0.24, delay: 850 })] }, 'slowRise', 5600,
+    (t) => firstLine(t, { scale: 0.55, color: GOLD })),
+  a('glassHorizon', 'Glass horizon', 'Cinematic', 'A glass plate floats over a teal horizon with a fine light line.', 'A DIFFERENT\nPOINT OF VIEW',
+    { ...MID, size: 0.072, lines: 'keep', font: 'Bahnschrift', style: 'Regular', tracking: 1.08, box: NO_BOX, shadow: NO_SHADOW,
+      backdrop: bg([0.018, 0.13, 0.18], [0.035, 0.035, 0.11], 90),
+      deco: [glass({ gap: 0.7, gapX: 1.05, border: TEAL, borderWidth: 0.025, ms: 900 }), line(TEAL, { amount: 0.52, size: 0.025, gap: 0.38, delay: 500 })] }, 'smoothRise', 5200,
+    (t) => secondLine(t, [0.7, 0.86, 0.88], 0.68)),
+  a('filmNegative', 'Film negative', 'Cinematic', 'A restrained black card with letterbox bars, frame and light pass.', 'STILL\nIN MOTION',
+    { ...MID, size: 0.09, lines: 'keep', font: 'Georgia', style: 'Regular', tracking: 1.12, fill: [0.96, 0.93, 0.86], box: NO_BOX, shadow: SOFT_SHADOW,
+      backdrop: solidBg([0.018, 0.02, 0.026]),
+      deco: [letterbox({ amount: 0.085 }), frame(SOFT_WHITE, { size: 0.026, amount: 0.92, gap: 0.72, delay: 220, in: 'fade' }), sweep({ color: GOLD, delay: 1150, ms: 1100, opacity: 0.72 })] }, 'ghost', 5600),
+  a('documentarySlate', 'Documentary slate', 'Cinematic', 'A muted blue slate with a moving plate, accent bar and soft reveal.', 'FIELD NOTES\nA STORY IN THREE PARTS',
+    { ...LEFT, size: 0.064, x: 0.08, y: 0.12, lines: 'keep', font: 'Bahnschrift', style: 'Regular', tracking: 1.08, box: NO_BOX, shadow: SOFT_SHADOW,
+      backdrop: bg([0.025, 0.07, 0.1], [0.1, 0.18, 0.2], 15),
+      deco: [panel(DARK, { opacity: 0.62, gap: 0.6, gapX: 0.9, round: 0.08, in: 'wipe', ms: 850 }), bar(TEAL, { size: 0.055, gap: 0.32, delay: 180, ms: 700 })] }, 'featherRise', 5500,
+    (t) => firstLine(t, { scale: 0.58, color: TEAL })),
+  a('goldenPremiere', 'Golden premiere', 'Cinematic', 'A midnight-to-gold card with a drawn frame and a bright sweep.', 'THE PREMIERE',
+    { ...MID, size: 0.102, lines: '1', font: 'Georgia', style: 'Regular', tracking: 1.18, fill: [1, 0.94, 0.78], box: NO_BOX, shadow: SOFT_SHADOW,
+      backdrop: bg([0.045, 0.025, 0.06], [0.24, 0.12, 0.045], 135),
+      deco: [frame(GOLD, { size: 0.03, amount: 1.15, gap: 0.68, delay: 250, ms: 1050, in: 'fade' }), sweep({ color: GOLD, delay: 1000, ms: 1200 })] }, 'titleCard', 5500),
 
   // ── Devotional ──
   s('shloka', 'Shloka', 'Devotional', 'A line in Hindi with its meaning in gold under it.', 'शांति का संदेश\nMessage of peace',

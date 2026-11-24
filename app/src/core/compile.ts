@@ -41,6 +41,8 @@ export interface TextLook {
   }
   shadow?: { blur: number; distance: number; opacity: number; color: Rgb }
   box?: { color: Rgb; opacity: number; round: number; pad: number }
+  /** Full-frame background rendered by the app for Finished clips. */
+  backdrop?: Look['backdrop']
   /** Drawn by the app only (Finished clips); a Text+ caption has the first colour, no picture, the final numbers */
   gradient?: { color: Rgb; angle: number }
   image?: { src: string; size: number; place: ImagePlace }
@@ -430,6 +432,7 @@ export function compileCue(cue: Cue, presetId: string, opts: Partial<CompileOpts
       ...(look.outline.on ? { outline: outlineOut(look.outline) } : {}),
       ...(look.shadow.on ? { shadow: { blur: look.shadow.blur, distance: look.shadow.distance, opacity: look.shadow.opacity, color: look.shadow.color } } : {}),
       ...(look.box.on ? { box: { color: look.box.color, opacity: look.box.opacity, round: look.box.round, pad: look.box.pad } } : {}),
+      ...(look.backdrop.on ? { backdrop: look.backdrop } : {}),
       ...(look.gradient.on ? { gradient: { color: look.gradient.color, angle: look.gradient.angle } } : {}),
       ...(look.image.on && look.image.src ? { image: { src: look.image.src, size: look.image.size, place: look.image.place } } : {}),
       ...(look.count.on ? { count: { from: look.count.from, ms: look.count.ms } } : {}),

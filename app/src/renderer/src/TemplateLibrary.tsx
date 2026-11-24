@@ -106,12 +106,14 @@ export function TemplateLibrary({ onPick, base }: {
       {!onPick && <p className="hint2 pad warn2">Templates add supers: pick “Supers made here” in Read from, on the timeline bar, to use them.</p>}
       <div className="ttiles" onMouseLeave={() => setHover(null)}>
         {shown.map((t) => (
-          <button key={t.id} type="button" className="tcard" aria-disabled={!onPick} title={t.desc}
+          <button key={t.id} type="button" className="tcard" aria-disabled={!onPick}
+            title={t.desc + (t.look.backdrop?.on ? ' Full-frame background is included in Finished clips.' : '')}
             onClick={() => onPick?.(t.id)} onMouseEnter={() => setHover(t.id)}>
             <Thumb t={t} base={base} aspect={THUMB_ASPECT} playing={hover === t.id} />
             <span className="tcard-name">{t.name}</span>
             <span className="tcard-meta">
               <i className={t.level === 'advanced' ? 'adv' : ''}>{t.level === 'advanced' ? 'Advanced' : 'Simple'}</i>
+              {t.look.backdrop?.on && <i className="adv">Background</i>}
               {t.group} · {presetById(t.preset)?.name ?? t.preset} · {(t.ms / 1000).toFixed(1)} s
             </span>
           </button>
