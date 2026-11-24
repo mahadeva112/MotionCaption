@@ -578,6 +578,8 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
 .vdefs { position: absolute; width: 0; height: 0; overflow: hidden; }
 .vtext.grad { display: inline-block; }
 .vletterbox { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+.vbackdrop { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+.vbackdrop img { display: block; width: 100%; height: 100%; }
 .vimg { position: absolute; display: block; width: auto; max-width: none; pointer-events: none; }
 .vimg.left { right: 100%; top: 50%; transform: translateY(-50%); margin-right: .3em; }
 .vimg.right { left: 100%; top: 50%; transform: translateY(-50%); margin-left: .3em; }

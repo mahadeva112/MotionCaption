@@ -3,7 +3,7 @@ import { DEFAULT_LOOK, type Deco, type Look, type Outline, type Rgb, type WordLo
 // Building blocks for the super templates (templates.ts, templatesMore.ts): the template
 // shape, colours, looks, word looks and the shapes advanced templates draw around the text.
 
-export const TEMPLATE_GROUPS = ['Names', 'Titles', 'Quotes', 'Social', 'Info', 'News', 'Lists', 'Cinematic', 'Devotional'] as const
+export const TEMPLATE_GROUPS = ['Lower thirds', 'Names', 'Titles', 'Quotes', 'Social', 'Info', 'News', 'Lists', 'Cinematic', 'Devotional'] as const
 export type TemplateGroup = (typeof TEMPLATE_GROUPS)[number]
 /** Simple: the text's own look. Advanced: shapes around it (bars, frames, plates…) that come in on their own. */
 export type TemplateLevel = 'simple' | 'advanced'

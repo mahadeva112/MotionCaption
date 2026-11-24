@@ -210,12 +210,20 @@ export function Inspector(p: Props) {
   const [saving, setSaving] = useState<string | null>(null)
   const [savingMine, setSavingMine] = useState<string | null>(null)
   const [imgNote, setImgNote] = useState('')
+  const [backdropNote, setBackdropNote] = useState('')
   /** A picture file as a data: URL, kept with the look (so it travels with saved styles and brand kits) */
   const pickImage = (f: File | undefined) => {
     if (!f) return
     if (f.size > 1_500_000) { setImgNote('That picture is over 1.5 MB. Use a smaller PNG or SVG.'); return }
     const r = new FileReader()
     r.onload = () => { setImgNote(''); p.onLook({ image: { ...L.image, on: true, src: String(r.result) } }) }
+    r.readAsDataURL(f)
+  }
+  const pickBackdrop = (f: File | undefined) => {
+    if (!f) return
+    if (f.size > 1_500_000) { setBackdropNote('That image is over 1.5 MB. Use a smaller JPG, PNG or WebP.'); return }
+    const r = new FileReader()
+    r.onload = () => { setBackdropNote(''); p.onLook({ backdrop: { ...L.backdrop, on: true, mode: 'image', src: String(r.result) } }) }
     r.readAsDataURL(f)
   }
   const drawnNote = p.drawn ? null : <p className="hint2 warn2">Shows in Resolve only with Finished clips (Send window). Editable Text+ leaves it out.</p>
@@ -229,7 +237,7 @@ export function Inspector(p: Props) {
     dirty: keys.some((k) => !same(L[k], B[k])),
     reset: () => p.onLook(Object.fromEntries(keys.map((k) => [k, B[k]])) as Partial<Look>),
   })
-  const sub = <K extends 'outline' | 'shadow' | 'box' | 'gradient' | 'image' | 'count'>(k: K, f: keyof Look[K]): R => ({
+  const sub = <K extends 'outline' | 'shadow' | 'box' | 'backdrop' | 'gradient' | 'image' | 'count'>(k: K, f: keyof Look[K]): R => ({
     dirty: !same(L[k][f], B[k][f]),
     reset: () => p.onLook({ [k]: { ...L[k], [f]: B[k][f] } }),
   })
@@ -369,6 +377,31 @@ export function Inspector(p: Props) {
               <Slider label="Opacity" value={L.box.opacity} r={sub('box', 'opacity')} min={0} max={1} onChange={(v) => p.onLook({ box: { ...L.box, opacity: v } })} />
               <Slider label="Corners" value={L.box.round} r={sub('box', 'round')} min={0} max={1} onChange={(v) => p.onLook({ box: { ...L.box, round: v } })} />
               <Slider label="Padding" value={L.box.pad} r={sub('box', 'pad')} min={0} max={1} onChange={(v) => p.onLook({ box: { ...L.box, pad: v } })} />
+            </Section>
+            <Section title={<>Full-frame background <Toggle on={L.backdrop.on} onChange={(on) => p.onLook({ backdrop: { ...L.backdrop, on } })}>On</Toggle></>} off={!L.backdrop.on} r={lk('backdrop')}>
+              <Seg label="Type" value={L.backdrop.mode} r={sub('backdrop', 'mode')} onChange={(mode) => p.onLook({ backdrop: { ...L.backdrop, mode } })}
+                opts={[[ 'solid', 'Solid' ], [ 'gradient', 'Gradient' ], [ 'image', 'Image' ]]} />
+              {L.backdrop.mode === 'solid' && <Color label="Colour" value={L.backdrop.color} r={sub('backdrop', 'color')} onChange={(color) => p.onLook({ backdrop: { ...L.backdrop, color } })} />}
+              {L.backdrop.mode === 'gradient' && <>
+                <Color label="Start" value={L.backdrop.color} r={sub('backdrop', 'color')} onChange={(color) => p.onLook({ backdrop: { ...L.backdrop, color } })} />
+                <Color label="End" value={L.backdrop.color2} r={sub('backdrop', 'color2')} onChange={(color2) => p.onLook({ backdrop: { ...L.backdrop, color2 } })} />
+                <Slider label="Angle" value={L.backdrop.angle} r={sub('backdrop', 'angle')} min={0} max={360} step={5} fmt={(v) => `${v}°`}
+                  onChange={(angle) => p.onLook({ backdrop: { ...L.backdrop, angle } })} />
+              </>}
+              {L.backdrop.mode === 'image' && <>
+                <Row label="File" wide>
+                  <label className="mini filebtn">{L.backdrop.src ? 'Change…' : 'Choose a background image…'}
+                    <input type="file" accept="image/png,image/webp,image/jpeg" hidden onChange={(e) => { pickBackdrop(e.target.files?.[0]); e.target.value = '' }} />
+                  </label>
+                  {L.backdrop.src && <img className="imgthumb" src={L.backdrop.src} alt="" />}
+                </Row>
+                {backdropNote && <p className="hint2 warn2">{backdropNote}</p>}
+                <Seg label="Fit" value={L.backdrop.fit} r={sub('backdrop', 'fit')} onChange={(fit) => p.onLook({ backdrop: { ...L.backdrop, fit } })}
+                  opts={[[ 'cover', 'Fill' ], [ 'contain', 'Fit' ]]} />
+              </>}
+              <Slider label="Opacity" value={L.backdrop.opacity} r={sub('backdrop', 'opacity')} min={0.05} max={1} onChange={(opacity) => p.onLook({ backdrop: { ...L.backdrop, opacity } })} />
+              <p className="hint2">Covers the whole frame. Use a transparent backdrop to keep your timeline video visible.</p>
+              {L.backdrop.on && drawnNote}
             </Section>
             <Section title={<>Gradient <Toggle on={L.gradient.on} onChange={(on) => p.onLook({ gradient: { ...L.gradient, on } })}>On</Toggle></>} off={!L.gradient.on} r={lk('gradient')}>
               <Color label="To colour" value={L.gradient.color} r={sub('gradient', 'color')} onChange={(c) => p.onLook({ gradient: { ...L.gradient, color: c } })} />

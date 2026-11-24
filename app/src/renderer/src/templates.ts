@@ -13,16 +13,16 @@ export { TEMPLATE_GROUPS, type SuperTemplate, type TemplateGroup, type TemplateL
 const FIRST: SuperTemplate[] = [
   // ── Names ──
   {
-    id: 'lowerThird', name: 'Lower third', group: 'Names', level: 'simple', desc: 'A name, and a title under it, bottom left on a dark box.',
+    id: 'lowerThird', name: 'Lower third', group: 'Lower thirds', level: 'simple', desc: 'A name, and a title under it, bottom left on a dark box.',
     text: 'Name Surname\nTitle or role',
     look: { anchor: 6, align: 'left', size: 0.06, lines: 'keep', x: 0.05, y: 0.14, box: BOX, shadow: NO_SHADOW },
-    preset: 'glideLeft', words: (t) => secondLine(t), ms: 4000,
+    preset: 'quietPush', words: (t) => secondLine(t), ms: 4600,
   },
   {
-    id: 'lowerThirdRight', name: 'Lower third right', group: 'Names', level: 'simple', desc: 'The same, from the right edge.',
+    id: 'lowerThirdRight', name: 'Lower third right', group: 'Lower thirds', level: 'simple', desc: 'The same, from the right edge.',
     text: 'Name Surname\nTitle or role',
     look: { anchor: 8, align: 'right', size: 0.06, lines: 'keep', x: -0.05, y: 0.14, box: BOX, shadow: NO_SHADOW },
-    preset: 'glideRightIn', words: (t) => secondLine(t), ms: 4000,
+    preset: 'quietPush', words: (t) => secondLine(t), ms: 4600,
   },
   {
     id: 'nameTag', name: 'Name tag', group: 'Names', level: 'simple', desc: 'The name on an orange tag, the role in white under it.',

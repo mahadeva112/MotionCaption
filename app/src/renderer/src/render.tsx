@@ -72,12 +72,15 @@ export function RenderStage() {
     ;(window as unknown as { __mcRender?: RenderApi }).__mcRender = api
   }, [])
 
-  // Answer once the frame is painted: fonts ready, then two frames for layout and paint
+  // Answer once the frame is painted: background images and fonts ready, then two frames for layout and paint
   useEffect(() => {
     const ok = done.current
     if (!ok) return
     done.current = null
-    document.fonts.ready.then(() => requestAnimationFrame(() => requestAnimationFrame(() => ok(true))))
+    const images = [...document.querySelectorAll<HTMLImageElement>('.vbackdrop img')]
+    Promise.all(images.map((img) => img.decode().catch(() => undefined)))
+      .then(() => document.fonts.ready)
+      .then(() => requestAnimationFrame(() => requestAnimationFrame(() => ok(true))))
   }, [shot])
 
   if (!shot) return null

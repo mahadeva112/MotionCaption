@@ -6,11 +6,11 @@ import { TEMPLATE_GROUPS, TEMPLATES } from './templates'
 import { lookOf } from './model'
 
 describe('super templates', () => {
-  it('has 100, half simple and half advanced, in every group', () => {
-    expect(TEMPLATES).toHaveLength(100)
-    expect(TEMPLATES.filter((t) => t.level === 'advanced')).toHaveLength(50)
+  it('has 181, with 86 advanced, in every group', () => {
+    expect(TEMPLATES).toHaveLength(181)
+    expect(TEMPLATES.filter((t) => t.level === 'advanced')).toHaveLength(86)
     for (const g of TEMPLATE_GROUPS) expect(TEMPLATES.some((t) => t.group === g), g).toBe(true)
-    expect(new Set(TEMPLATES.map((t) => t.id)).size).toBe(100)
+    expect(new Set(TEMPLATES.map((t) => t.id)).size).toBe(181)
   })
 
   it('uses animations that exist', () => {
