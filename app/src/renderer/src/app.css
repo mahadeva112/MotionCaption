@@ -482,6 +482,8 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
 .recent .info span { color: var(--t2); }
 .recent .info em { color: var(--t3); font-style: normal; font-size: 11px; }
 .recent .mini { flex: none; }
+.recent .x { flex: none; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 8px; background: none; border: 0; color: var(--t2); cursor: pointer; }
+.recent .x:hover { background: rgba(255,255,255,.08); color: #fff; }
 @media (max-width: 720px) { .wel-row { grid-template-columns: 1fr; } }
 
 /* Dialogs */
